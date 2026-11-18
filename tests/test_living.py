@@ -171,7 +171,7 @@ class StreamingApiTests(unittest.TestCase):
     def test_semantic_retrieval_api_uses_model_ids(self):
         store = MemoryStore(self.db)
         x = store.add_memory("fact", "Наш гараж обслуживает автопарк")
-        store.add_memory("fact", "Ремонт автомобилей ведется в мастерской")
+        store.add_memory("fact", "В гараже проводят ремонт автомобилей")
         with patch.object(cloudru.CloudSession, "rerank", return_value=[x["id"]]) as rank:
             with self.request("/api/soul/search", {"query": "гараж", "semantic": True}) as response:
                 result = json.load(response)

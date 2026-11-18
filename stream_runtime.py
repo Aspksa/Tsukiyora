@@ -10,6 +10,31 @@ from cloudru import CloudError, persona_prompt
 from soul_growth import SoulGrowth
 
 
+class StreamCancellation:
+    """Event plus upstream close: clicking Stop promptly shuts the paid stream."""
+    def __init__(self):
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._response = None
+
+    def is_set(self):
+        return self._event.is_set()
+
+    def bind(self, response):
+        with self._lock:
+            if self._event.is_set():
+                response.close()
+            else:
+                self._response = response
+
+    def set(self):
+        with self._lock:
+            self._event.set()
+            if self._response is not None:
+                self._response.close()
+                self._response = None
+
+
 def validate_message(obj: dict) -> tuple[str, str, str | None]:
     content = obj.get("content")
     if not isinstance(content, str) or not (1 <= len(content.strip()) <= 8000):
@@ -40,7 +65,7 @@ def handle_stream(handler, obj: dict):
     if not handler.server.chat_lock.acquire(blocking=False):
         raise CloudError("Цукиёра уже отвечает. Дождись конца или останови её.", 409)
     stream_id = uuid.uuid4().hex
-    cancelled = threading.Event()
+    cancelled = StreamCancellation()
     handler.server.active_streams[stream_id] = cancelled
     started = False
     try:

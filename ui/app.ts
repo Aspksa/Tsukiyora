@@ -7,6 +7,14 @@ const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let brainGraph = {nodes: [], edges: [], pending: 0};
 let graphPositions = new Map();
+let graphScale = 1;
+let graphPanX = 0;
+let graphPanY = 0;
+let graphLoaded = false;
+let graphFreshIds = new Set();
+let graphPulseAt = 0;
+let graphDrag = null;
+let graphMoved = false;
 let vectorAvailableForSearch = false;
 let width = 0, height = 0, time = 0, last = 0;
 
@@ -97,20 +105,12 @@ function paint() {
     ctx.fill();
   }
 
-  for (let i = 0; i < 38; i++) {
-    const theta = (i * Math.PI * 2 / 38) - time * .00009;
-    const distance = r * (.60 + (i % 6) * .09);
-    ctx.fillStyle = "rgba(239,204,147,.5)";
-    ctx.beginPath();
-    ctx.arc(x + Math.cos(theta)*distance, y + Math.sin(theta)*distance,
-      i % 7 === 0 ? 1.5 : .8, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // No decorative fake nodes. Every hexagon below is a real SQLite memory.
   // Real SQLite graph, capped at 180 nodes/400 edges. No demo activity.
   graphPositions = new Map();
   const sectorCounts = Array(8).fill(0);
   const section = {fact: 0, preference: 2, event: 4, biography: 6};
-  const cellSize = Math.max(3.2, Math.min(6.5, r / 34));
+  const cellSize = Math.max(3.0, Math.min(7.2, r / 32)) * Math.sqrt(graphScale);
   for (const node of brainGraph.nodes) {
     const sector = (section[node.kind] ?? 0) + (node.id % 2);
     const slot = sectorCounts[sector]++;
@@ -120,9 +120,9 @@ function paint() {
                   (slotInRing - 6) * 0.043 + Math.sin(slot * 2.4) * .005;
     const distance = r * (.60 + layer * .075);
     graphPositions.set(node.id, {
-      x: x + Math.cos(angle) * distance,
-      y: y + Math.sin(angle) * distance,
-      preview: node.preview, kind: node.kind,
+      x: x + graphPanX + Math.cos(angle) * distance * graphScale,
+      y: y + graphPanY + Math.sin(angle) * distance * graphScale,
+      id: node.id, preview: node.preview, kind: node.kind,
     });
   }
   ctx.strokeStyle = "rgba(211,173,114,.18)";
@@ -135,10 +135,22 @@ function paint() {
     ctx.strokeStyle = link.relation === "possible_conflict"
       ? "rgba(225,135,101,.42)" : "rgba(220,173,113,.21)";
     ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(x, y, b.x, b.y);
+    ctx.quadraticCurveTo(x + graphPanX, y + graphPanY, b.x, b.y);
     ctx.stroke();
   }
   for (const node of graphPositions.values()) {
+    // Pulse only after a real new memory arrived; reduced motion stays static.
+    if (!reducedMotion && graphFreshIds.has(node.id)) {
+      const age = performance.now() - graphPulseAt;
+      if (age < 1800 && age >= 0) {
+        const alpha = (1 - age / 1800) * .40;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, cellSize * (2.0 + age / 1600), 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(246,183,96," + alpha.toFixed(3) + ")";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
     ctx.beginPath();
     ctx.strokeStyle = "rgba(241,198,132,.75)";
     ctx.fillStyle = "rgba(190,135,65,.10)";
@@ -173,6 +185,12 @@ async function refreshBrain() {
     const response = await fetch("/api/soul/graph", {cache: "no-store"});
     if (!response.ok) throw new Error("graph unavailable");
     const data = await response.json();
+    if (graphLoaded) {
+      const previous = new Set(brainGraph.nodes.map(node => node.id));
+      graphFreshIds = new Set(data.nodes.filter(node => !previous.has(node.id)).map(node => node.id));
+      if (graphFreshIds.size) graphPulseAt = performance.now();
+    }
+    graphLoaded = true;
     brainGraph = data;
     $("soul-live-state").textContent = data.nodes.length
       ? data.nodes.length + " воспоминаний · " + data.edges.length + " связей"
@@ -183,21 +201,78 @@ async function refreshBrain() {
   }
 }
 
-// Nodes show the real preview only on hover. No artificial neural activity.
-canvas.addEventListener("pointermove", (event) => {
-  const rect = canvas.getBoundingClientRect();
-  const px = event.clientX - rect.left;
-  const py = event.clientY - rect.top;
-  let hovered = null;
-  for (const position of graphPositions.values()) {
-    if ((position.x - px) ** 2 + (position.y - py) ** 2 < 80) {
-      hovered = position;
-      break;
+// Zoom, pan and click work on actual SQLite nodes. Dragging never creates records.
+function nearestBrainNode(px, py) {
+  let found = null;
+  let distance = Math.max(64, 55 * graphScale);
+  for (const node of graphPositions.values()) {
+    const delta = (node.x - px) ** 2 + (node.y - py) ** 2;
+    if (delta < distance) {
+      distance = delta;
+      found = node;
     }
   }
-  canvas.title = hovered ? hovered.kind + ": " + hovered.preview : "";
+  return found;
+}
+
+canvas.addEventListener("wheel", (event) => {
+  if (!brainGraph.nodes.length) return;
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const centerX = rect.width * .5, centerY = rect.height * .48;
+  const px = event.clientX - rect.left, py = event.clientY - rect.top;
+  const old = graphScale;
+  graphScale = Math.max(.65, Math.min(2.6, graphScale * (event.deltaY < 0 ? 1.12 : .89)));
+  const ratio = graphScale / old;
+  graphPanX = Math.max(-width * .5, Math.min(width * .5,
+    (px - centerX) - ratio * (px - centerX - graphPanX)));
+  graphPanY = Math.max(-height * .5, Math.min(height * .5,
+    (py - centerY) - ratio * (py - centerY - graphPanY)));
+  if (reducedMotion) paint();
+}, {passive: false});
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || !brainGraph.nodes.length) return;
+  graphDrag = {x: event.clientX, y: event.clientY};
+  graphMoved = false;
+  canvas.setPointerCapture(event.pointerId);
 });
+canvas.addEventListener("pointermove", (event) => {
+  if (graphDrag) {
+    const dx = event.clientX - graphDrag.x;
+    const dy = event.clientY - graphDrag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) graphMoved = true;
+    graphPanX = Math.max(-width * .5, Math.min(width * .5, graphPanX + dx));
+    graphPanY = Math.max(-height * .5, Math.min(height * .5, graphPanY + dy));
+    graphDrag = {x: event.clientX, y: event.clientY};
+    if (reducedMotion) paint();
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
+  canvas.title = node ? node.kind + ": " + node.preview : "Колёсико — масштаб; перетаскивание — перемещение";
+  canvas.style.cursor = node ? "pointer" : "grab";
+});
+canvas.addEventListener("pointerup", (event) => {
+  graphDrag = null;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+});
+canvas.addEventListener("pointercancel", () => { graphDrag = null; });
 canvas.addEventListener("pointerleave", () => { canvas.title = ""; });
+canvas.addEventListener("dblclick", () => {
+  graphScale = 1; graphPanX = 0; graphPanY = 0;
+  if (reducedMotion) paint();
+});
+canvas.addEventListener("click", async (event) => {
+  if (graphMoved) { graphMoved = false; return; }
+  const rect = canvas.getBoundingClientRect();
+  const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
+  if (!node) return;
+  $("memory-search").value = node.preview.slice(0, 60);
+  $("memory-details").open = true;
+  if (!dialog.open) dialog.showModal();
+  await refreshMemory();
+});
 
 window.addEventListener("resize", () => {
   resize();

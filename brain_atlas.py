@@ -14,6 +14,8 @@ KIND_BASE = {"fact":0,"preference":2,"event":4,"biography":6}
 BUCKET_SIZE = 256
 MAX_BUCKETS = 240
 MAX_NODES = 160
+REGION_SPAN = BUCKET_SIZE * 32
+MAX_REGIONS = 100
 
 
 def decode_sector(sector: int) -> tuple[str,int]:
@@ -51,31 +53,68 @@ class BrainAtlas:
         ],key=lambda x:x["id"])
         return {"level":"overview","total":total,"sectors":sectors,
                 "connections":edge_count,
-                "page_size":BUCKET_SIZE,
+                "page_size":BUCKET_SIZE,"region_span":REGION_SPAN,"hierarchical":True,
                 "maximum_records_in_response":MAX_BUCKETS}
 
-    def clusters(self, sector: int, cursor: int | None = None) -> dict:
+    def regions(self, sector: int, cursor: int | None = None) -> dict:
+        """Hierarchical, seek-paginated 8192-ID regions for 100k+ memories."""
         kind, parity = decode_sector(sector)
-        if cursor is not None and (type(cursor) is not int or cursor <= 0):
+        if cursor is not None and (type(cursor) is not int or cursor < 0):
+            raise ValueError("Invalid region cursor.")
+        with closing(self.connect()) as db:
+            rows = db.execute(
+                "SELECT CAST((id-1)/? AS INTEGER) region, COUNT(*) n,"
+                "MIN(id) first_id,MAX(id) last_id FROM memory_items "
+                "WHERE status='active' AND kind=? AND (id%2)=? "
+                "AND (? IS NULL OR id<?) "
+                "GROUP BY region ORDER BY region DESC LIMIT ?",
+                (REGION_SPAN, kind, parity, cursor, cursor*REGION_SPAN+REGION_SPAN+1
+                 if cursor is not None else None, MAX_REGIONS+1)
+            ).fetchall()
+            total=db.execute(
+                "SELECT COUNT(*) FROM memory_items "
+                "WHERE status='active' AND kind=? AND (id%2)=?",
+                (kind,parity)
+            ).fetchone()[0]
+        more=len(rows)>MAX_REGIONS
+        visible=rows[:MAX_REGIONS]
+        return {"level":"regions","sector":sector,"kind":kind,"total":total,
+                "regions":[{"region":x["region"],"count":x["n"],
+                            "first_id":x["first_id"],"last_id":x["last_id"]}
+                           for x in visible],
+                "next_cursor":visible[-1]["region"] if more else None,
+                "has_more":more,"region_span":REGION_SPAN,
+                "bounded":True}
+
+    def clusters(self, sector: int, cursor: int | None = None, region: int | None = None) -> dict:
+        kind, parity = decode_sector(sector)
+        if cursor is not None and (type(cursor) is not int or cursor < 0):
             raise ValueError("Неверная позиция списка кластеров.")
+        if region is not None and (type(region) is not int or region < 0):
+            raise ValueError("Неверная область памяти.")
         with closing(self.connect()) as db:
             query = (
                 "SELECT CAST((id-1)/? AS INTEGER) bucket,COUNT(*) n,"
                 "MIN(id) first_id,MAX(id) last_id "
                 "FROM memory_items WHERE status='active' AND kind=? AND (id%2)=?"
                 " AND (? IS NULL OR CAST((id-1)/? AS INTEGER)<?)"
+                " AND (? IS NULL OR id BETWEEN ? AND ?)"
                 " GROUP BY bucket ORDER BY bucket DESC LIMIT ?"
             )
+            low = region*REGION_SPAN+1 if region is not None else 0
+            high = (region+1)*REGION_SPAN if region is not None else 0
             rows = db.execute(
-                query,(BUCKET_SIZE,kind,parity,cursor,BUCKET_SIZE,cursor,MAX_BUCKETS+1)
+                query,(BUCKET_SIZE,kind,parity,cursor,BUCKET_SIZE,cursor,
+                       region,low,high,MAX_BUCKETS+1)
             ).fetchall()
             total = db.execute(
                 "SELECT COUNT(*) FROM memory_items WHERE status='active' "
-                "AND kind=? AND (id%2)=?",(kind,parity)
+                "AND kind=? AND (id%2)=? AND (? IS NULL OR id BETWEEN ? AND ?)",
+                (kind,parity,region,low,high)
             ).fetchone()[0]
         more = len(rows)>MAX_BUCKETS
         items = rows[:MAX_BUCKETS]
-        return {"level":"clusters","sector":sector,"kind":kind,"total":total,
+        return {"level":"clusters","sector":sector,"kind":kind,"region":region,"total":total,
                 "clusters":[
                     {"bucket":x["bucket"],"count":x["n"],
                      "first_id":x["first_id"],"last_id":x["last_id"]}

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080b">
+  <title>Цукиёра — SOUL CORE</title>
+  <link rel="stylesheet" href="/ui/style.css">
+  <script type="module" src="/ui/app.ts"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="identity"><span class="identity-mark" aria-hidden="true">✦</span><span>TSUKIYORA</span></div>
+      <div class="top-actions">
+        <span class="status" id="status" role="status">Запуск…</span>
+        <button id="settings-open" class="icon-button" aria-label="Сведения и настройки" title="Сведения и настройки">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="soul-panel" aria-label="Ядро личности Цукиёры">
+        <canvas id="soul-canvas" aria-hidden="true"></canvas>
+        <div class="soul-title">
+          <span class="soul-kicker">SOUL CORE · 01</span>
+          <h1 id="persona-name">Цукиёра</h1>
+          <p id="persona-subtitle">Локальная личность</p>
+        </div>
+        <div class="soul-footnote"><span class="signal"></span><span>Ядро личности · локально</span></div>
+      </section>
+
+      <section class="chat-panel" aria-label="Чат Цукиёры">
+        <div class="chat-heading"><span>ДИАЛОГ</span><span class="muted">Первое пробуждение</span></div>
+        <div class="conversation" id="conversation" role="log" aria-live="polite">
+          <div class="greeting">
+            <span class="greeting-mark" aria-hidden="true">✧</span>
+            <p id="welcome">Хозяин, мой характер уже хранится в этой папке. Скоро мы сможем разговаривать.</p>
+            <div class="greeting-detail" id="persona-traits">Загрузка профиля…</div>
+          </div>
+        </div>
+        <div class="composer">
+          <label class="sr-only" for="message">Сообщение</label>
+          <textarea id="message" rows="1" disabled placeholder="Чат появится после подключения облачной модели"></textarea>
+          <button class="send" type="button" disabled aria-label="Отправка недоступна">↗</button>
+        </div>
+        <p class="composer-note">Сейчас работает только локальное ядро и просмотр личности. Облачная модель не подключена.</p>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="settings-dialog" aria-labelledby="settings-heading">
+    <div class="dialog-header">
+      <h2 id="settings-heading">Состояние Цукиёры</h2>
+      <button class="icon-button" id="settings-close" aria-label="Закрыть">×</button>
+    </div>
+    <dl class="settings-list">
+      <div><dt>Локальный сервер</dt><dd id="server-info">Проверка…</dd></div>
+      <div><dt>Память SQLite</dt><dd id="memory-info">Проверка…</dd></div>
+      <div><dt>Нейросеть</dt><dd id="model-info">Не подключена</dd></div>
+    </dl>
+    <p class="dialog-note">Новые настройки появятся здесь только тогда, когда соответствующие функции будут действительно работать. Ключи и личная память не хранятся в GitHub.</p>
+  </dialog>
+</body>
+</html>

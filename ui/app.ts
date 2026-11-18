@@ -5,6 +5,8 @@ const ctx = canvas.getContext("2d", {alpha: true});
 const dialog = document.getElementById("settings-dialog");
 const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let brainGraph = {nodes: [], edges: [], pending: 0};
+let graphPositions = new Map();
 let width = 0, height = 0, time = 0, last = 0;
 
 async function loadState() {
@@ -25,6 +27,7 @@ async function loadState() {
     $("memory-info").textContent = status.database === "ready" ? `SQLite · ${status.memory?.memories ?? 0} записей` : "Ошибка";
     await refreshCloudStatus();
     await refreshChatSessions();
+    await Promise.all([refreshBrain(), refreshCognition()]);
     $("welcome").textContent =
       "Хозяин… Моё ядро личности уже здесь. Я сохраню верность, нежность и собственный разум, даже когда мы подключим облачную модель.";
   } catch (error) {
@@ -102,6 +105,52 @@ function paint() {
       i % 7 === 0 ? 1.5 : .8, 0, Math.PI * 2);
     ctx.fill();
   }
+  // Real SQLite graph, capped at 180 nodes/400 edges. No demo activity.
+  graphPositions = new Map();
+  const sectorCounts = Array(8).fill(0);
+  const section = {fact: 0, preference: 2, event: 4, biography: 6};
+  const cellSize = Math.max(3.2, Math.min(6.5, r / 34));
+  for (const node of brainGraph.nodes) {
+    const sector = (section[node.kind] ?? 0) + (node.id % 2);
+    const slot = sectorCounts[sector]++;
+    const layer = Math.floor(slot / 13);
+    const slotInRing = slot % 13;
+    const angle = -Math.PI / 2 + sector * Math.PI / 4 +
+                  (slotInRing - 6) * 0.043 + Math.sin(slot * 2.4) * .005;
+    const distance = r * (.60 + layer * .075);
+    graphPositions.set(node.id, {
+      x: x + Math.cos(angle) * distance,
+      y: y + Math.sin(angle) * distance,
+      preview: node.preview, kind: node.kind,
+    });
+  }
+  ctx.strokeStyle = "rgba(211,173,114,.18)";
+  ctx.lineWidth = .8;
+  for (const link of brainGraph.edges) {
+    const a = graphPositions.get(link.source_id);
+    const b = graphPositions.get(link.target_id);
+    if (!a || !b) continue;
+    ctx.beginPath();
+    ctx.strokeStyle = link.relation === "possible_conflict"
+      ? "rgba(225,135,101,.42)" : "rgba(220,173,113,.21)";
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(x, y, b.x, b.y);
+    ctx.stroke();
+  }
+  for (const node of graphPositions.values()) {
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(241,198,132,.75)";
+    ctx.fillStyle = "rgba(190,135,65,.10)";
+    for (let side = 0; side < 6; side++) {
+      const angle = Math.PI / 3 * side;
+      const px = node.x + cellSize * Math.cos(angle);
+      const py = node.y + cellSize * Math.sin(angle);
+      if (side === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
 }
 
 function frame(timestamp) {
@@ -117,6 +166,37 @@ function frame(timestamp) {
   }
   if (!reducedMotion) requestAnimationFrame(frame);
 }
+
+async function refreshBrain() {
+  try {
+    const response = await fetch("/api/soul/graph", {cache: "no-store"});
+    if (!response.ok) throw new Error("graph unavailable");
+    const data = await response.json();
+    brainGraph = data;
+    $("soul-live-state").textContent = data.nodes.length
+      ? data.nodes.length + " воспоминаний · " + data.edges.length + " связей"
+      : "Память ждёт первых воспоминаний";
+    if (reducedMotion) paint();
+  } catch (error) {
+    $("soul-live-state").textContent = "Граф памяти временно недоступен";
+  }
+}
+
+// Nodes show the real preview only on hover. No artificial neural activity.
+canvas.addEventListener("pointermove", (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const px = event.clientX - rect.left;
+  const py = event.clientY - rect.top;
+  let hovered = null;
+  for (const position of graphPositions.values()) {
+    if ((position.x - px) ** 2 + (position.y - py) ** 2 < 80) {
+      hovered = position;
+      break;
+    }
+  }
+  canvas.title = hovered ? hovered.kind + ": " + hovered.preview : "";
+});
+canvas.addEventListener("pointerleave", () => { canvas.title = ""; });
 
 window.addEventListener("resize", () => {
   resize();
@@ -388,6 +468,34 @@ function addChatBubble(role, content) {
   return node;
 }
 
+function attachFeedback(node, messageId) {
+  if (!Number.isInteger(messageId) || node.querySelector(".feedback-actions")) return;
+  const controls = document.createElement("div");
+  controls.className = "feedback-actions";
+  for (const [symbol, helpful, label] of [["♡", true, "Ответ помог"], ["✕", false, "Ответ не помог"]]) {
+    const button = document.createElement("button");
+    button.className = "feedback-button";
+    button.type = "button";
+    button.textContent = symbol;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.addEventListener("click", async () => {
+      try {
+        await requestJSON("/api/soul/feedback", "POST", {
+          message_id: messageId, helpful,
+        });
+        controls.querySelectorAll("button").forEach(item => item.disabled = true);
+        $("chat-notice").textContent = "Оценку сохранила. Учту её в будущих ответах.";
+        await refreshCognition();
+      } catch (error) {
+        $("chat-notice").textContent = error.message;
+      }
+    });
+    controls.append(button);
+  }
+  node.append(controls);
+}
+
 function showGreeting() {
   const target = $("conversation");
   target.classList.remove("has-messages");
@@ -413,7 +521,10 @@ async function loadChatHistory() {
     $("conversation").replaceChildren();
     if (!result.messages.length) return showGreeting();
     $("conversation").classList.add("has-messages");
-    for (const msg of result.messages) addChatBubble(msg.role, msg.content);
+    for (const msg of result.messages) {
+      const node = addChatBubble(msg.role, msg.content);
+      if (msg.role === "assistant") attachFeedback(node, msg.id);
+    }
   } catch (error) {
     $("chat-notice").textContent = "Не удалось открыть историю: " + error.message;
   }
@@ -549,6 +660,7 @@ async function sendMessage() {
         autoScrollChat();
       } else if (event === "done") {
         complete = true;
+        attachFeedback(placeholder, data.message_id);
         pendingClientId = "";
         currentPrompt = "";
         $("chat-notice").textContent = "Ответ и история сохранены локально.";
@@ -567,6 +679,8 @@ async function sendMessage() {
     await refreshChatSessions();
     await loadPendingMemories();
     await loadSoulJournal();
+    await refreshBrain();
+    await refreshCognition();
   } catch (error) {
     $("message").value = content;
     if (!received) placeholder.remove();
@@ -634,6 +748,8 @@ async function loadPendingMemories() {
             await loadPendingMemories();
             await refreshMemory();
             await loadSoulJournal();
+            await refreshBrain();
+            await refreshCognition();
           } catch (error) {
             memoryFeedback(error.message);
           }

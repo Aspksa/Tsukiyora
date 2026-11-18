@@ -1,7 +1,9 @@
+import {BrainAtlasView} from "./atlas_view.ts";
 // JavaScript-compatible TypeScript: browser can run this file without a build step.
 // A dedicated TypeScript build may be added later using the approved Node.js frontend.
 const canvas = document.getElementById("soul-canvas");
 const ctx = canvas.getContext("2d", {alpha: true});
+const atlasView = new BrainAtlasView(ctx);
 const dialog = document.getElementById("settings-dialog");
 const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -64,6 +66,10 @@ function resize() {
 }
 
 function paint() {
+  if (atlasView.active) {
+    atlasView.draw(width,height,graphScale,graphPanX,graphPanY,reducedMotion);
+    return;
+  }
   ctx.clearRect(0, 0, width, height);
   const x = width * .5, y = height * .48;
   const r = Math.min(width * .39, height * .39, 254);
@@ -206,6 +212,20 @@ function frame(timestamp) {
 
 async function refreshBrain() {
   try {
+    const atlasResponse = await fetch("/api/soul/atlas?level=overview", {cache:"no-store"});
+    if (!atlasResponse.ok) throw new Error("atlas unavailable");
+    const overview = await atlasResponse.json();
+    if (overview.total > 2400) {
+      await atlasView.refresh(overview);
+      brainGraph={nodes:[],edges:[],pending:0};
+      $("soul-live-state").textContent = overview.total.toLocaleString("ru-RU") +
+        " воспоминаний · " + overview.connections + " связей · " +
+        (atlasView.level==="overview"?"8 секторов":
+         atlasView.level==="clusters"?"кластеры памяти":"отдельные соты");
+      if (reducedMotion) paint();
+      return;
+    }
+    atlasView.active = false;
     const response = await fetch("/api/soul/graph", {cache: "no-store"});
     if (!response.ok) throw new Error("graph unavailable");
     const data = await response.json();
@@ -228,6 +248,7 @@ async function refreshBrain() {
 
 // Zoom, pan and click work on actual SQLite nodes. Dragging never creates records.
 function nearestBrainNode(px, py) {
+  if (atlasView.active) return atlasView.hit(px,py);
   if (graphScale < .85 && brainGraph.nodes.length >= 300) return null;
   let found = null;
   let distance = Math.max(64, 55 * graphScale);
@@ -242,7 +263,7 @@ function nearestBrainNode(px, py) {
 }
 
 canvas.addEventListener("wheel", (event) => {
-  if (!brainGraph.nodes.length) return;
+  if (!brainGraph.nodes.length && !atlasView.active) return;
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const centerX = rect.width * .5, centerY = rect.height * .48;
@@ -258,7 +279,7 @@ canvas.addEventListener("wheel", (event) => {
 }, {passive: false});
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || !brainGraph.nodes.length) return;
+  if (event.button !== 0 || (!brainGraph.nodes.length && !atlasView.active)) return;
   graphDrag = {x: event.clientX, y: event.clientY};
   graphMoved = false;
   canvas.setPointerCapture(event.pointerId);
@@ -276,7 +297,8 @@ canvas.addEventListener("pointermove", (event) => {
   }
   const rect = canvas.getBoundingClientRect();
   const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
-  canvas.title = node ? node.kind + ": " + node.preview : "Колёсико — масштаб; перетаскивание — перемещение";
+  canvas.title = node ? (node.type ? node.preview : node.kind + ": " + node.preview)
+    : "Колёсико — масштаб; перетаскивание — перемещение";
   canvas.style.cursor = node ? "pointer" : "grab";
 });
 canvas.addEventListener("pointerup", (event) => {
@@ -285,8 +307,16 @@ canvas.addEventListener("pointerup", (event) => {
 });
 canvas.addEventListener("pointercancel", () => { graphDrag = null; });
 canvas.addEventListener("pointerleave", () => { canvas.title = ""; });
-canvas.addEventListener("dblclick", () => {
+canvas.addEventListener("dblclick", async () => {
   graphScale = 1; graphPanX = 0; graphPanY = 0;
+  if (atlasView.active) {
+    try {
+      const overview=await atlasView.fetch("overview");
+      atlasView.overview(overview);
+    } catch (error) {
+      $("soul-live-state").textContent = "Ошибка карты: "+error.message;
+    }
+  }
   if (reducedMotion) paint();
 });
 canvas.addEventListener("click", async (event) => {
@@ -294,6 +324,20 @@ canvas.addEventListener("click", async (event) => {
   const rect = canvas.getBoundingClientRect();
   const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
   if (!node) return;
+  if (atlasView.active && node.type && node.type !== "memory") {
+    try {
+      await atlasView.open(node);
+      graphScale=1;graphPanX=0;graphPanY=0;
+      $("soul-live-state").textContent =
+        atlasView.level==="clusters" ? "Кластеры памяти · выбери соту" :
+        atlasView.level==="nodes" ? "Воспоминания · выбери запись" :
+        "Обзор памяти";
+      if (reducedMotion) paint();
+    } catch (error) {
+      $("soul-live-state").textContent="Ошибка загрузки сот: "+error.message;
+    }
+    return;
+  }
   $("memory-search").value = node.preview.slice(0, 60);
   $("memory-details").open = true;
   if (!dialog.open) dialog.showModal();
@@ -1267,6 +1311,13 @@ $("cognitive-details").addEventListener("toggle", () => {
 
 canvas.addEventListener("keydown", (event) => {
   const key = event.key;
+  if (key==="Escape" && atlasView.active) {
+    event.preventDefault();
+    atlasView.back().then(() => {if (reducedMotion) paint();}).catch(
+      (error) => { $("soul-live-state").textContent=error.message; }
+    );
+    return;
+  }
   if (key === "+" || key === "=") graphScale = Math.min(3.2, graphScale * 1.13);
   else if (key === "-") graphScale = Math.max(.45, graphScale / 1.13);
   else if (key === "ArrowLeft") graphPanX += 22;

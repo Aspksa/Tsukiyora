@@ -141,7 +141,9 @@ class V07StorageTests(unittest.TestCase):
         self.assertIn(result["kind"], ("backup","integrity","layer_index",
                                       "quality","vector_repair","lessons",
                                       "precision_index","academy_cycle",
-                                      "persona_continuity","backup_verify"))
+                                      "persona_continuity","backup_verify",
+                                      "academy_curriculum","persona_arc",
+                                      "document_index","source_audit"))
         self.assertEqual(work.pending()["usage"]["answered_requests"], 0)
         session = self.store.create_conversation()
         reply = self.store.append_messages(session["id"], [

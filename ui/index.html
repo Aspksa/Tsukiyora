@@ -28,7 +28,7 @@
           <h1 id="persona-name">Цукиёра</h1>
           <p id="persona-subtitle">Локальная личность</p>
         </div>
-        <div class="soul-footnote"><span class="signal"></span><span>Ядро личности · локально</span></div>
+        <div class="soul-footnote"><span class="signal"></span><span id="soul-live-state">Ядро личности · локально</span></div>
       </section>
 
       <section class="chat-panel" aria-label="Чат Цукиёры">
@@ -106,6 +106,22 @@
           <p class="memory-empty">Из разговоров сюда поступают важные факты. Ты сам решаешь, что сохранить.</p>
           <div id="memory-pending" class="memory-results" aria-live="polite"></div>
         </details>
+        <details class="memory-queue" id="vector-details">
+          <summary>Векторная память <span id="vector-count" class="muted">опционально</span></summary>
+          <p class="memory-empty">Индексация отправляет выбранные подтверждённые воспоминания в embedding-модель Cloud.ru, расходует токены. Кэш остаётся в SQLite.</p>
+          <label class="sr-only" for="embedding-model">Embedding-модель</label>
+          <select id="embedding-model" disabled><option value="">Подключи Cloud.ru и обнови модели</option></select>
+          <div class="memory-actions">
+            <button id="embedding-select" type="button" class="quiet-button" disabled>Выбрать модель</button>
+            <button id="embedding-index" type="button" class="quiet-button" disabled>Индексировать память</button>
+          </div>
+          <p class="memory-empty" id="vector-feedback" role="status">Обработка только после твоего подтверждения.</p>
+        </details>
+        <details class="memory-queue" id="cognitive-details">
+          <summary>Опыт и биография <span class="muted">локально</span></summary>
+          <div id="cognitive-status" class="memory-empty">Локальная проверка…</div>
+          <div id="biography-notes" class="memory-results"></div>
+        </details>
         <details class="memory-queue" id="soul-journal">
           <summary>История Цукиёры</summary>
           <div id="soul-timeline" class="memory-results"></div>
@@ -116,7 +132,7 @@
         </div>
       </div>
     </details>
-    <p class="dialog-note">История сообщений сохраняется автоматически в локальной SQLite. Воспоминания по-прежнему добавляются вручную — Цукиёра не приписывает тебе вымышленные факты.</p>
+    <p class="dialog-note">Диалоги сохраняются в SQLite. Новые факты требуют подтверждения, когнитивный цикл работает только локально. Эмбеддинги отправляются в облако исключительно после отдельного согласия.</p>
   </dialog>
 </body>
 </html>

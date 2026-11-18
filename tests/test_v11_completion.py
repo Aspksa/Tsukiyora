@@ -55,6 +55,12 @@ class HistoryLocalTests(unittest.TestCase):
                                            before_id=result["next_before_id"])
         self.assertTrue(all(x["id"]<result["items"][-1]["id"] for x in continuation["items"]))
         self.assertEqual(self.history.search("несуществующий запрос")["items"],[])
+        hit=result["items"][-1]
+        context=self.history.context(hit["id"])
+        self.assertEqual(context["selected_message_id"],hit["id"])
+        self.assertTrue(any(x["id"]==hit["id"] for x in context["messages"]))
+        self.assertLessEqual(len(context["messages"]),17)
+        self.assertEqual(context["cloud_requests"],0)
         for query in ("", " ", "x"*251):
             with self.assertRaises(ValueError):
                 self.history.search(query)
@@ -189,6 +195,8 @@ class HistoryHTTPTests(unittest.TestCase):
             "client_message_id":"user1"}])
         result=self.get("/api/memory/history/search?query=%D0%B4%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80")
         self.assertEqual(len(result["items"]),1)
+        context=self.get("/api/memory/history/context?message_id="+str(result["items"][0]["id"]))
+        self.assertEqual(context["messages"][0]["id"],result["items"][0]["id"])
         self.assertFalse(self.get("/api/memory/history/recap?conversation_id="+
                                   convo["id"])["ready"])
         a=store.add_memory("fact","Стандартная гарантия составляет один год")

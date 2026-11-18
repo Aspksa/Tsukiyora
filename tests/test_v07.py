@@ -83,6 +83,17 @@ class V07StorageTests(unittest.TestCase):
         self.assertEqual(MemoryStore(self.db).stats()["memories"], 1)
         self.assertEqual(MemoryStore(self.db).find_memories()[0]["id"], first["id"])
 
+    def test_recovery_can_preserve_and_replace_corrupt_current_database(self):
+        original = self.store.add_memory("fact", "Из резервной копии")
+        recovery = Reliability(self.db, ROOT)
+        saved = recovery.ensure_snapshot(force=True)
+        # Simulate offline disk corruption only after every database handle is closed.
+        self.db.write_bytes(b"damaged local database bytes")
+        restored = recovery.restore_offline(saved["name"], confirm=True)
+        self.assertTrue(restored["safety_copy"].startswith("damaged-"))
+        self.assertTrue((recovery.folder / restored["safety_copy"]).exists())
+        self.assertEqual(MemoryStore(self.db).find_memories()[0]["id"], original["id"])
+
     def test_incompatible_backup_is_rejected_without_touching_database(self):
         self.store.add_memory("fact", "Keep me")
         recovery = Reliability(self.db, ROOT)

@@ -173,6 +173,7 @@ async function refreshMemory() {
   const target = $("memory-results");
   try {
     const result = await memoryRequest("/api/memory?" + new URLSearchParams({query, limit: "50"}));
+    const relationships = await memoryRequest("/api/soul/links");
     target.replaceChildren();
     if (!result.items.length) {
       const empty = document.createElement("p");
@@ -184,7 +185,12 @@ async function refreshMemory() {
       const record = document.createElement("div");
       record.className = "memory-record";
       const label = document.createElement("small");
-      label.textContent = (memoryLabels[item.kind] || item.kind) + " · " + item.created_at;
+      const edges = relationships.items.filter(e => e.source_id === item.id || e.target_id === item.id);
+      const conflicts = edges.filter(e => e.relation === "possible_conflict").length;
+      label.textContent = (memoryLabels[item.kind] || item.kind) + " · " + item.created_at
+        + (item.source_ref ? " · источник #" + item.source_ref : " · вручную")
+        + (edges.length ? " · связей: " + edges.length : "")
+        + (conflicts ? " · проверь противоречия: " + conflicts : "");
       const text = document.createElement("p");
       text.textContent = item.content;
       const actions = document.createElement("div");

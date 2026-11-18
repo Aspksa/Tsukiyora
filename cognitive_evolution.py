@@ -154,11 +154,31 @@ class CognitiveEvolution:
                 "interpretation": "Сигналы проблем; истинные причины ещё не установлены.",
                 "auto_remote_calls": False}
 
-    def generate(self, domain, *, count=4, confirmed=False):
+    def observe(self):
+        """Propose only drafts when repeated explicit feedback shows a weak skill."""
+        signals=self.signals()["feedback"]
+        qualified=[x for x in signals if x["negative"]>=4]
+        if not qualified:
+            return {"proposed":0,"reason":"not_enough_negative_ratings"}
+        category=qualified[0]["category"]
+        domain=(category if category in DOMAINS else
+                "rag" if category in ("sources","accuracy") else "logic")
+        with closing(self.store.connect()) as db:
+            exists=db.execute(
+                "SELECT COUNT(*) FROM evol4_candidates WHERE domain=? AND state='proposed'",
+                (domain,)
+            ).fetchone()[0]
+        if exists>=3:
+            return {"proposed":0,"reason":"unreviewed_drafts_exist","domain":domain}
+        result=self.generate(domain,count=3,automatic=True)
+        return {"proposed":len(result["candidates"]),"domain":domain,
+                "automatic_activation":False,"cloud_requests":0}
+
+    def generate(self, domain, *, count=4, confirmed=False, automatic=False):
         """Evolutionary recombination/mutation from a locked library of methods."""
         if domain not in DOMAINS or type(count) is not int or not 3 <= count <= 5:
             raise ValueError("Выбери предметную область и 3–5 вариантов.")
-        if confirmed is not True:
+        if confirmed is not True and automatic is not True:
             raise ValueError("Требуется подтверждение генерации гипотез.")
         with closing(self.store.connect()) as db, db:
             parent = db.execute(
@@ -337,6 +357,37 @@ class CognitiveEvolution:
                 "promotion_requires_cases":MIN_PROMOTION_CASES,
                 "auto_activation":False,"estimated_token_billing":False,
                 "provider_requests_in_background":False}
+
+    def budget_plan(self):
+        """Local prioritisation; not a cost prediction or an API scheduler."""
+        report=self.report()
+        remaining=max(0,DAILY_MAX_CALLS-report["daily_calls_reserved"])
+        priorities=[]
+        for c in report["candidates"]:
+            if c["state"]!="proposed" or c["running"]:
+                continue
+            own=max((r["cases"] for r in c["own_results"]),default=0)
+            has_regression=any(r["regressions"]>max(1,int(r["cases"]*.1))
+                               for r in c["own_results"])
+            if has_regression:
+                decision="review_regressions_before_more_calls"
+            elif own>=MIN_PROMOTION_CASES:
+                decision="review_for_manual_activation"
+            elif remaining<2:
+                decision="wait_for_budget"
+            else:
+                decision="test_new_holdout_cases"
+            priorities.append({
+                "candidate_id":c["id"],"domain":c["domain"],
+                "assessed_holdout_cases":own,
+                "priority":(MIN_PROMOTION_CASES-own) if own<MIN_PROMOTION_CASES else 0,
+                "next_step":decision,
+            })
+        priorities.sort(key=lambda x:(x["next_step"]!="review_for_manual_activation",
+                                      -x["assessed_holdout_cases"],x["candidate_id"]))
+        return {"today_calls_remaining":remaining,"suggestions":priorities[:12],
+                "estimated_billing":False,"automatic_paid_calls":False,
+                "max_per_batch":MAX_CALLS_PER_BATCH}
 
     def _guidance(self, recipe):
         return " ".join(METHODS[name] for name in recipe)[:1400]

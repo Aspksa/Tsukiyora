@@ -12,6 +12,7 @@ import re
 import unicodedata
 
 from memory_store import MemoryStore
+from vector_memory import digest, unpack_vector, similarity
 
 NEGATION = re.compile(r"\b(?:не|нет|никогда|перестал(?:а)?|больше\s+не|ненавижу)\b", re.I)
 STOP = frozenset(
@@ -90,7 +91,58 @@ class MemoryQuality:
                     duplicates.append(entry)
                 elif result["conflict"]:
                     conflicts.append(entry)
+        # Semantic duplicate signals use ONLY previously cached vectors.
+        # Never request cloud embeddings while doing a quality check.
+        semantic = []
+        seen = {tuple(sorted((x["left"]["id"], x["right"]["id"]))) for x in duplicates}
+        with closing(self.store.connect()) as db:
+            rows = db.execute(
+                "SELECT e.memory_id,e.model,e.text_sha256,c.dimension,c.vector,"
+                "m.kind,m.content,m.source_type,m.source_ref "
+                "FROM memory_embeddings e "
+                "JOIN memory_items m ON m.id=e.memory_id "
+                "JOIN embedding_cache c ON c.model=e.model AND c.text_sha256=e.text_sha256 "
+                "WHERE m.status='active' ORDER BY e.memory_id DESC LIMIT 90"
+            ).fetchall()
+        verified = []
+        for row in rows:
+            if row["text_sha256"] != digest(row["content"]):
+                continue
+            try:
+                vec = unpack_vector(row["vector"], row["dimension"])
+            except (ValueError, TypeError):
+                continue
+            verified.append((row, vec))
+        for i, (left, vec1) in enumerate(verified):
+            for right, vec2 in verified[i + 1:]:
+                if left["memory_id"] == right["memory_id"] or (
+                        left["model"] != right["model"] or left["kind"] != right["kind"]):
+                    continue
+                pair = tuple(sorted((left["memory_id"], right["memory_id"])))
+                if pair in seen:
+                    continue
+                # Polarity opposites are NOT duplicate claims.
+                if bool(NEGATION.search(normalized(left["content"]))) != bool(
+                        NEGATION.search(normalized(right["content"]))):
+                    continue
+                cosine = similarity(vec1, vec2)
+                if cosine >= .96:
+                    seen.add(pair)
+                    semantic.append({
+                        "left": {k: left[k] for k in ("kind", "content", "source_type", "source_ref")}
+                                | {"id": left["memory_id"]},
+                        "right": {k: right[k] for k in ("kind", "content", "source_type", "source_ref")}
+                                 | {"id": right["memory_id"]},
+                        "score": round(cosine, 3),
+                        "evidence": "cached vector similarity; needs human review",
+                    })
+                if len(semantic) >= 35:
+                    break
+            if len(semantic) >= 35:
+                break
         duplicates.sort(key=lambda x: x["score"], reverse=True)
         conflicts.sort(key=lambda x: x["score"], reverse=True)
-        return {"duplicates": duplicates[:40], "conflicts": conflicts[:40],
-                "scanned": len(items), "automatic_deletions": 0}
+        semantic.sort(key=lambda x: x["score"], reverse=True)
+        return {"duplicates": duplicates[:40], "semantic_duplicates": semantic[:35],
+                "conflicts": conflicts[:40], "scanned": len(items),
+                "automatic_deletions": 0, "outbound_cloud_requests": 0}

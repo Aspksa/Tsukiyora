@@ -296,6 +296,13 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.curriculum.status())
         if path == "/api/soul/persona/arc":
             return self.send_json(self.server.cognition.persona_arc.history())
+        if path == "/api/soul/persona/links":
+            return self.send_json(self.server.cognition.persona_arc.links())
+        if path == "/api/soul/academy/practice":
+            return self.send_json({
+                **self.server.cognition.practice.questions(),
+                **self.server.cognition.practice.status()
+            })
         if path == "/api/soul/academy":
             return self.send_json(self.server.cognition.academy.status())
         if path == "/api/soul/academy/metrics":
@@ -417,6 +424,14 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cloud.enable_document_context(
                     obj.get("allowed")))
             except (ValueError,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/academy/practice/evaluate":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.practice.evaluate(
+                    obj.get("skill"),obj.get("answer"),
+                    confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/academy/rollback/resume":
             try:

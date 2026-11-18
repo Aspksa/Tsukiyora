@@ -334,8 +334,9 @@ class SoulHandler(BaseHTTPRequestHandler):
             store = self._memory()
             obj = self._read_body() if method in ("POST", "PUT") else {}
             if method == "POST" and path == "/api/memory":
-                return self.send_json({"item": store.add_memory(
-                    kind=obj.get("kind"), content=obj.get("content"))}, 201)
+                item = store.add_memory(kind=obj.get("kind"), content=obj.get("content"))
+                SoulGrowth(self.server.memory_path).build_links(item["id"])
+                return self.send_json({"item": item}, 201)
             if method == "POST" and path == "/api/memory/conversations":
                 return self.send_json({"conversation": store.create_conversation(
                     title=obj.get("title", "Новый диалог"))}, 201)
@@ -348,9 +349,11 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"saved": True, "filename": target.name}, 201)
             match = re.fullmatch(r"/api/memory/([1-9][0-9]*)", path)
             if match and method == "PUT":
-                return self.send_json({"item": store.correct_memory(
+                item = store.correct_memory(
                     int(match.group(1)), obj.get("content"),
-                    reason=obj.get("reason", "user correction"))})
+                    reason=obj.get("reason", "user correction"))
+                SoulGrowth(self.server.memory_path).build_links(item["id"])
+                return self.send_json({"item": item})
             if match and method == "DELETE":
                 store.delete_memory(int(match.group(1)))
                 return self.send_json({"deleted": True})

@@ -988,7 +988,7 @@ $("precision-search").addEventListener("click", async () => {
   const button=$("precision-search");
   button.disabled=true;
   try {
-    const result=await requestJSON("/api/soul/rag","POST", {
+    const result=await requestJSON("/api/soul/rag4","POST", {
       query,limit:20,max_age_days:365,
     });
     const target=$("memory-results");

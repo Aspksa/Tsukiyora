@@ -48,3 +48,29 @@ dialog::backdrop{background:#000b}
 @media(max-width:900px){.app{padding:0 22px}.stage{grid-template-columns:1fr;gap:0}.soul-panel{min-height:315px}.soul-title h1{font-size:43px}.soul-footnote{bottom:18px}.chat-panel{min-height:470px;padding:10px 0 24px}.conversation{min-height:225px;padding:25px 7px}.chat-heading{padding-bottom:15px}.greeting p{font-size:19px}}
 @media(max-width:480px){.app{padding:0 16px}.topbar{height:64px}.stage{min-height:calc(100vh - 64px)}.soul-panel{min-height:280px}.top-actions{gap:10px}.status{max-width:125px;text-align:right}.chat-panel{min-height:calc(100vh - 344px)}.chat-heading .muted{font-size:9px}.greeting p{font-size:18px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* Memory controls live inside the existing settings dialog, not a separate page. */
+dialog{max-height:min(86vh,850px);overflow-y:auto}
+.memory-details{margin-top:20px;border-top:1px solid #ffffff1c;padding-top:17px}
+.memory-details summary{cursor:pointer;font-weight:500;font-size:14px;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.memory-details summary::-webkit-details-marker{display:none}
+.memory-details summary:before{content:"+";color:#d8b885;margin-right:9px;font-size:18px}
+.memory-details[open] summary:before{content:"−"}
+.memory-form{padding-top:17px;display:flex;flex-direction:column;gap:11px}
+.memory-form select,.memory-form textarea,.memory-form input{width:100%;background:#1b1919;border:1px solid #594730;color:#efe3d0;border-radius:9px;padding:10px 11px;outline:none;font-size:13px}
+.memory-form textarea{resize:vertical;min-height:78px}
+.memory-form select:focus,.memory-form textarea:focus,.memory-form input:focus{border-color:#d3aa74}
+.memory-actions,.memory-footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.accent-button{border:1px solid #b4915f;background:#6a4b2b;color:#f5e8d4;padding:9px 15px;border-radius:8px;cursor:pointer}
+.accent-button:hover{background:#86633d}
+.quiet-button{border:1px solid #ffffff23;background:transparent;color:#c8b093;padding:7px 10px;border-radius:8px;cursor:pointer}
+.quiet-button:hover{border-color:#b9996a}
+.quiet-button[hidden]{display:none}
+.memory-results{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
+.memory-record{padding:10px;border:1px solid #ffffff17;border-radius:9px;background:#ffffff04}
+.memory-record p{font-size:13px;line-height:1.6;margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.memory-record small{color:#af9a7b;font-size:11px}
+.memory-record .memory-actions{margin-top:7px}
+.memory-record .quiet-button{font-size:11px;padding:4px 8px}
+.memory-footer{justify-content:space-between;font-size:11px;color:#a8a093}
+.memory-empty{font-size:12px;color:#938d84;line-height:1.5}

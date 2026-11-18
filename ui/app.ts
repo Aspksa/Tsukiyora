@@ -802,8 +802,27 @@ async function searchDialogueHistory(nextPage=false) {
           sessions.append(opt);
         }
         sessions.value=activeSession;
-        await loadChatHistory();
-        $("dialogue-memory").open=false;
+        try {
+          const nearby=await requestJSON("/api/memory/history/context?"+
+            new URLSearchParams({message_id:String(record.id)}));
+          const log=$("conversation");
+          log.replaceChildren();log.classList.add("has-messages");
+          let selected=null;
+          for (const msg of nearby.messages) {
+            const bubble=addChatBubble(msg.role,msg.content);
+            if (msg.role==="assistant") attachFeedback(bubble,msg.id);
+            if (msg.id===nearby.selected_message_id) {
+              bubble.classList.add("dialogue-highlight");
+              selected=bubble;
+            }
+          }
+          if (selected) selected.scrollIntoView({block:"center"});
+          $("chat-notice").textContent="Фрагмент истории около сообщения #"+
+            record.id+". Для последних сообщений снова выбери диалог в списке.";
+          $("dialogue-memory").open=false;
+        } catch (error) {
+          $("chat-notice").textContent="Ошибка открытия сообщения: "+error.message;
+        }
       });
       output.append(choice);
     }

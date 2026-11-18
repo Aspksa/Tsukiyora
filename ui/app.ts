@@ -1197,10 +1197,11 @@ $("memory-quality").addEventListener("toggle", () => {
   if ($("memory-quality").open) refreshQuality();
 });
 
+let academyPracticeQuestions=[];
 async function refreshCognition() {
   try {
     const [status, biography, cloud, character, academyMetrics, timeline, experiments,
-      curriculum, personaArc, rollback] = await Promise.all([
+      curriculum, personaArc, rollback, practice, personaLinks] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
@@ -1211,7 +1212,32 @@ async function refreshCognition() {
       requestJSON("/api/soul/academy/curriculum"),
       requestJSON("/api/soul/persona/arc"),
       requestJSON("/api/soul/academy/rollback"),
+      requestJSON("/api/soul/academy/practice"),
+      requestJSON("/api/soul/persona/links"),
     ]);
+    academyPracticeQuestions=practice.questions;
+    const select=$("academy-practice-skill");
+    const keep=select.value;
+    select.replaceChildren();
+    for (const question of academyPracticeQuestions) {
+      const option=document.createElement("option");
+      option.value=question.skill;option.textContent=question.skill;
+      select.append(option);
+    }
+    if (academyPracticeQuestions.some(x=>x.skill===keep)) select.value=keep;
+    const chosen=academyPracticeQuestions.find(x=>x.skill===select.value);
+    $("academy-practice-question").textContent=chosen?.question||
+      "Нет доступных контрольных вопросов.";
+    $("persona-link-summary").textContent=
+      "Связи подтверждённой биографии и событий: "+
+      personaLinks.relation_count+
+      ". Отображаются только существующие записи SQLite.";
+    const attempts=practice.results.reduce((sum,x)=>sum+x.runs,0);
+    if (!$("academy-practice-result").textContent) {
+      $("academy-practice-result").textContent=
+        "Выполнено локальных контрольных ответов: "+attempts+
+        ". Эвристика не доказывает качество LLM.";
+    }
     const academy=status.academy;
     $("academy-enabled").checked=Boolean(academy.enabled);
     const academyPane=$("academy-progress");
@@ -1813,4 +1839,30 @@ $("document-cloud-consent").addEventListener("change",async () => {
     input.checked=!allowed;
     $("document-status").textContent="Ошибка разрешения: "+error.message;
   } finally {input.disabled=false;}
+});
+
+$("academy-practice-skill").addEventListener("change",() => {
+  const selected=academyPracticeQuestions.find(
+    x=>x.skill===$("academy-practice-skill").value);
+  $("academy-practice-question").textContent=
+    selected?.question||"Нет вопроса.";
+});
+$("academy-practice-evaluate").addEventListener("click",async () => {
+  const button=$("academy-practice-evaluate");
+  const answer=$("academy-practice-answer").value.trim();
+  if (!answer) {
+    $("academy-practice-result").textContent="Нужен текст проверяемого ответа.";
+    return;
+  }
+  button.disabled=true;
+  try {
+    const result=await requestJSON("/api/soul/academy/practice/evaluate","POST",{
+      skill:$("academy-practice-skill").value,answer,confirmed:true
+    });
+    $("academy-practice-result").textContent=result.passed
+      ? "✓ Пройдена проверка заданных слов и длины. Это не проверка фактической истины."
+      : "Критерии локальной проверки не выполнены. Это не оценка интеллекта модели.";
+  } catch(error) {
+    $("academy-practice-result").textContent="Ошибка проверки: "+error.message;
+  } finally {button.disabled=false;}
 });

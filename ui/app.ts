@@ -199,6 +199,7 @@ function paint() {
 let renderCostMs = 0;
 let frameIntervalMs = 33;
 let fpsReportedAt = 0;
+let observedFps = 0;
 function frame(timestamp) {
   if (document.hidden) {
     last = timestamp;
@@ -208,6 +209,11 @@ function frame(timestamp) {
   const crowded = brainGraph.nodes.length > 900 ||
     (atlasView.active && atlasView.level === "nodes");
   if (timestamp - last >= frameIntervalMs) {
+    const elapsed = timestamp-last;
+    if (last && elapsed>0) {
+      const reading = Math.min(120,1000/elapsed);
+      observedFps=observedFps ? observedFps*.85+reading*.15 : reading;
+    }
     time = reducedMotion ? 0 : timestamp;
     const before = performance.now();
     paint();
@@ -218,8 +224,9 @@ function frame(timestamp) {
     frameIntervalMs = renderCostMs > 26 ? 85 :
       renderCostMs > 12 || crowded ? 50 : 33;
     if (timestamp - fpsReportedAt > 4500) {
-      $("brain-fps").textContent = " · цель " +
-        Math.round(1000 / frameIntervalMs) + " FPS";
+      $("brain-fps").textContent = " · " + Math.round(observedFps) +
+        " FPS (реально) · цель " +
+        Math.round(1000 / frameIntervalMs);
       fpsReportedAt = timestamp;
     }
     last = timestamp;
@@ -1180,7 +1187,8 @@ $("memory-quality").addEventListener("toggle", () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography, cloud, character, academyMetrics, timeline, experiments] = await Promise.all([
+    const [status, biography, cloud, character, academyMetrics, timeline, experiments,
+      curriculum, personaArc] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
@@ -1188,6 +1196,8 @@ async function refreshCognition() {
       requestJSON("/api/soul/academy/metrics"),
       requestJSON("/api/soul/character/timeline"),
       requestJSON("/api/soul/academy/experiments"),
+      requestJSON("/api/soul/academy/curriculum"),
+      requestJSON("/api/soul/persona/arc"),
     ]);
     const academy=status.academy;
     $("academy-enabled").checked=Boolean(academy.enabled);
@@ -1229,6 +1239,30 @@ async function refreshCognition() {
         " · наблюдаемая разница "+Math.round(experiments.observed_difference*100)+" п.п." :
         " · пока недостаточно оценок");
     experimentsPane.append(one);
+    const curriculumPane=$("academy-curriculum");
+    curriculumPane.replaceChildren();
+    for (const goal of curriculum.goals) {
+      const line=document.createElement("p");
+      line.className="memory-empty";
+      line.textContent=goal.skill+" · "+goal.state+
+        " · оценок "+goal.samples+
+        (goal.review_required ? " · проверь регрессию!" : "");
+      curriculumPane.append(line);
+    }
+    if (!curriculum.goals.length) curriculumPane.textContent=
+      "Цели появятся после первого локального учебного цикла.";
+    const arcPane=$("persona-arc");
+    arcPane.replaceChildren();
+    const lastArc=personaArc.snapshots[0];
+    const arcInfo=document.createElement("p");
+    arcInfo.className="memory-empty";
+    arcInfo.textContent=lastArc
+      ? "История: биография "+lastArc.approved_facts+
+        " · привычки "+lastArc.approved_habits+
+        " · исправленные записи "+lastArc.corrected_items+
+        ". Защищённый характер не меняется."
+      : "История характера пока не сформирована.";
+    arcPane.append(arcInfo);
     const charPane=$("character-progress");
     charPane.replaceChildren();
     const summary=document.createElement("p");

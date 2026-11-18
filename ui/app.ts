@@ -65,104 +65,112 @@ function resize() {
 
 function paint() {
   ctx.clearRect(0, 0, width, height);
-  const x = width * .5;
-  const y = height * .48;
+  const x = width * .5, y = height * .48;
   const r = Math.min(width * .39, height * .39, 254);
-  const halo = ctx.createRadialGradient(x, y, 6, x, y, r * 1.42);
-  halo.addColorStop(0, "rgba(212,149,76,0.19)");
-  halo.addColorStop(.50, "rgba(166,115,61,0.065)");
+  const halo = ctx.createRadialGradient(x, y, 6, x, y, r * 1.3);
+  halo.addColorStop(0, "rgba(212,149,76,.15)");
+  halo.addColorStop(.55, "rgba(166,115,61,.04)");
   halo.addColorStop(1, "rgba(166,115,61,0)");
   ctx.fillStyle = halo;
   ctx.beginPath();
-  ctx.arc(x, y, r * 1.42, 0, Math.PI * 2);
+  ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
   ctx.fill();
-
-  for (let ring = 0; ring < 9; ring++) {
-    const radius = r * (.45 + ring * .072);
-    const phase = (ring % 2 ? -1 : 1) * time * .00013 + ring * .42;
-    ctx.strokeStyle = ring % 3 === 0
-      ? "rgba(221,173,104,.45)" : "rgba(218,169,102,.17)";
-    ctx.lineWidth = ring % 3 === 0 ? 1.25 : .75;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, phase, phase + Math.PI * (1.45 + ring * .035));
-    ctx.stroke();
-  }
-
-  for (let i = 0; i < 8; i++) {
-    const a = (i * Math.PI / 4) + (time * .00004) - Math.PI / 2;
-    const sx = x + Math.cos(a) * r * .64;
-    const sy = y + Math.sin(a) * r * .64;
-    const ex = x + Math.cos(a) * r * 1.05;
-    const ey = y + Math.sin(a) * r * 1.05;
-    ctx.strokeStyle = "rgba(203,151,84,.23)";
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.fillStyle = "#e7c18b";
-    ctx.arc(ex, ey, 1.7, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // No decorative fake nodes. Every hexagon below is a real SQLite memory.
-  // Real SQLite graph, capped at 180 nodes/400 edges. No demo activity.
-  graphPositions = new Map();
-  const sectorCounts = Array(8).fill(0);
+  // Only records returned by SQLite are rendered as cells, no fake neurons.
+  const counts = Array(8).fill(0);
   const section = {fact: 0, preference: 2, event: 4, biography: 6};
-  const cellSize = Math.max(3.0, Math.min(7.2, r / 32)) * Math.sqrt(graphScale);
+  const radius = Math.max(2.4, Math.min(4.9, r / 42)) * Math.sqrt(graphScale);
+  const ringCapacity = 28;
+  const step = Math.max(5, r / 34);
+  graphPositions = new Map();
   for (const node of brainGraph.nodes) {
     const sector = (section[node.kind] ?? 0) + (node.id % 2);
-    const slot = sectorCounts[sector]++;
-    const layer = Math.floor(slot / 13);
-    const slotInRing = slot % 13;
+    const slot = counts[sector]++;
+    const level = Math.floor(slot / ringCapacity);
+    const index = slot % ringCapacity;
     const angle = -Math.PI / 2 + sector * Math.PI / 4 +
-                  (slotInRing - 6) * 0.043 + Math.sin(slot * 2.4) * .005;
-    const distance = r * (.60 + layer * .075);
+       ((index + .5) / ringCapacity - .5) * .67 + (level % 2 ? .012 : 0);
+    const distance = r * .28 + level * step;
     graphPositions.set(node.id, {
+      id: node.id, kind: node.kind, preview: node.preview,
       x: x + graphPanX + Math.cos(angle) * distance * graphScale,
       y: y + graphPanY + Math.sin(angle) * distance * graphScale,
-      id: node.id, preview: node.preview, kind: node.kind,
     });
   }
-  ctx.strokeStyle = "rgba(211,173,114,.18)";
-  ctx.lineWidth = .8;
-  for (const link of brainGraph.edges) {
-    const a = graphPositions.get(link.source_id);
-    const b = graphPositions.get(link.target_id);
-    if (!a || !b) continue;
+  for (let sector = 0; sector < 8; sector++) {
+    const a = sector * Math.PI / 4 - Math.PI / 2;
     ctx.beginPath();
-    ctx.strokeStyle = link.relation === "possible_conflict"
-      ? "rgba(225,135,101,.42)" : "rgba(220,173,113,.21)";
+    ctx.moveTo(x + Math.cos(a) * r * .24, y + Math.sin(a) * r * .24);
+    ctx.lineTo(x + Math.cos(a) * r * .92, y + Math.sin(a) * r * .92);
+    ctx.strokeStyle = "rgba(203,151,84,.14)";
+    ctx.lineWidth = .7;
+    ctx.stroke();
+  }
+  const drawNodes = graphScale >= .85 || brainGraph.nodes.length < 300;
+  if (!drawNodes) {
+    // Level of detail: collapse >300 tiny cells into the eight real groups.
+    for (let i = 0; i < counts.length; i++) {
+      if (!counts[i]) continue;
+      const a = i * Math.PI / 4 - Math.PI / 2;
+      const px = x + graphPanX + Math.cos(a) * r * .66 * graphScale;
+      const py = y + graphPanY + Math.sin(a) * r * .66 * graphScale;
+      const size = 11 + Math.log2(counts[i] + 1) * 2;
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const phi = k * Math.PI / 3;
+        const hx = px + Math.cos(phi) * size, hy = py + Math.sin(phi) * size;
+        if (k === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(174,126,66,.20)";
+      ctx.strokeStyle = "rgba(226,177,106,.73)";
+      ctx.fill(); ctx.stroke();
+      ctx.font = "11px system-ui,sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ead0a9";
+      ctx.fillText(String(counts[i]), px, py);
+    }
+    return;
+  }
+  // Viewport culling and bounded edge count avoid huge Canvas workloads.
+  const visible = (n) => n.x >= -15 && n.x <= width + 15 &&
+                           n.y >= -15 && n.y <= height + 15;
+  const edgeCap = graphScale < 1 ? 400 : 1700;
+  ctx.lineWidth = .75;
+  for (const edge of brainGraph.edges.slice(0, edgeCap)) {
+    const a = graphPositions.get(edge.source_id), b = graphPositions.get(edge.target_id);
+    if (!a || !b || (!visible(a) && !visible(b))) continue;
+    ctx.beginPath();
+    ctx.strokeStyle = edge.relation === "possible_conflict"
+      ? "rgba(232,125,93,.35)" : "rgba(221,171,110,.19)";
     ctx.moveTo(a.x, a.y);
     ctx.quadraticCurveTo(x + graphPanX, y + graphPanY, b.x, b.y);
     ctx.stroke();
   }
+  ctx.beginPath();
   for (const node of graphPositions.values()) {
-    // Pulse only after a real new memory arrived; reduced motion stays static.
-    if (!reducedMotion && graphFreshIds.has(node.id)) {
-      const age = performance.now() - graphPulseAt;
-      if (age < 1800 && age >= 0) {
-        const alpha = (1 - age / 1800) * .40;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, cellSize * (2.0 + age / 1600), 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(246,183,96," + alpha.toFixed(3) + ")";
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-      }
-    }
-    ctx.beginPath();
-    ctx.strokeStyle = "rgba(241,198,132,.75)";
-    ctx.fillStyle = "rgba(190,135,65,.10)";
-    for (let side = 0; side < 6; side++) {
-      const angle = Math.PI / 3 * side;
-      const px = node.x + cellSize * Math.cos(angle);
-      const py = node.y + cellSize * Math.sin(angle);
+    if (!visible(node)) continue;
+    for (let side = 0; side <= 6; side++) {
+      const angle = side * Math.PI / 3;
+      const px = node.x + radius * Math.cos(angle);
+      const py = node.y + radius * Math.sin(angle);
       if (side === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(238,190,123,.78)";
+  ctx.lineWidth = .82;
+  ctx.stroke();
+  // A brief glow only when real records appeared since the previous refresh.
+  if (!reducedMotion && performance.now() - graphPulseAt < 1700) {
+    const strength = (1 - (performance.now() - graphPulseAt) / 1700) * .45;
+    ctx.strokeStyle = "rgba(247,205,145," + Math.max(0, strength).toFixed(3) + ")";
+    ctx.lineWidth = 1.2;
+    for (const id of [...graphFreshIds].slice(0, 48)) {
+      const node = graphPositions.get(id);
+      if (!node || !visible(node)) continue;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius * 1.7, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
   }
 }
 
@@ -172,7 +180,7 @@ function frame(timestamp) {
     requestAnimationFrame(frame);
     return;
   }
-  if (timestamp - last >= 33) {
+  if (timestamp - last >= (brainGraph.nodes.length > 900 ? 55 : 33)) {
     time = reducedMotion ? 0 : timestamp;
     paint();
     last = timestamp;
@@ -192,8 +200,9 @@ async function refreshBrain() {
     }
     graphLoaded = true;
     brainGraph = data;
-    $("soul-live-state").textContent = data.nodes.length
-      ? data.nodes.length + " воспоминаний · " + data.edges.length + " связей"
+    $("soul-live-state").textContent = data.total
+      ? data.nodes.length + "/" + data.total + " воспоминаний · " +
+        data.edges.length + " связей"
       : "Память ждёт первых воспоминаний";
     if (reducedMotion) paint();
   } catch (error) {
@@ -203,6 +212,7 @@ async function refreshBrain() {
 
 // Zoom, pan and click work on actual SQLite nodes. Dragging never creates records.
 function nearestBrainNode(px, py) {
+  if (graphScale < .85 && brainGraph.nodes.length >= 300) return null;
   let found = null;
   let distance = Math.max(64, 55 * graphScale);
   for (const node of graphPositions.values()) {

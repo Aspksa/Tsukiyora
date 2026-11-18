@@ -1678,7 +1678,40 @@ async function refreshDocuments() {
           button.disabled=false;
         }
       });
-      row.append(label,button);
+      const analysis=document.createElement("button");
+      analysis.type="button";analysis.className="quiet-button";
+      analysis.textContent="Условия";
+      analysis.addEventListener("click",async () => {
+        analysis.disabled=true;
+        const target=$("contract-insights");
+        target.replaceChildren();
+        try {
+          const data=await requestJSON("/api/soul/contracts/insights?"+
+            new URLSearchParams({id:String(doc.id)}));
+          const heading=document.createElement("p");
+          heading.className="memory-empty";
+          heading.textContent="Найдены кандидаты: "+data.items.length+
+            ". Это не юридический анализ и не гарантия полноты.";
+          target.append(heading);
+          for (const item of data.items.slice(0,35)) {
+            const line=document.createElement("p");
+            line.className="memory-empty";
+            line.textContent=item.citation+" · "+item.types.join(", ")+
+              " · "+item.excerpt;
+            target.append(line);
+          }
+          for (const issue of data.possible_differences) {
+            const warning=document.createElement("p");
+            warning.className="memory-empty";
+            warning.textContent="Проверь различие: "+issue.first+" / "+
+              issue.second+". "+issue.note;
+            target.append(warning);
+          }
+        } catch(error) {
+          $("document-status").textContent="Ошибка анализа договора: "+error.message;
+        } finally {analysis.disabled=false;}
+      });
+      row.append(label,analysis,button);
       pane.append(row);
     }
     if (!data.items.length) pane.textContent="Пока нет импортированных документов.";
@@ -1693,11 +1726,11 @@ $("document-details").addEventListener("toggle",() => {
 $("document-import").addEventListener("click",async () => {
   const chosen=$("document-file").files?.[0];
   if (!chosen) {
-    $("document-status").textContent="Сначала выбери TXT или Markdown.";
+    $("document-status").textContent="Сначала выбери TXT, MD, DOCX или PDF.";
     return;
   }
-  if (!/\.(txt|md)$/i.test(chosen.name) || chosen.size>50000) {
-    $("document-status").textContent="Разрешены только TXT/Markdown размером до 50 КБ.";
+  if (!/\.(txt|md|docx|pdf)$/i.test(chosen.name) || chosen.size>1000000) {
+    $("document-status").textContent="Разрешены TXT, Markdown, DOCX и PDF до 1 МБ.";
     return;
   }
   if (!window.confirm("Добавить выбранный файл в локальный индекс SQLite? "+
@@ -1705,13 +1738,19 @@ $("document-import").addEventListener("click",async () => {
   const button=$("document-import");
   button.disabled=true;
   try {
-    const body=await chosen.text();
-    if (body.length>44000) throw new Error("Текст превышает 44 000 символов.");
-    const result=await requestJSON("/api/soul/documents/import","POST",
-                                  {name:chosen.name,text:body,confirmed:true});
+    const encoded=await new Promise((resolve,reject) => {
+      const reader=new FileReader();
+      reader.onload=() => resolve(String(reader.result).split(",")[1]||"");
+      reader.onerror=() => reject(new Error("Не удалось прочитать локальный файл."));
+      reader.readAsDataURL(chosen);
+    });
+    const result=await requestJSON("/api/soul/documents/import-binary","POST",
+                                  {name:chosen.name,base64:encoded,confirmed:true});
     $("document-status").textContent="Индексировано локально: "+
       result.name+" · фрагментов "+result.chunks+
-      " · редакция "+result.revision+".";
+      " · редакция "+result.revision+
+      (result.complete_extraction_guaranteed ? "." :
+        ". Извлечение могло пропустить сложное форматирование — проверь исходник.");
     await refreshDocuments();
   } catch(error) {
     $("document-status").textContent="Ошибка импорта: "+error.message;

@@ -309,5 +309,15 @@ class UnifiedCognitiveCore:
                 "DELETE FROM cognitive_v5_digests WHERE day NOT IN "
                 "(SELECT day FROM cognitive_v5_digests ORDER BY day DESC LIMIT 90)"
             )
+        if cur.rowcount:
+            # Preserve the original experience timeline expected by
+            # established installations and V1–V4 API clients, while
+            # recording only once per day (not from a second timer).
+            with closing(self.store.connect()) as db:
+                conflicts=db.execute(
+                    "SELECT COUNT(*) FROM memory_links "
+                    "WHERE relation='possible_conflict'"
+                ).fetchone()[0]
+            core.experience.snapshot(summary["pending_memories"],conflicts)
         return {"already_recorded":not bool(cur.rowcount),"day":today,
                 "aggregate_fields":len(summary)}

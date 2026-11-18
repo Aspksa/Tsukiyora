@@ -332,11 +332,15 @@ class SelfImprovement:
                 answers=[]
                 elapsed=[]
                 for guide in (baseline,proposed):
+                    if cloud.status().get("model") != status["model"]:
+                        raise ValueError("Модель Cloud.ru изменилась во время проверки.")
                     start=time.monotonic()
                     answer=cloud.complete(persona,[
                         {"role":"user","content":case["question"]}
                     ],[],extra_guidance=guide)
                     count+=1
+                    if cloud.status().get("model") != status["model"]:
+                        raise ValueError("Модель Cloud.ru изменилась во время проверки.")
                     answers.append(int(_normalized(answer)==_normalized(case["expected"])))
                     elapsed.append(int((time.monotonic()-start)*1000))
                 with closing(self.store.connect()) as db, db:
@@ -367,6 +371,22 @@ class SelfImprovement:
                 "gold_answers_sent_to_cloud":False,
                 "candidate_automatically_activated":False,
                 "billed_tokens_unknown":True}
+
+    def recover_interrupted(self, run_id, *, confirmed=False):
+        """Manual fail-closed recovery after server restart during an evaluation."""
+        if type(run_id) is not int or run_id <= 0 or confirmed is not True:
+            raise ValueError("Требуется подтверждённый номер прерванного теста.")
+        with closing(self.store.connect()) as db, db:
+            run=db.execute(
+                "SELECT status FROM improvement_runs WHERE id=?",(run_id,)
+            ).fetchone()
+            if run is None or run["status"]!="running":
+                raise ValueError("Только незавершённый тест может быть закрыт.")
+            db.execute(
+                "UPDATE improvement_runs SET status='failed' WHERE id=?",(run_id,)
+            )
+        return {"run_id":run_id,"status":"failed",
+                "activation_allowed":False}
 
     def decide(self, proposal_id, *, approve, confirmed=False):
         if (type(proposal_id) is not int or proposal_id<=0

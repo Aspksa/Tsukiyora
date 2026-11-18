@@ -123,6 +123,35 @@ class ConversationMemory:
                 "next_before_id":result[-1]["id"] if len(rows)>limit else None,
                 "mode":mode,"cloud_requests":0,"private_local_only":True}
 
+    def context(self,message_id:int,radius:int=8)->dict:
+        """Open the exact matched message with bounded real neighbours."""
+        if type(message_id) is not int or message_id<=0:
+            raise ValueError("Invalid message ID.")
+        if type(radius) is not int or not 1<=radius<=20:
+            raise ValueError("Invalid context radius.")
+        with closing(self.connect()) as db:
+            anchor=db.execute(
+                "SELECT m.id,m.conversation_id,c.title FROM messages m "
+                "JOIN conversations c ON c.id=m.conversation_id WHERE m.id=?",
+                (message_id,)
+            ).fetchone()
+            if anchor is None:
+                raise ValueError("Сохранённое сообщение не найдено.")
+            before=db.execute(
+                "SELECT id,role,content,created_at FROM messages "
+                "WHERE conversation_id=? AND id<=? ORDER BY id DESC LIMIT ?",
+                (anchor["conversation_id"],message_id,radius+1)
+            ).fetchall()
+            after=db.execute(
+                "SELECT id,role,content,created_at FROM messages "
+                "WHERE conversation_id=? AND id>? ORDER BY id ASC LIMIT ?",
+                (anchor["conversation_id"],message_id,radius)
+            ).fetchall()
+        items=sorted([dict(x) for x in (*before,*after)],key=lambda x:x["id"])
+        return {"conversation_id":anchor["conversation_id"],
+                "title":anchor["title"],"selected_message_id":message_id,
+                "messages":items,"bounded":True,"cloud_requests":0}
+
     def summary(self,conversation_id:str)->dict:
         if not isinstance(conversation_id,str) or not 1<=len(conversation_id)<=64:
             raise ValueError("Invalid conversation.")

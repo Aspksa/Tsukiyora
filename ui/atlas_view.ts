@@ -151,6 +151,22 @@ export class BrainAtlasView {
 
     if (this.level==="overview") {
       const sectors=this.data.sectors||[];
+      // Only aggregated real SQLite memory_links contribute to these lines.
+      for (const edge of (this.data.sector_links||[]).slice(0,64)) {
+        if (edge.source===edge.target) continue;
+        const a=-Math.PI/2+edge.source*Math.PI/4;
+        const b=-Math.PI/2+edge.target*Math.PI/4;
+        const sx=cx+Math.cos(a)*base*.68*zoom;
+        const sy=cy+Math.sin(a)*base*.68*zoom;
+        const tx=cx+Math.cos(b)*base*.68*zoom;
+        const ty=cy+Math.sin(b)*base*.68*zoom;
+        ctx.beginPath();ctx.moveTo(sx,sy);
+        ctx.quadraticCurveTo(cx,cy,tx,ty);
+        ctx.strokeStyle="rgba(218,160,83,"+
+          Math.min(.55,.13+Math.log2(1+edge.count)*.055).toFixed(3)+")";
+        ctx.lineWidth=Math.min(2.8,.65+Math.log2(1+edge.count)*.2);
+        ctx.stroke();
+      }
       for (const item of sectors) {
         const angle=-Math.PI/2+item.id*Math.PI/4;
         const px=cx+Math.cos(angle)*base*.68*zoom;

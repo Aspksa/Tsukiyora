@@ -394,6 +394,13 @@ class SoulHandler(BaseHTTPRequestHandler):
                     per_minute=obj.get("per_minute")))
             except (ValueError,sqlite3.Error) as error:
                 return self._handle_error(error)
+        if method == "POST" and path == "/api/cloud/documents/consent":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cloud.enable_document_context(
+                    obj.get("allowed")))
+            except (ValueError,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/documents/import":
             try:
                 obj=self._read_body()

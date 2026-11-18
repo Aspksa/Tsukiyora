@@ -182,7 +182,8 @@ def run() -> int:
         url = previous_url()
         if url:
             print("Tsukiyora already running:", url)
-            webbrowser.open(url)
+            if os.environ.get("TSUKIYORA_NO_BROWSER") != "1":
+                webbrowser.open(url)
             return 0
         print("Tsukiyora is already launching. Check data/logs.")
         return 0
@@ -200,7 +201,8 @@ def run() -> int:
         LOG.info("Tsukiyora started: %s", url)
         print("Tsukiyora running at", url)
         print("Press Ctrl+C or close this console to stop.")
-        webbrowser.open(url)
+        if os.environ.get("TSUKIYORA_NO_BROWSER") != "1":
+            webbrowser.open(url)
         server.serve_forever(poll_interval=0.25)
         return 0
     except KeyboardInterrupt:

@@ -979,6 +979,7 @@ async function refreshQuality() {
     const result = await requestJSON("/api/soul/quality");
     target.replaceChildren();
     for (const [field, label] of [["duplicates", "Похожая запись"],
+                                   ["semantic_duplicates", "Возможно повторение по смыслу"],
                                    ["conflicts", "Возможное противоречие"]]) {
       for (const issue of result[field]) {
         const block = document.createElement("div");
@@ -995,7 +996,7 @@ async function refreshQuality() {
         target.append(block);
       }
     }
-    if (!result.duplicates.length && !result.conflicts.length) {
+    if (!result.duplicates.length && !result.semantic_duplicates.length && !result.conflicts.length) {
       const empty = document.createElement("p");
       empty.className = "memory-empty";
       empty.textContent = "Подозрительных совпадений среди " +

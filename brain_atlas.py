@@ -122,6 +122,25 @@ class BrainAtlas:
                 "next_cursor":items[-1]["bucket"] if more else None,
                 "has_more":more,"bucket_size":BUCKET_SIZE}
 
+    def locate(self, memory_id: int) -> dict:
+        """Fast direct seek of a single approved record, even with 1M+ items."""
+        if type(memory_id) is not int or not 1 <= memory_id <= 2**63-1:
+            raise ValueError("Неверный ID воспоминания.")
+        with closing(self.connect()) as db:
+            row=db.execute(
+                "SELECT id,kind,substr(content,1,180) AS preview,source_type,source_ref "
+                "FROM memory_items WHERE id=? AND status='active'",(memory_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError("Воспоминание не найдено или было удалено.")
+        kind=row["kind"]
+        return {"memory_id":memory_id,"sector":KIND_BASE[kind]+memory_id%2,
+                "region":(memory_id-1)//REGION_SPAN,
+                "bucket":(memory_id-1)//BUCKET_SIZE,
+                "preview":row["preview"],"kind":kind,
+                "source_type":row["source_type"],"source_ref":row["source_ref"],
+                "is_real_record":True}
+
     def nodes(self, sector: int, bucket: int) -> dict:
         kind,parity=decode_sector(sector)
         if type(bucket) is not int or not 0 <= bucket <= 10_000_000:

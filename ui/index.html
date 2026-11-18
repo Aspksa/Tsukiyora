@@ -28,7 +28,7 @@
           <h1 id="persona-name">Цукиёра</h1>
           <p id="persona-subtitle">Локальная личность</p>
         </div>
-        <div class="soul-footnote"><span class="signal"></span><span id="soul-live-state">Ядро личности · локально</span><span id="soul-zoom-note" class="muted">· масштаб мышью</span></div>
+        <div class="soul-footnote"><span class="signal"></span><span id="soul-live-state">Ядро личности · локально</span><span id="soul-zoom-note" class="muted">· масштаб мышью</span><span id="brain-fps" class="muted" aria-live="off"></span></div>
       </section>
 
       <section class="chat-panel" aria-label="Чат Цукиёры">
@@ -88,6 +88,17 @@
         <div id="diagnostics-results" class="memory-results" aria-live="polite"></div>
         <p id="browser-selftest" class="memory-empty" role="status">Проверка интерфейса ещё не выполнялась.</p>
         <div id="workload-status" class="memory-empty"></div>
+        <details class="memory-queue" id="cloud-budget-details">
+          <summary>Cloud.ru · лимиты <span class="muted">контроль запросов</span></summary>
+          <div class="budget-grid">
+            <label>Диалогов в сутки<input id="budget-chat" type="number" min="1" max="1000" value="100"></label>
+            <label>Embedding-запросов в сутки<input id="budget-embeddings" type="number" min="1" max="1000" value="120"></label>
+            <label>Запросов в минуту<input id="budget-minute" type="number" min="1" max="60" value="10"></label>
+          </div>
+          <button type="button" id="budget-save" class="quiet-button">Сохранить лимиты</button>
+          <p id="budget-status" class="memory-empty" role="status">Считаются запросы, не списанные токены.</p>
+          <div id="budget-events" class="memory-results"></div>
+        </details>
         <button type="button" id="diagnostics-backup" class="quiet-button">Сделать проверенную копию SQLite</button>
         <div class="memory-actions">
           <label class="sr-only" for="recovery-snapshot">Выбери копию для проверки восстановления</label>
@@ -116,6 +127,11 @@
         </div>
         <label class="sr-only" for="memory-search">Найти воспоминания</label>
         <input id="memory-search" type="search" maxlength="300" placeholder="Поиск по памяти">
+        <div class="memory-actions">
+          <label class="sr-only" for="brain-find-id">ID воспоминания на карте</label>
+          <input id="brain-find-id" type="number" min="1" step="1" placeholder="Найти соту по ID">
+          <button id="brain-find-btn" type="button" class="quiet-button">Показать в мозге</button>
+        </div>
         <div class="memory-actions">
           <button type="button" id="precision-search" class="quiet-button" title="Многошаговый поиск FTS5 и графа с проверкой источников, без Cloud.ru">Точный RAG · локально</button>
           <button type="button" id="rag-search" class="quiet-button" title="Смысловой поиск использует Cloud.ru и может расходовать токены">Смысловой · Cloud.ru</button>
@@ -163,10 +179,11 @@
           <div id="tone-status" class="memory-empty"></div>
           <div id="learning-goals" class="memory-results"></div>
           <details class="memory-queue" id="academy-details">
-            <summary>SOUL ACADEMY 3.0 <span class="muted">измеримый прогресс</span></summary>
+            <summary>SOUL ACADEMY 4.0 <span class="muted">эксперименты и прогресс</span></summary>
             <label class="vector-opt-in"><input id="academy-enabled" type="checkbox" checked> Разрешить локальное обучение по оценкам</label>
             <div id="academy-progress" class="memory-results"></div>
             <div id="academy-metrics" class="memory-results" aria-live="polite"></div>
+            <div id="academy-experiments" class="memory-results"></div>
           </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>

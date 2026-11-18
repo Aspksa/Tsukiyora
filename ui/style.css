@@ -166,3 +166,36 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
 #restore-result{line-height:1.5}
 #academy-metrics .memory-empty,#character-timeline .memory-empty{margin:6px 0;padding:4px 0;border-bottom:1px solid #ffffff10}
 @media(max-width:480px){#system-diagnostics .memory-actions{flex-wrap:wrap}#recovery-snapshot{min-width:100%}}
+
+/* v1.0 — restrained black/gold product polish: no external fonts or UI libraries. */
+:root{--gold:#d8ad72;--gold-soft:#a88455;--ink:#050506;--surface:#101013;--rule:#dfb67b20;--copy:#eee6d7}
+html{scrollbar-color:#6e553b #0b0b0c}
+body{background:radial-gradient(ellipse 70% 90% at 27% 36%,#19140e 0%,#0a090b 58%,#050506 100%);color:var(--copy);-webkit-font-smoothing:antialiased}
+button,select,input,textarea{font-family:inherit}
+button{transition:transform .16s ease,background-color .18s ease,border-color .18s ease}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{
+  outline:2px solid var(--gold);outline-offset:3px
+}
+.topbar{border-color:var(--rule)}
+.chat-heading{border-color:var(--rule)}
+.soul-title h1{letter-spacing:.04em;font-weight:450}
+.soul-kicker{letter-spacing:.29em}
+.soul-panel{background:radial-gradient(ellipse 58% 44% at 48% 45%,#bd844b0b,transparent 80%)}
+#soul-canvas{touch-action:none;user-select:none}
+.conversation{scroll-behavior:smooth;overscroll-behavior:contain}
+#cloud-budget-details{margin-top:10px}
+.budget-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:11px 0}
+.budget-grid label{color:#b6a68e;font-size:11px;line-height:1.5}
+.budget-grid input,#brain-find-id{display:block;width:100%;min-width:0;margin-top:5px;background:#121114;color:#ecd6b5;border:1px solid #65503a;border-radius:8px;padding:9px 10px;font-size:12px}
+#brain-find-id{margin:0;flex:1}
+#brain-find-btn{white-space:nowrap}
+#budget-events{max-height:135px;overflow:auto}
+#budget-events .memory-empty{font-size:11px;padding:2px 0}
+#brain-fps{font-variant-numeric:tabular-nums;opacity:.55}
+@media(max-width:650px){.budget-grid{grid-template-columns:1fr}.soul-title h1{font-size:clamp(30px,8vw,44px)}}
+@media(prefers-reduced-motion:reduce){
+  button,.icon-button,.feedback-actions{transition:none!important}
+  .conversation{scroll-behavior:auto}
+}

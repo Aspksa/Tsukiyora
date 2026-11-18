@@ -11,6 +11,7 @@ import os
 import shutil
 from pathlib import Path
 import sqlite3
+import threading
 import sys
 import uuid
 
@@ -18,6 +19,9 @@ from memory_store import MemoryStore
 
 
 class Reliability:
+    # Serialize concurrent manual and scheduled snapshots in this process.
+    # SQLite's backup API handles concurrent WAL writes.
+    _backup_mutex = threading.Lock()
     def __init__(self, db_path, project_root=None):
         self.db_path = Path(db_path)
         self.root = Path(project_root) if project_root else self.db_path.parent.parent
@@ -72,6 +76,10 @@ class Reliability:
                 "note": "Проверка кнопок браузера требует запуска в браузере; Cloud.ru отдельно проверяется с ключом."}
 
     def ensure_snapshot(self, interval_hours: int = 5, keep: int = 12, force: bool = False) -> dict:
+        with self._backup_mutex:
+            return self._ensure_snapshot_unlocked(interval_hours,keep,force)
+
+    def _ensure_snapshot_unlocked(self, interval_hours: int, keep: int, force: bool) -> dict:
         """Online SQLite backup is safe with concurrent WAL writes."""
         if type(interval_hours) is not int or not 1 <= interval_hours <= 168:
             raise ValueError("Invalid backup interval.")

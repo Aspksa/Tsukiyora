@@ -26,6 +26,8 @@ from soul_academy import SoulAcademy
 from persona_continuity import PersonaContinuity
 from brain_atlas import BrainAtlas
 from rag_pipeline import RagPipeline
+from rag_fusion import RagFusion
+from academy_experiments import AcademyExperiments
 from academy_metrics import AcademyMetrics
 from migration_guard import MigrationGuard
 
@@ -47,6 +49,8 @@ class CognitiveCore:
         self.continuity = PersonaContinuity(path)
         self.atlas = BrainAtlas(path)
         self.rag = RagPipeline(path)
+        self.fusion = RagFusion(path)
+        self.experiments = AcademyExperiments(path)
         self.metrics = AcademyMetrics(path)
         self.migrations = MigrationGuard(path)
         self.chat_priority = None
@@ -86,6 +90,7 @@ class CognitiveCore:
         self.academy.initialize()
         self.continuity.initialize()
         self.metrics.initialize()
+        self.experiments.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -105,7 +110,9 @@ class CognitiveCore:
         self.update_lessons()
         self.academy.run_cycle()
         self.metrics.evaluate()
+        experiment = self.experiments.record(message_id, helpful)
         return {"message_id": message_id, "helpful": helpful, "category": category,
+                "experiment":experiment,
                 "recorded": True}
 
     def update_lessons(self):
@@ -215,6 +222,7 @@ class CognitiveCore:
                 "experience": self.experience.state(),
                 "academy": self.academy.status(limit=5),
                 "academy_progress": self.metrics.status(),
+                "academy_experiments": self.experiments.report(),
                 "character": {
                     "continuity": "source_grounded",
                     "real_emotions": False,

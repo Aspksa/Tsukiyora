@@ -221,14 +221,15 @@ class StreamingApiTests(unittest.TestCase):
         self.assertNotIn("ДАЛЬШЕ", output)
         self.assertEqual(MemoryStore(self.db).stats()["messages"], 1)
 
-    def test_stop_during_rerank_skips_paid_stream(self):
+    def test_stop_during_local_search_skips_paid_stream(self):
         MemoryStore(self.db).add_memory("fact", "Гараж ремонтирует автомобили")
         MemoryStore(self.db).add_memory("fact", "Гараж хранит автомобили")
-        def cancel_while_searching(query, matches):
-            self.assertGreater(len(matches), 1)
+        def cancel_while_searching(query, **kwargs):
+            self.assertEqual(query, "Гараж")
             next(iter(self.server.active_streams.values())).set()
-            return []
-        with patch.object(cloudru.CloudSession, "rerank", side_effect=cancel_while_searching):
+            return {"items": []}
+        with patch.object(self.server.cognition.fusion, "search",
+                          side_effect=cancel_while_searching):
             with patch.object(cloudru.CloudSession, "stream",
                               side_effect=AssertionError("Paid generation must not start")):
                 with self.request("/api/chat/stream", {

@@ -119,8 +119,38 @@ class SelfImprovement:
                 "fact_checked": False,
                 "interpretation": "Сигналы ошибок, а не доказанные причины ошибок."}
 
+    def observe(self):
+        """Form a bounded unapproved hypothesis from repeated negative ratings."""
+        with closing(self.store.connect()) as db:
+            rows = [dict(x) for x in db.execute(
+                "SELECT COALESCE(t.category,'general') category,COUNT(*) n "
+                "FROM cognitive_feedback f "
+                "LEFT JOIN experience_feedback_tags t ON t.message_id=f.message_id "
+                "WHERE f.helpful=0 GROUP BY category ORDER BY n DESC,category LIMIT 4"
+            )]
+        if not rows or rows[0]["n"] < 3:
+            return {"created":False,"reason":"insufficient_negative_feedback"}
+        category=rows[0]["category"]
+        strategy = ("uncertainty" if category in ("sources","accuracy") else
+                    "causal_steps" if category in ("clarity","general") else
+                    "alternatives")
+        reason = ("Автоматическая гипотеза: " + str(rows[0]["n"]) +
+                  " отрицательных оценок категории " + category[:40] +
+                  ". Применение требует реального эталонного теста и ручного решения.")
+        with closing(self.store.connect()) as db, db:
+            cursor=db.execute(
+                "INSERT OR IGNORE INTO improvement_proposals(strategy,rationale)"
+                " VALUES(?,?)",(strategy,reason)
+            )
+            row=db.execute(
+                "SELECT id,state FROM improvement_proposals WHERE strategy=?",
+                (strategy,)
+            ).fetchone()
+        return {"created":bool(cursor.rowcount),"proposal_id":row["id"],
+                "state":row["state"],"automatic_activation":False}
+
     def propose(self, strategy, *, confirmed=False):
-        if strategy not in STRATEGIES or not isinstance(strategy, str):
+        if not isinstance(strategy, str) or strategy not in STRATEGIES:
             raise ValueError("Разрешены только проверенные стратегии.")
         if confirmed is not True:
             raise ValueError("Нужно подтвердить создание гипотезы.")

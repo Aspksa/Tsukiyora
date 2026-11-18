@@ -74,3 +74,27 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
 .memory-record .quiet-button{font-size:11px;padding:4px 8px}
 .memory-footer{justify-content:space-between;font-size:11px;color:#a8a093}
 .memory-empty{font-size:12px;color:#938d84;line-height:1.5}
+
+/* One compact connection panel in settings; no extra pages. */
+.cloud-details{margin-top:18px;padding-top:15px;border-top:1px solid #ffffff1c}
+.cloud-details summary{cursor:pointer;display:flex;align-items:center;gap:10px;justify-content:space-between;font-size:14px;font-weight:500;list-style:none}
+.cloud-details summary::-webkit-details-marker{display:none}
+.cloud-details summary:before{content:"+";font-size:18px;color:#d8b885}
+.cloud-details[open] summary:before{content:"−"}
+.cloud-form{display:flex;flex-direction:column;gap:11px;padding-top:15px}
+.cloud-form input,.cloud-form select{width:100%;min-width:0;background:#1b1919;border:1px solid #594730;color:#efe3d0;border-radius:9px;padding:10px 11px;font:inherit}
+.cloud-form input:focus-visible,.cloud-form select:focus-visible{outline:2px solid #d3aa74;outline-offset:2px}
+.cloud-form .accent-button,.cloud-form .quiet-button{width:100%;min-height:38px}
+.cloud-form button:disabled{opacity:.5;cursor:not-allowed}
+.chat-controls{display:flex;gap:8px;align-items:center;min-width:0;letter-spacing:normal}
+.chat-controls select{max-width:175px;min-width:95px;background:#171511;color:#c8b093;border:1px solid #4a3928;padding:6px;border-radius:7px;font-size:11px}
+.chat-controls .quiet-button{font-size:18px;padding:2px 10px}
+.conversation.has-messages{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:14px;overflow-y:auto}
+.chat-bubble{max-width:87%;padding:12px 15px;border:1px solid #ffffff1a;border-radius:13px;align-self:flex-start;background:#ffffff08}
+.chat-bubble.from-user{align-self:flex-end;border-color:#80613a55;background:#34291c66}
+.chat-bubble small{display:block;color:#c5a476;font-size:10px;letter-spacing:.13em;margin-bottom:7px}
+.chat-bubble p{margin:0;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.composer textarea:disabled{opacity:.72}
+.composer .send:not(:disabled){background:#9f7344;color:#fff2df;opacity:1;cursor:pointer}
+.composer .send:disabled{opacity:.4;cursor:not-allowed}
+@media(max-width:480px){.chat-controls select{max-width:114px}.chat-bubble{max-width:96%}.chat-heading{gap:8px}}

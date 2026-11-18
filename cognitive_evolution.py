@@ -308,6 +308,7 @@ class CognitiveEvolution:
         candidate["evaluations"]=len(runs)
         candidate["running"]=any(x["status"]=="running" for x in runs)
         candidate["last_status"]=runs[-1]["status"] if runs else None
+        candidate["last_run_id"]=runs[-1]["id"] if runs else None
         return candidate
 
     def report(self):

@@ -7,6 +7,7 @@ const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let brainGraph = {nodes: [], edges: [], pending: 0};
 let graphPositions = new Map();
+let vectorAvailableForSearch = false;
 let width = 0, height = 0, time = 0, last = 0;
 
 async function loadState() {
@@ -808,7 +809,11 @@ $("rag-search").addEventListener("click", async () => {
   const button = $("rag-search");
   button.disabled = true;
   try {
-    const result = await requestJSON("/api/soul/search", "POST", {query, semantic: true});
+    const result = vectorAvailableForSearch
+      ? await requestJSON("/api/soul/vectors/search", "POST", {
+          query, confirm_send_to_cloud: true,
+        })
+      : await requestJSON("/api/soul/search", "POST", {query, semantic: true});
     const target = $("memory-results");
     target.replaceChildren();
     for (const item of result.items) {
@@ -821,7 +826,9 @@ $("rag-search").addEventListener("click", async () => {
       node.append(title, text);
       target.append(node);
     }
-    memoryFeedback(result.semantic ? "Смысловой поиск Cloud.ru выполнен." : "Результаты локального поиска.");
+    memoryFeedback(result.mode === "vector_hybrid"
+      ? "Векторный + текстовый поиск через Cloud.ru и SQLite."
+      : result.semantic ? "Смысловой LLM-поиск выполнен." : "Результаты локального поиска.");
   } catch (error) {
     memoryFeedback("Смысловой поиск: " + error.message);
   } finally {
@@ -874,10 +881,15 @@ $("embedding-index").addEventListener("click", async () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography] = await Promise.all([
+    const [status, biography, cloud] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
+      requestJSON("/api/cloud/status"),
     ]);
+    vectorAvailableForSearch = Boolean(
+      cloud.configured && cloud.verified && cloud.embedding_model
+      && status.vectors.indexed_memories > 0
+    );
     const recent = status.last_cycle;
     $("cognitive-status").textContent = (recent
       ? "Локальная проверка: " + recent.status + " · " + recent.created_at

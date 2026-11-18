@@ -362,6 +362,11 @@ class SoulHandler(BaseHTTPRequestHandler):
                                    "cloud_calls":0,"index":"SQLite local"})
         if path == "/api/soul/graph":
             return self.send_json(self.server.cognition.graph())
+        if path == "/api/soul/unified":
+            return self.send_json(self.server.cognition.orchestrator.status(
+                self.server.cognition.scheduler))
+        if path == "/api/soul/unified/reviews":
+            return self.send_json(self.server.cognition.orchestrator.reviews())
         if path == "/api/soul/cognition":
             return self.send_json(self.server.cognition.status())
         if path == "/api/soul/semantic/groups":
@@ -472,6 +477,25 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path.startswith("/api/soul/unified/"):
+            try:
+                obj=self._read_body()
+                engine=self.server.cognition.orchestrator
+                if path=="/api/soul/unified/control":
+                    return self.send_json(engine.configure(
+                        obj.get("enabled"),confirmed=obj.get("confirmed",False)))
+                if path=="/api/soul/unified/review":
+                    return self.send_json(engine.mark_reviewed(
+                        obj.get("id"),confirmed=obj.get("confirmed",False)))
+                if path=="/api/soul/unified/tick":
+                    if obj.get("confirmed") is not True:
+                        raise ValueError("Локальная проверка требует подтверждения.")
+                    return self.send_json(engine.tick(
+                        self.server.cognition,chat_lock=self.server.chat_lock,
+                        max_millis=850))
+                return self.send_json({"error":"Unknown unified cognitive route."},404)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/system/cloud-budget":
             try:
                 obj=self._read_body()

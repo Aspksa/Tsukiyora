@@ -45,6 +45,7 @@ from reflective_optimization import ReflectiveOptimization
 from cognitive_next import CognitiveNext
 from self_improvement import SelfImprovement
 from cognitive_evolution import CognitiveEvolution
+from unified_cognitive import UnifiedCognitiveCore
 
 
 class CognitiveCore:
@@ -83,6 +84,7 @@ class CognitiveCore:
         self.next = CognitiveNext(path, core=self)
         self.improvement = SelfImprovement(path)
         self.evolution4 = CognitiveEvolution(path)
+        self.orchestrator = UnifiedCognitiveCore(path)
         self.chat_priority = None
 
     def connect(self):
@@ -134,6 +136,7 @@ class CognitiveCore:
         self.next.initialize()
         self.improvement.initialize()
         self.evolution4.initialize()
+        self.orchestrator.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -289,6 +292,7 @@ class CognitiveCore:
                 "cognitive_next": self.next.working_state(),
                 "self_improvement": self.improvement.report(),
                 "evolution4": self.evolution4.report(),
+                "unified_cognitive": self.orchestrator.status(self.scheduler),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {
@@ -302,73 +306,17 @@ class CognitiveCore:
                 "maintenance": self.scheduler.pending()}
 
     def cycle(self) -> dict:
-        """Local maintenance only: bounded and repeatable, no cloud/key access."""
-        summary = ""
-        state = "ok"
+        """Compatibility entrypoint: one idempotent local aggregate, not a
+        second full maintenance pass. Actual repairs/learning have one
+        persistent owner: Maintenance.JOBS via UnifiedCognitiveCore.
+        """
         try:
-            with closing(self.connect()) as db:
-                integrity = db.execute("PRAGMA quick_check").fetchone()[0]
-            if integrity != "ok":
-                raise sqlite3.DatabaseError("SQLite integrity check did not pass.")
-            repairs = self.vectors.repair(limit=2000)
-            layers = self.layers.repair(limit=2000)
-            index = self.precision.repair(limit=600)
-            # Only a small local batch per cycle, never expensive cloud requests.
-            with closing(self.connect()) as db:
-                recent = [row[0] for row in db.execute(
-                    "SELECT id FROM memory_items WHERE status='active' "
-                    "ORDER BY id DESC LIMIT 8"
-                )]
-            for memory_id in recent:
-                self.growth.build_links(memory_id)
-            self.update_lessons()
-            self.experience.consolidate()
-            lessons = self.academy.run_cycle()
-            self.improvement.observe()
-            self.evolution4.observe()
-            progress = self.metrics.evaluate()
-            continuity = self.continuity.consolidate()
-            arc = self.persona_arc.consolidate()
-            curriculum = self.curriculum.advance()
-            rollback = self.rollback.evaluate()
-            quality = self.quality.review(limit=180)
-            stats = self.status()
-            digest = self.experience.snapshot(
-                stats["pending"], stats["possible_conflicts"]
-            )
-            # Only aggregate counts go into the periodic diary, never raw chats.
-            summary = json.dumps({
-                "possible_conflicts": len(quality["conflicts"]),
-                "possible_duplicates": len(quality["duplicates"]) + len(quality["semantic_duplicates"]),
-                "pending": stats["pending"],
-                "approved": stats["vectors"]["active_memories"],
-                "indexed": stats["vectors"]["indexed_memories"],
-                "cached_links_repaired": repairs["cache_restored"],
-                "memory_layers_repaired": layers["updated"],
-                "fts5_indexed": index["indexed"],
-                "academy_updated": lessons.get("updated",False),
-                "academy_evaluations_updated": progress.get("updated",False),
-                "stable_habits": continuity["stable_habits"],
-                "persona_arc_updated": arc["changed"],
-                "learning_regressions": len(curriculum.get("regressions", [])),
-                "styles_suspended": len(rollback.get("suspended",[])),
-                "learning_goals": digest["practice_goals"],
-            }, ensure_ascii=False)
-            with closing(self.connect()) as db:
-                db.execute("PRAGMA optimize")
-        except (sqlite3.Error, ValueError, OSError):
-            state = "warning"
-            summary = "Локальная проверка не завершилась; посмотри диагностику."
-        with closing(self.connect()) as db, db:
-            db.execute(
-                "INSERT INTO cognitive_cycles(status,summary) VALUES (?,?)",
-                (state, summary)
-            )
-            db.execute(
-                "DELETE FROM cognitive_cycles WHERE id NOT IN "
-                "(SELECT id FROM cognitive_cycles ORDER BY id DESC LIMIT 120)"
-            )
-        return {"status": state, "summary": summary}
+            result=self.orchestrator.digest(self)
+            return {"status":"ok",
+                    "summary":json.dumps(result,ensure_ascii=False)}
+        except (sqlite3.Error,ValueError,OSError):
+            return {"status":"warning",
+                    "summary":"Не удалось сохранить локальную сводку."}
 
 
 class CognitiveWorker:
@@ -386,26 +334,18 @@ class CognitiveWorker:
         self._thread.start()
 
     def _run(self):
-        # Delayed slightly to let startup serve requests; then every 15 min.
+        # ONE worker, ONE persistent maintenance queue. Startup is delayed
+        # to prioritize HTTP; all tasks are local and stop with this process.
         if self._stop.wait(3):
             return
         while not self._stop.is_set():
             try:
-                self.core.scheduler.tick(self.core, chat_lock=self.core.chat_priority,
-                                         max_millis=850)
-            except (OSError, sqlite3.Error, ValueError):
-                # An isolated maintenance failure must not stop the server.
+                self.core.orchestrator.tick(
+                    self.core,chat_lock=self.core.chat_priority,
+                    max_millis=850)
+            except (OSError,sqlite3.Error,ValueError):
+                # Status and backoff are tracked by the SQLite queue.
                 pass
-            # The traditional consolidation diary is less frequent than jobs.
-            # It never calls remote models and does not run during active chat.
-            if (not self.core.chat_priority or not self.core.chat_priority.locked()):
-                if not hasattr(self, "_last_full_cycle") or (
-                    time.monotonic() - self._last_full_cycle >= self.interval):
-                    self._last_full_cycle = time.monotonic()
-                    try:
-                        self.core.cycle()
-                    except (OSError, sqlite3.Error, ValueError):
-                        pass
             if self._stop.wait(15):
                 return
 

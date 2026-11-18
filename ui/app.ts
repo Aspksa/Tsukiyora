@@ -1575,6 +1575,114 @@ async function refreshCognition() {
   }
 }
 
+// Cognitive Soul 5.0 is a single local dashboard for the existing modules.
+// Older manual tools remain available under "Advanced" without losing data.
+async function refreshUnifiedCognitive() {
+  if(!$("cognitive-unified").open) return;
+  try {
+    const [state,reviews]=await Promise.all([
+      requestJSON("/api/soul/unified"),
+      requestJSON("/api/soul/unified/reviews")
+    ]);
+    const jobs=state.maintenance?.jobs||[];
+    $("unified-state").textContent=(state.enabled
+      ?"Локальная автоматика включена":"Локальная автоматика на паузе")+
+      " · режим: только безопасные локальные действия"+
+      " · очередь: "+(state.maintenance?.queue_depth??0)+
+      " · предупреждений для проверки: "+state.pending_reviews+
+      " · скрытых платных запросов: 0.";
+    $("unified-toggle").textContent=state.enabled
+      ?"Приостановить фоновую работу":"Возобновить локальную работу";
+    $("unified-toggle").dataset.enabled=String(state.enabled);
+    $("unified-tick").disabled=!state.enabled;
+    const overview=$("unified-overview");
+    overview.replaceChildren();
+    const counts={ok:0,warning:0,pending:0,running:0,waiting:0};
+    for(const job of jobs){
+      if(job.last_status==="ok") counts.ok++;
+      if(job.last_status==="warning") counts.warning++;
+      if(job.state in counts) counts[job.state]++;
+    }
+    addCognitiveLine(overview,"Планировщик: "+jobs.length+" локальных заданий"+
+      " · завершено успешно: "+counts.ok+
+      " · с предупреждениями: "+counts.warning+
+      " · ожидают: "+counts.pending+
+      ". Чат имеет приоритет.");
+    if(state.last_digest) {
+      const data=state.last_digest.summary;
+      addCognitiveLine(overview,"Сводка "+state.last_digest.day+
+        ": отзывов "+data.feedback+
+        ", память на проверке "+data.pending_memories+
+        ", исследовательских вопросов "+data.pending_questions+
+        ", кандидатов навыков "+data.skill_candidates+
+        ", гипотез V3/V4 "+data.v3_hypotheses+"/"+data.v4_hypotheses);
+    } else addCognitiveLine(overview,
+      "Сводка появится после первого задания cog5_digest.");
+    const reviewPane=$("unified-review-list");
+    reviewPane.replaceChildren();
+    for(const item of reviews.items.filter(x=>x.state==="pending").slice(0,12)) {
+      const line=document.createElement("div");
+      line.className="memory-record";
+      addCognitiveLine(line,(item.kind==="possible_conflict"
+        ?"Возможное противоречие":"Возможно устаревшая запись")+
+        " · память #"+item.memory_id+
+        (item.related_id?" и #"+item.related_id:""));
+      const mark=document.createElement("button");
+      mark.type="button";mark.className="quiet-button";
+      mark.textContent="Отметить как проверенное";
+      mark.addEventListener("click",async()=>{
+        if(!window.confirm("Отметить предупреждение проверенным? Исходная память не изменится.")) return;
+        try {
+          await requestJSON("/api/soul/unified/review","POST",
+                            {id:item.id,confirmed:true});
+          await refreshUnifiedCognitive();
+        } catch(error) {
+          $("unified-state").textContent="Ошибка: "+error.message;
+        }
+      });
+      line.append(mark);reviewPane.append(line);
+    }
+    if(!reviewPane.childElementCount) addCognitiveLine(reviewPane,
+      "Пока нет новых предупреждений. Это не доказывает отсутствие ошибок в знаниях.");
+    const activity=$("unified-activity");
+    activity.replaceChildren();
+    for(const event of state.recent_jobs.slice(0,10)){
+      addCognitiveLine(activity,event.kind+" · "+
+        (event.outcome==="ok"?"выполнено":"требует внимания")+
+        " · "+event.duration_ms+" мс · "+event.created_at);
+    }
+    if(!state.recent_jobs.length) addCognitiveLine(activity,
+      "Задачи ещё не выполнялись на этой базе.");
+  } catch(error) {
+    $("unified-state").textContent="Диагностика Cognitive Soul 5.0: "+error.message;
+  }
+}
+$("cognitive-unified").addEventListener("toggle",refreshUnifiedCognitive);
+$("unified-refresh").addEventListener("click",refreshUnifiedCognitive);
+$("unified-toggle").addEventListener("click",async()=>{
+  const enable=$("unified-toggle").dataset.enabled!=="true";
+  if(!window.confirm(enable?"Возобновить безопасный локальный цикл?"
+      :"Приостановить фоновую автоматику?")) return;
+  try {
+    await requestJSON("/api/soul/unified/control","POST",
+      {enabled:enable,confirmed:true});
+    await refreshUnifiedCognitive();
+  } catch(error) {
+    $("unified-state").textContent="Не удалось изменить режим: "+error.message;
+  }
+});
+$("unified-tick").addEventListener("click",async()=>{
+  if(!window.confirm("Выполнить один безопасный локальный шаг очереди? Cloud.ru не используется.")) return;
+  try {
+    const result=await requestJSON("/api/soul/unified/tick","POST",{confirmed:true});
+    $("unified-state").textContent="Результат шага: "+result.status+
+      (result.kind?" · "+result.kind:"");
+    await refreshUnifiedCognitive();
+  } catch(error) {
+    $("unified-state").textContent="Локальная проверка: "+error.message;
+  }
+});
+
 // Three opt-in cognitive extensions live in the existing settings panel.
 function addCognitiveLine(parent, label) {
   const line=document.createElement("p");

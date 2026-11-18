@@ -32,6 +32,14 @@ JOBS = {
     "wal_check": 7200,
     "dialogue_recaps": 1800,
     "semantic_group_audit": 3600,
+    # Cognitive Soul 5.0: all tasks reuse the one persistent SQLite queue.
+    "cog5_links": 1800,
+    "cog5_skills": 1800,
+    "cog5_hypotheses": 1800,
+    "cog5_simulator": 3600,
+    "cog5_insights": 3600,
+    "cog5_budget": 3600,
+    "cog5_digest": 21600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -205,6 +213,8 @@ class Maintenance:
                           "foreign_key_errors":report["foreign_key_errors"]}
                 if not report["sqlite_integrity"] or report["foreign_key_errors"]:
                     raise sqlite3.DatabaseError("SQLite migration integrity warning")
+            elif kind.startswith("cog5_") and kind in JOBS:
+                result = core.orchestrator.run_job(kind,core)
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

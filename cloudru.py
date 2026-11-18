@@ -249,7 +249,10 @@ class CloudSession:
             with build_opener(_NoRedirect()).open(req, timeout=45) as response:
                 if "text/event-stream" not in response.headers.get("Content-Type", ""):
                     raise CloudError("Cloud.ru не вернул поток SSE.")
+                if hasattr(cancellation, "bind"):
+                    cancellation.bind(response)
                 total = 0
+                saw_done = False
                 while not cancellation.is_set():
                     line = response.readline(65537)
                     if not line:
@@ -260,6 +263,7 @@ class CloudSession:
                         continue
                     data = line[5:].strip()
                     if data == b"[DONE]":
+                        saw_done = True
                         break
                     try:
                         chunk = json.loads(data.decode("utf-8"))
@@ -277,6 +281,8 @@ class CloudSession:
                         if total > 32000:
                             raise CloudError("Потоковый ответ слишком длинный.")
                         yield token
+                if not cancellation.is_set() and not saw_done:
+                    raise CloudError("Cloud.ru оборвал поток без признака завершения.")
         except HTTPError as error:
             if error.code in (401, 403):
                 raise CloudError("Cloud.ru отклонил ключ или доступ.", 401) from None

@@ -160,11 +160,13 @@ class CognitiveCore:
         evolution = self.evolution.record(message_id, helpful)
         improvement = self.improvement.feedback(message_id, helpful)
         evolved = self.evolution4.feedback(message_id, helpful)
+        evolution4_drafts = self.evolution4.observe()
         hypothesis = self.improvement.observe()
         return {"message_id": message_id, "helpful": helpful, "category": category,
                 "skill_candidate": skill, "strategy_trial": evolution,
                 "self_improvement": improvement, "new_hypothesis": hypothesis,
                 "evolution4_feedback": evolved,
+                "evolution4_drafts": evolution4_drafts,
                 "suspended_styles":rollback.get("suspended",[]),
                 "curriculum_review_required": len(curriculum.get("regressions",[])),
                 "experiment":experiment,
@@ -323,6 +325,7 @@ class CognitiveCore:
             self.experience.consolidate()
             lessons = self.academy.run_cycle()
             self.improvement.observe()
+            self.evolution4.observe()
             progress = self.metrics.evaluate()
             continuity = self.continuity.consolidate()
             arc = self.persona_arc.consolidate()

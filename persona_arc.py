@@ -32,17 +32,18 @@ class PersonaArc:
     def consolidate(self)->dict:
         with closing(self.store.connect()) as db:
             approved=[dict(row) for row in db.execute(
-                "SELECT m.id,m.kind,COALESCE(MAX(r.id),0) AS revision "
+                "SELECT m.id,m.kind,COALESCE(MAX(r.id),0) AS revision,"
+                "SUM(CASE WHEN r.operation='correct' THEN 1 ELSE 0 END) AS corrections "
                 "FROM memory_items m LEFT JOIN memory_revisions r ON r.memory_id=m.id "
                 "WHERE m.status='active' AND m.kind IN ('biography','preference') "
                 "GROUP BY m.id ORDER BY m.id LIMIT 20000"
             )]
             conversations=db.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
-        contents=json.dumps([[x["id"],x["kind"],x["revision"]] for x in approved],
+        contents=json.dumps([[x["id"],x["kind"],x["revision"],x["corrections"]] for x in approved],
                             separators=(",",":")).encode()
         digest=hashlib.sha256(contents).hexdigest()
         habits=sum(x["kind"]=="preference" for x in approved)
-        corrected=sum(x["revision"]>0 for x in approved)
+        corrected=sum(x["corrections"]>0 for x in approved)
         with closing(self.store.connect()) as db,db:
             cursor=db.execute(
                 "INSERT OR IGNORE INTO persona_arc"

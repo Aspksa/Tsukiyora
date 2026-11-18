@@ -110,10 +110,12 @@ class ExperienceSkills:
     def guidance(self) -> str:
         with closing(self.store.connect()) as db:
             rows = db.execute(
-                "SELECT s.guidance FROM experience_skill_candidates s "
+                "SELECT s.guidance,f.note FROM experience_skill_candidates s "
                 "JOIN cognitive_feedback f ON f.message_id=s.message_id "
-                "WHERE s.state='approved' AND f.helpful=1 AND "
-                "s.guidance=trim(f.note) ORDER BY s.id DESC LIMIT 3"
+                "WHERE s.state='approved' AND f.helpful=1 "
+                "ORDER BY s.id DESC LIMIT 15"
             ).fetchall()
+        verified = [x["guidance"] for x in rows
+                    if " ".join(x["note"].split())[:280] == x["guidance"]]
         # Only explicitly reviewed, positive notes; subordinate to persona and rules.
-        return " ".join(x["guidance"] for x in rows)[:500]
+        return " ".join(verified[:3])[:500]

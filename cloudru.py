@@ -31,7 +31,7 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 def _request(method: str, resource: str, token: str, payload: dict | None = None) -> dict:
-    if resource not in ("models", "chat/completions"):
+    if resource not in ("models", "chat/completions", "embeddings"):
         raise ValueError("Unknown Cloud.ru API route.")
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
     req = Request(
@@ -109,6 +109,7 @@ class CloudSession:
         self._models: list[str] = []
         self._verified = False
         self._model = ""
+        self._embedding_model = ""
         self._preferences_file = Path(preferences_file) if preferences_file else None
         if self._preferences_file and self._preferences_file.exists():
             try:
@@ -116,13 +117,17 @@ class CloudSession:
                 value = info.get("model", "")
                 if isinstance(value, str) and MODEL_RE.fullmatch(value):
                     self._model = value
+                candidate = info.get("embedding_model", "")
+                if isinstance(candidate, str) and MODEL_RE.fullmatch(candidate):
+                    self._embedding_model = candidate
             except (OSError, ValueError, TypeError):
                 pass
 
     def status(self) -> dict:
         with self._lock:
             return {"provider": "cloud.ru", "configured": bool(self._key),
-                    "verified": self._verified, "model": self._model}
+                    "verified": self._verified, "model": self._model,
+                    "embedding_model": self._embedding_model}
 
     def set_key(self, key: str) -> dict:
         if not isinstance(key, str) or len(key) > 4096 or any(c in key for c in "\r\n"):
@@ -156,6 +161,8 @@ class CloudSession:
             self._models = names
             if self._model and self._model not in names:
                 self._model = ""
+            if self._embedding_model and self._embedding_model not in names:
+                self._embedding_model = ""
             return names
 
     def select(self, model: str) -> dict:
@@ -166,9 +173,64 @@ class CloudSession:
             if self._preferences_file:
                 self._preferences_file.parent.mkdir(parents=True, exist_ok=True)
                 target = self._preferences_file.with_suffix(".tmp")
-                target.write_text(json.dumps({"model": model}), encoding="utf-8")
+                target.write_text(json.dumps({"model": model, "embedding_model": self._embedding_model}), encoding="utf-8")
                 target.replace(self._preferences_file)
             return self.status()
+
+    def select_embedding(self, model: str) -> dict:
+        """Opt-in; only models in refreshed catalogue, never arbitrary URLs."""
+        with self._lock:
+            if not isinstance(model, str) or model not in self._models:
+                raise ValueError("Обнови модели и выбери доступную embedding-модель.")
+            if not any(word in model.casefold() for word in ("embed", "bge-")):
+                raise ValueError("Выбранная модель не похожа на embedding-модель.")
+            self._embedding_model = model
+            if self._preferences_file:
+                self._preferences_file.parent.mkdir(parents=True, exist_ok=True)
+                tmp = self._preferences_file.with_suffix(".tmp")
+                tmp.write_text(json.dumps({
+                    "model": self._model, "embedding_model": model,
+                }), encoding="utf-8")
+                tmp.replace(self._preferences_file)
+            return self.status()
+
+    def embedding_model(self) -> str:
+        with self._lock:
+            if not self._key or not self._verified or self._embedding_model not in self._models:
+                raise CloudError("Сначала выбери доступную embedding-модель в Cloud.ru.", 400)
+            return self._embedding_model
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        """Official tutorial describes OpenAI-compatible embedding models.
+        The OpenAPI spec omits the route, so runtime diagnostics are essential.
+        """
+        if not isinstance(texts, list) or not 1 <= len(texts) <= 8 or any(
+                not isinstance(x, str) or not 1 <= len(x) <= 8000 for x in texts):
+            raise ValueError("Expected 1-8 texts, each up to 8000 characters.")
+        model = self.embedding_model()
+        with self._lock:
+            key = self._key
+        payload = _request("POST", "embeddings", key, {"model": model, "input": texts})
+        records = payload.get("data")
+        if not isinstance(records, list) or len(records) != len(texts):
+            raise CloudError("Cloud.ru вернул неполный список эмбеддингов.")
+        ordered = [None] * len(texts)
+        for pos, record in enumerate(records):
+            if not isinstance(record, dict):
+                raise CloudError("Некорректный ответ embedding-модели.")
+            index = record.get("index", pos)
+            values = record.get("embedding")
+            if type(index) is not int or not 0 <= index < len(texts) or ordered[index] is not None:
+                raise CloudError("Неправильные индексы эмбеддингов.")
+            if not isinstance(values, list) or not 2 <= len(values) <= 4096:
+                raise CloudError("Неподдерживаемая размерность эмбеддингов.")
+            from math import isfinite
+            if any(type(v) not in (int, float) or not isfinite(v) for v in values):
+                raise CloudError("Некорректные значения эмбеддингов.")
+            ordered[index] = [float(v) for v in values]
+        if len({len(x) for x in ordered}) != 1:
+            raise CloudError("Cloud.ru вернул эмбеддинги разной размерности.")
+        return ordered
 
     def active_credentials(self):
         with self._lock:

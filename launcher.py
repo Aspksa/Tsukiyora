@@ -17,6 +17,8 @@ import re
 
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
+from cognitive_core import CognitiveCore, CognitiveWorker
+from vector_memory import VectorMemory
 from stream_runtime import handle_stream, stop_stream
 from cloudru import CloudSession, CloudError
 from urllib.request import build_opener, ProxyHandler
@@ -61,6 +63,7 @@ def init_database(db_path: Path = DATABASE) -> None:
         db.commit()
     MemoryStore(db_path).initialize()
     SoulGrowth(db_path).initialize()
+    CognitiveCore(db_path).initialize()
 
 
 def setup_logs() -> None:
@@ -129,6 +132,7 @@ class SoulServer(ThreadingHTTPServer):
         self.memory_path = memory_path
         self.cloud = CloudSession(Path(memory_path).parent / "cloudru_preferences.json")
         self.chat_lock = threading.Lock()
+        self.cognition = CognitiveCore(memory_path)
         self.active_streams = {}
         super().__init__(address, SoulHandler)
 
@@ -203,6 +207,12 @@ class SoulHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path = parsed.path
         args = parse_qs(parsed.query, keep_blank_values=True)
+        if path == "/api/soul/graph":
+            return self.send_json(self.server.cognition.graph())
+        if path == "/api/soul/cognition":
+            return self.send_json(self.server.cognition.status())
+        if path == "/api/soul/biography":
+            return self.send_json(self.server.cognition.biography())
         if path == "/api/soul/suggestions":
             return self.send_json({"items": SoulGrowth(self.server.memory_path).suggestions()})
         if path == "/api/soul/journal":
@@ -291,6 +301,41 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"stopping": stop_stream(self.server, self._read_body().get("stream_id"))})
             except ValueError as error:
                 return self.send_json({"error": str(error)}, 400)
+        if method == "POST" and path == "/api/cloud/embedding/model":
+            try:
+                return self.send_json(self.server.cloud.select_embedding(
+                    self._read_body().get("model")))
+            except (ValueError, OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/vectors/index":
+            try:
+                obj = self._read_body()
+                if obj.get("confirm_send_to_cloud") is not True:
+                    raise ValueError("Нужно подтверждение отправки воспоминаний в Cloud.ru.")
+                return self.send_json(self.server.cognition.vectors.sync(
+                    self.server.cloud, obj.get("limit", 40)))
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+            except (ValueError, OSError, sqlite3.Error) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/vectors/search":
+            try:
+                obj = self._read_body()
+                if obj.get("confirm_send_to_cloud") is not True:
+                    raise ValueError("Нужно согласие на отправку поискового запроса.")
+                return self.send_json(self.server.cognition.vectors.query(
+                    obj.get("query"), self.server.cloud))
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+            except (ValueError, OSError, sqlite3.Error) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/feedback":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.feedback(
+                    obj.get("message_id"), obj.get("helpful"), obj.get("note", "")))
+            except (ValueError, OSError, sqlite3.Error) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/cloud/diagnose":
             try:
                 return self.send_json(self.server.cloud.diagnostic())
@@ -439,10 +484,13 @@ def run() -> int:
         return 0
 
     server = None
+    worker = None
     try:
         persona = load_personality()
         init_database()
         server = SoulServer(("127.0.0.1", 0), persona)
+        worker = CognitiveWorker(server.cognition)
+        worker.start()
         port = server.server_address[1]
         tmp = DATA / "runtime.json.tmp"
         tmp.write_text(json.dumps({"port": port}), encoding="utf-8")
@@ -463,6 +511,8 @@ def run() -> int:
         print("Launch failed: see data/logs/launcher.log", file=sys.stderr)
         return 1
     finally:
+        if worker is not None:
+            worker.stop()
         if server is not None:
             server.server_close()
         try:

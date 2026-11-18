@@ -109,3 +109,19 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
 .memory-queue .memory-results{margin-top:10px}
 #rag-search{font-size:11px;align-self:flex-start}
 #rag-search:disabled{opacity:.6}
+
+/* Subtle vector-memory controls, no additional panels or navigation pages. */
+#embedding-model{width:100%;background:#181715;color:#e8d4b6;border:1px solid #59452e;border-radius:8px;font-size:12px;padding:9px 10px;margin:8px 0}
+#vector-feedback{white-space:pre-wrap;line-height:1.55}
+#cognitive-status{line-height:1.75;margin-top:11px}
+#biography-notes .memory-empty{padding:7px 0;margin:0;border-bottom:1px solid #ffffff10}
+.soul-panel{isolation:isolate}
+#soul-canvas{cursor:crosshair}
+.soul-title{pointer-events:none}
+.feedback-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:8px;opacity:.25;transition:opacity .18s ease}
+.chat-bubble:hover .feedback-actions,.feedback-actions:focus-within{opacity:1}
+.feedback-button{width:25px;height:25px;border:1px solid #ffffff22;border-radius:7px;color:#c9ad84;background:transparent;font-size:15px;cursor:pointer}
+.feedback-button:hover{border-color:#c9a36d;background:#ffffff0b}
+.feedback-button:disabled{opacity:.45;cursor:default}
+@media(hover:none){.feedback-actions{opacity:1}}
+@media(prefers-reduced-motion:reduce){.feedback-actions{transition:none}}

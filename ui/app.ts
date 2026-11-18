@@ -268,6 +268,7 @@ $("memory-backup").addEventListener("click", async () => {
 let activeSession = "";
 let chatBusy = false;
 let cloudReady = false;
+let preferNewConversation = false;
 
 function cloudMessage(text) {
   $("cloud-feedback").textContent = text;
@@ -428,7 +429,7 @@ async function refreshChatSessions() {
     }
     if (activeSession && result.conversations.some(x => x.id === activeSession)) {
       select.value = activeSession;
-    } else if (!activeSession && result.conversations.length && !chatBusy) {
+    } else if (!activeSession && !preferNewConversation && result.conversations.length && !chatBusy) {
       activeSession = result.conversations[0].id;
       select.value = activeSession;
     } else {
@@ -443,6 +444,7 @@ async function refreshChatSessions() {
 $("chat-new").addEventListener("click", () => {
   if (chatBusy) return;
   activeSession = "";
+  preferNewConversation = true;
   $("chat-sessions").value = "";
   $("message").value = "";
   showGreeting();
@@ -452,6 +454,7 @@ $("chat-new").addEventListener("click", () => {
 $("chat-sessions").addEventListener("change", async () => {
   if (chatBusy) return;
   activeSession = $("chat-sessions").value;
+  preferNewConversation = !activeSession;
   await loadChatHistory();
 });
 
@@ -463,8 +466,11 @@ async function sendMessage() {
   $("message").value = "";
   chatBusy = true;
   setCloudReady(true, $("model-info").textContent);
-  $("conversation").replaceChildren();
-  $("conversation").classList.add("has-messages");
+  if (!$("conversation").classList.contains("has-messages")) {
+    $("conversation").replaceChildren();
+    $("conversation").classList.add("has-messages");
+  }
+  addChatBubble("user", content);
   const placeholder = addChatBubble("assistant", "Отвечаю…");
   try {
     // The database, not browser memory, is the source of truth for history.
@@ -473,6 +479,7 @@ async function sendMessage() {
       client_message_id: window.crypto.randomUUID(),
     });
     activeSession = result.conversation_id;
+    preferNewConversation = false;
     await refreshChatSessions();
     $("chat-notice").textContent = "Диалог сохранён локально.";
   } catch (error) {

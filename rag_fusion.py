@@ -79,7 +79,7 @@ class RagFusion:
                                     potentially_stale=None,
                                     truth_verified=False,citation=f"[Память #{row['id']}]",
                                     source_state="requires_provenance_check",
-                                    channels=[])
+                                    channels=[],rrf_score=0.0)
                         seen[item["id"]] = item
                     if "vector" not in item["channels"]:
                         item["channels"].append("vector")

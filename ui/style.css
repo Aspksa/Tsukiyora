@@ -243,3 +243,5 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 .chat-excerpts{max-height:190px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.55 "Segoe UI",system-ui,sans-serif;color:#d4c2a4;background:#09090b;border-radius:6px;padding:0 6px;margin:0}
 .chat-excerpts:not(:empty){padding:10px;border:1px solid #d6ad762a}
 @media(prefers-reduced-motion:reduce){.dialogue-result{transition:none}}
+
+.dialogue-highlight{outline:2px solid #e5bc72;outline-offset:2px;box-shadow:0 0 16px #dca75a36}

@@ -198,9 +198,15 @@ class V11HttpTests(unittest.TestCase):
         self.assertEqual(len(self.get("/api/soul/documents")["items"]),1)
         evidence=self.post("/api/soul/evidence",{"query":"договор поставки"})
         self.assertEqual(evidence["documents"][0]["document_id"],doc["id"])
-        self.assertFalse(self.get("/api/soul/academy/curriculum")["model_weights_updated"]
-                         if "model_weights_updated" in self.get("/api/soul/academy/curriculum")
-                         else self.get("/api/soul/academy/curriculum")["goals"])
+        curriculum=self.get("/api/soul/academy/curriculum")
+        self.assertEqual(curriculum["goals"],[])
+        self.assertFalse(curriculum["automatic_strategy_rewrite"])
+        self.assertFalse(self.get("/api/cloud/status")["document_context_allowed"])
+        with self.assertRaises(HTTPError) as no_cloud:
+            self.post("/api/cloud/documents/consent",{"allowed":True})
+        self.assertEqual(no_cloud.exception.code,400)
+        self.assertFalse(self.post("/api/cloud/documents/consent",
+                                   {"allowed":False})["document_context_allowed"])
         self.assertTrue(self.get("/api/soul/persona/arc")["protected_persona_unchanged"])
         self.assertEqual(self.get("/api/soul/evidence/audits")["items"],[])
         self.post("/api/soul/documents/delete",{"id":doc["id"],"confirmed":True})
@@ -211,7 +217,8 @@ class V11HttpTests(unittest.TestCase):
         js=(ROOT/"ui"/"app.ts").read_text(encoding="utf-8")
         for element in ("document-import","document-refresh","document-file",
                         "academy-curriculum","persona-arc","evidence-audit-summary",
-                        "stop-message","send-message","cloud-diagnose"):
+                        "stop-message","send-message","cloud-diagnose",
+                        "document-cloud-consent"):
             self.assertIn('id="'+element+'"',html)
             self.assertIn('"'+element+'"',js)
         for route in ("/api/soul/evidence","/api/soul/documents/import",

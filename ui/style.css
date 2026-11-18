@@ -199,3 +199,18 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
   button,.icon-button,.feedback-actions{transition:none!important}
   .conversation{scroll-behavior:auto}
 }
+
+/* v1.1: minimal document and learning controls within one black/gold dialog. */
+#document-details{border-color:#a9864929}
+#document-file{display:block;width:100%;max-width:100%;margin:8px 0 12px;color:#e3d1ae;font-size:12px}
+#document-file::file-selector-button{background:#1b1713;color:#e9d0a5;border:1px solid #786147;border-radius:7px;padding:8px 10px;margin-right:10px;cursor:pointer}
+#document-cloud-consent{accent-color:#c7a16c}
+#document-status{line-height:1.65}
+#document-list{max-height:210px;overflow:auto}
+#document-list .memory-record{display:flex;align-items:center;gap:9px;justify-content:space-between}
+#document-list .memory-record small{overflow-wrap:anywhere;min-width:0}
+#academy-curriculum,#persona-arc,#evidence-audit-summary{margin-top:6px}
+#academy-curriculum .memory-empty,#persona-arc .memory-empty{padding:5px 0;border-bottom:1px solid #ffffff11}
+#brain-fps{letter-spacing:.015em}
+@media(max-width:500px){#document-list .memory-record{flex-wrap:wrap}#document-file::file-selector-button{display:block;margin-bottom:7px}}
+@media(prefers-reduced-motion:reduce){#document-file::file-selector-button{transition:none}}

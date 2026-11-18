@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feat/soul-core-runtime, feat/long-term-memory, main]
+    branches: [feat/soul-core-runtime, feat/long-term-memory, feat/cloudru-chat, main]
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,11 @@ jobs:
         with:
           python-version: '3.13'
       - name: Compile Python sources
-        run: python -m compileall -q launcher.py memory_store.py tests
+        run: python -m compileall -q launcher.py memory_store.py cloudru.py tests
+      - name: Check browser JS syntax
+        run: |
+          python -c "from pathlib import Path; Path('ui/app.check.mjs').write_bytes(Path('ui/app.ts').read_bytes())"
+          node --check ui/app.check.mjs
       - name: Validate JSON personality
         run: python -m json.tool soul/personality.json
       - name: Run tests

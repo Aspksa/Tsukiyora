@@ -111,6 +111,7 @@ class CloudSession:
         self._model = ""
         self._embedding_model = ""
         self._vector_chat_enabled = False
+        self.guard = None  # Attached by the local SoulServer; never persisted.
         self._preferences_file = Path(preferences_file) if preferences_file else None
         if self._preferences_file and self._preferences_file.exists():
             try:
@@ -123,6 +124,15 @@ class CloudSession:
                     self._embedding_model = candidate
             except (OSError, ValueError, TypeError):
                 pass
+
+    def reserve_call(self, kind: str) -> None:
+        """Apply local request quotas before a potentially paid call."""
+        if self.guard is not None:
+            from resource_guard import LimitReached
+            try:
+                self.guard.reserve(kind)
+            except LimitReached as exc:
+                raise CloudError(str(exc), 429) from None
 
     def status(self) -> dict:
         with self._lock:
@@ -227,6 +237,7 @@ class CloudSession:
         model = self.embedding_model()
         with self._lock:
             key = self._key
+        self.reserve_call("embeddings")
         payload = _request("POST", "embeddings", key, {"model": model, "input": texts})
         records = payload.get("data")
         if not isinstance(records, list) or len(records) != len(texts):
@@ -258,6 +269,7 @@ class CloudSession:
     def diagnostic(self) -> dict:
         """Explicit paid test; no pretend connectivity and no chat persistence."""
         key, model = self.active_credentials()
+        self.reserve_call("chat")
         result = _request("POST", "chat/completions", key, {
             "model": model, "messages": [{"role": "user", "content": "Ответь коротко: проверка соединения."}],
             "max_tokens": 40, "stream": False
@@ -330,6 +342,7 @@ class CloudSession:
         key, model = self.active_credentials()
         entries = [{"id": item["id"], "text": item["content"][:380]}
                    for item in candidates[:18]]
+        self.reserve_call("chat")
         result = _request("POST", "chat/completions", key, {
             "model": model, "stream": False, "max_tokens": 180,
             "temperature": 0,
@@ -374,6 +387,9 @@ class CloudSession:
             "model": model, "messages": messages, "stream": True,
             "max_tokens": 1200,
         }, ensure_ascii=False).encode("utf-8")
+        if cancellation.is_set():
+            return
+        self.reserve_call("chat")
         if cancellation.is_set():
             return
         req = Request(BASE_URL + "/chat/completions", data=payload, method="POST",
@@ -455,6 +471,7 @@ class CloudSession:
         messages.extend(reversed(selected))
         if len(messages) < 2 or messages[-1]["role"] != "user":
             raise ValueError("Последнее сообщение должно быть от пользователя.")
+        self.reserve_call("chat")
         result = _request("POST", "chat/completions", token, {
             "model": model, "messages": messages,
             "stream": False, "max_tokens": 1200,

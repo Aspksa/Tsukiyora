@@ -231,3 +231,15 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 #atlas-health,#persona-link-summary{font-variant-numeric:tabular-nums}
 @media(max-width:600px){#document-list .memory-record{display:flex;flex-wrap:wrap}#academy-rollback .memory-actions{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.soul-panel{animation:none}}
+
+/* Local dialogue memory stays inside the single integrated chat surface. */
+.chat-memory{margin:9px 0 4px;border:1px solid #d6ad7630;border-radius:10px;padding:8px 11px;background:#08080ae9}
+.chat-memory>summary{cursor:pointer;color:#d6b58a;font-size:11px;letter-spacing:.035em}
+.chat-memory .memory-actions{display:flex;gap:8px;align-items:center;margin:10px 0}
+#dialogue-query{flex:1;min-width:0;background:#131116;color:#ead8bc;border:1px solid #6a4d30;border-radius:8px;padding:9px 10px;font-size:12px}
+#dialogue-results{max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.dialogue-result{width:100%;display:block;text-align:left;border:1px solid #d6ad7620;border-radius:7px;background:#20191261;color:#e1ceac;padding:8px 10px;font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.dialogue-result:hover{border-color:#d6ad767c;background:#342719b0}
+.chat-excerpts{max-height:190px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.55 "Segoe UI",system-ui,sans-serif;color:#d4c2a4;background:#09090b;border-radius:6px;padding:0 6px;margin:0}
+.chat-excerpts:not(:empty){padding:10px;border:1px solid #d6ad762a}
+@media(prefers-reduced-motion:reduce){.dialogue-result{transition:none}}

@@ -81,6 +81,20 @@ export class BrainAtlasView {
     return null;
   }
 
+  async goto(target) {
+    if (!target || !target.is_real_record) throw new Error("Сота не найдена.");
+    const sector=Number(target.sector),bucket=Number(target.bucket);
+    const result=await this.fetch("nodes",sector,bucket);
+    if (!result.nodes.some(item=>item.id===target.memory_id)) {
+      throw new Error("Выбранная запись не попала в ограниченную выдачу.");
+    }
+    this.active=true;
+    this.level="nodes";this.sector=sector;
+    this.region=Number(target.region);this.bucket=bucket;
+    this.cursor=null;this.data=result;
+    this.pulseAt=performance.now();
+  }
+
   async back() {
     if (this.level==="nodes") {
       this.data=await this.fetch("clusters",this.sector,null,this.cursor,this.region);

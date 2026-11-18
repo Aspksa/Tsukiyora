@@ -22,13 +22,13 @@
 
     <main class="stage">
       <section class="soul-panel" aria-label="Ядро личности Цукиёры">
-        <canvas id="soul-canvas" aria-hidden="true"></canvas>
+        <canvas id="soul-canvas" aria-label="Интерактивная карта воспоминаний: колёсико масштабирует, перетаскивание перемещает"></canvas>
         <div class="soul-title">
           <span class="soul-kicker">SOUL CORE · 01</span>
           <h1 id="persona-name">Цукиёра</h1>
           <p id="persona-subtitle">Локальная личность</p>
         </div>
-        <div class="soul-footnote"><span class="signal"></span><span id="soul-live-state">Ядро личности · локально</span></div>
+        <div class="soul-footnote"><span class="signal"></span><span id="soul-live-state">Ядро личности · локально</span><span id="soul-zoom-note" class="muted">· масштаб мышью</span></div>
       </section>
 
       <section class="chat-panel" aria-label="Чат Цукиёры">
@@ -81,6 +81,16 @@
         <p id="cloud-feedback" class="memory-empty" role="status">Ключ используется только в запущенном Python-сервере и не записывается на диск.</p>
       </div>
     </details>
+    <details class="cloud-details" id="system-diagnostics">
+      <summary>Диагностика и сохранность <span class="muted">локально</span></summary>
+      <div class="cloud-form">
+        <button type="button" id="run-system-check" class="quiet-button">Проверить систему</button>
+        <div id="diagnostics-results" class="memory-results" aria-live="polite"></div>
+        <div id="workload-status" class="memory-empty"></div>
+        <button type="button" id="diagnostics-backup" class="quiet-button">Сделать проверенную копию SQLite</button>
+        <p class="memory-empty">Восстановление базы доступно только после остановки сервера через restore_memory.py. Облачный тест требует отдельного нажатия в разделе Cloud.ru.</p>
+      </div>
+    </details>
     <details class="memory-details" id="memory-details">
       <summary>Воспоминания <span class="muted">добавить · найти · исправить</span></summary>
       <div class="memory-form">
@@ -106,6 +116,20 @@
           <p class="memory-empty">Из разговоров сюда поступают важные факты. Ты сам решаешь, что сохранить.</p>
           <div id="memory-pending" class="memory-results" aria-live="polite"></div>
         </details>
+        <details class="memory-queue" id="memory-layers">
+          <summary>Уровни памяти <span class="muted">краткая · события · знания · биография</span></summary>
+          <div class="memory-actions">
+            <label class="sr-only" for="layer-selector">Уровень памяти</label>
+            <select id="layer-selector">
+              <option value="all">Все подтверждённые</option>
+              <option value="short_term">Краткосрочная</option>
+              <option value="episodic">Эпизодическая</option>
+              <option value="semantic">Семантическая</option>
+              <option value="autobiographical">Биографическая</option>
+            </select>
+          </div>
+          <div id="layer-results" class="memory-results" aria-live="polite"></div>
+        </details>
         <details class="memory-queue" id="memory-quality">
           <summary>Качество памяти <span class="muted">дубли · противоречия</span></summary>
           <p class="memory-empty">Похожие и противоречивые записи отмечаются для проверки, но автоматически не удаляются.</p>
@@ -128,6 +152,7 @@
           <div id="cognitive-status" class="memory-empty">Локальная проверка…</div>
           <div id="tone-status" class="memory-empty"></div>
           <div id="learning-goals" class="memory-results"></div>
+          <div id="audit-status" class="memory-empty"></div>
           <div id="biography-notes" class="memory-results"></div>
         </details>
         <details class="memory-queue" id="soul-journal">

@@ -228,7 +228,7 @@ class StreamingApiTests(unittest.TestCase):
             self.assertEqual(query, "Гараж")
             next(iter(self.server.active_streams.values())).set()
             return {"items": []}
-        with patch.object(self.server.cognition.fusion, "search",
+        with patch.object(self.server.cognition.evidence, "search",
                           side_effect=cancel_while_searching):
             with patch.object(cloudru.CloudSession, "stream",
                               side_effect=AssertionError("Paid generation must not start")):

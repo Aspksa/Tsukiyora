@@ -98,3 +98,14 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
 .composer .send:not(:disabled){background:#9f7344;color:#fff2df;opacity:1;cursor:pointer}
 .composer .send:disabled{opacity:.4;cursor:not-allowed}
 @media(max-width:480px){.chat-controls select{max-width:114px}.chat-bubble{max-width:96%}.chat-heading{gap:8px}}
+
+/* Stream controls and approval queue stay inside the same uncluttered interface. */
+#stop-message{display:grid;place-items:center;min-width:35px;min-height:35px;padding:0;color:#e8ba87;font-size:17px}
+#stop-message[hidden]{display:none}
+#stop-message:disabled{opacity:.5}
+.conversation{scroll-behavior:smooth;overscroll-behavior:contain}
+.memory-queue{border-top:1px solid #ffffff18;margin-top:6px;padding-top:12px}
+.memory-queue summary{cursor:pointer;color:#d5b184;font-size:12px;display:flex;justify-content:space-between}
+.memory-queue .memory-results{margin-top:10px}
+#rag-search{font-size:11px;align-self:flex-start}
+#rag-search:disabled{opacity:.6}

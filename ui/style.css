@@ -125,3 +125,20 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
 .feedback-button:disabled{opacity:.45;cursor:default}
 @media(hover:none){.feedback-actions{opacity:1}}
 @media(prefers-reduced-motion:reduce){.feedback-actions{transition:none}}
+
+/* v0.6: controls remain hidden inside existing settings, visualization is useful. */
+#soul-canvas{touch-action:none;cursor:grab}
+#soul-canvas:active{cursor:grabbing}
+#cloud-feedback{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}
+#quality-results{margin-top:10px}
+#quality-results .memory-record{border-left:2px solid #b6935e}
+#quality-results .memory-record small{color:#e0b480}
+#quality-results .memory-record p{margin:5px 0}
+#tone-status{margin-top:10px;line-height:1.7}
+#learning-goals{margin:8px 0 12px}
+#learning-goals .memory-empty{padding:3px 0;margin:0}
+.memory-queue[open]>summary{color:#efd2a7}
+@media(prefers-reduced-motion:reduce){
+  .conversation{scroll-behavior:auto}
+  #soul-canvas{transition:none}
+}

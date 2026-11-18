@@ -179,9 +179,20 @@ class CloudSession:
             token, model = self._key, self._model
 
         messages = [{"role": "system", "content": persona_prompt(profile, memories)}]
-        for item in history[-MAX_PROMPT_MESSAGES:]:
-            if item.get("role") in ("user", "assistant") and isinstance(item.get("content"), str):
-                messages.append({"role": item["role"], "content": item["content"][:8000]})
+        # Send recent turns within a fixed text budget: long chats must not
+        # silently produce huge paid prompts or exceed model context limits.
+        selected = []
+        remaining = 24000
+        for index, item in enumerate(reversed(history[-MAX_PROMPT_MESSAGES:])):
+            if item.get("role") not in ("user", "assistant") or not isinstance(item.get("content"), str):
+                continue
+            cap = min(8000 if index == 0 else 4000, remaining)
+            if cap <= 0:
+                break
+            content = item["content"][:cap] if index == 0 else item["content"][-cap:]
+            selected.append({"role": item["role"], "content": content})
+            remaining -= len(content)
+        messages.extend(reversed(selected))
         if len(messages) < 2 or messages[-1]["role"] != "user":
             raise ValueError("Последнее сообщение должно быть от пользователя.")
         result = _request("POST", "chat/completions", token, {

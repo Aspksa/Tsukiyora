@@ -109,10 +109,8 @@ class VectorMemory:
             records = [dict(row) for row in db.execute(
                 "SELECT m.id,m.content FROM memory_items m "
                 "LEFT JOIN memory_embeddings e ON e.memory_id=m.id AND e.model=? "
-                "WHERE m.status='active' AND (e.text_sha256 IS NULL OR e.text_sha256<>?) "
-                "ORDER BY m.id LIMIT ?",
-                # An actual content hash must be compared per row below, not to a literal.
-                (model, "", limit * 4),
+                "WHERE m.status='active' ORDER BY m.id DESC LIMIT ?",
+                (model, 20000),
             )]
         pending = []
         for row in records:

@@ -205,9 +205,11 @@ class CognitiveNextHttpTests(unittest.TestCase):
                     "next-save-question","next-selfcheck","next-review",
                     "next-summary","next-add-goal","next-scenario","next-simulate"):
             self.assertIn('id="'+id_+'"',html)
+        self.assertIn('"/api/soul/next/"',app)
+        backend=(root/"launcher.py").read_text(encoding="utf-8")
         for route in ("next/causal","next/selfcheck","next/gap",
                       "next/goal/save","next/question/save","next/simulate"):
-            self.assertIn(route,app)
+            self.assertIn(route,backend)
         self.assertFalse(self.get("/api/system/selftest")["cloud_live_verified"])
 
 

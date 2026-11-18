@@ -163,6 +163,44 @@ class Reliability:
         return [{"filename": x.name, "size": x.stat().st_size}
                 for x in sorted(self.folder.glob("memory-*.sqlite3"), reverse=True)[:limit]]
 
+    def dry_run_restore(self, backup_filename: str) -> dict:
+        """Read-only restore into an isolated temporary SQLite DB, never live DB."""
+        if (not isinstance(backup_filename,str) or
+            not backup_filename.startswith("memory-") or
+            not backup_filename.endswith(".sqlite3") or
+            Path(backup_filename).name != backup_filename or len(backup_filename)>150):
+            raise ValueError("Choose a local memory snapshot by filename.")
+        source=self.folder/backup_filename
+        if not source.is_file() or source.is_symlink():
+            raise ValueError("Snapshot missing or not a regular file.")
+        if source.stat().st_size > 1024*1024*1024:
+            raise ValueError("Snapshot too large for automated recovery rehearsal.")
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="tsukiyora-restore-") as temp:
+            target=Path(temp)/"rehearsal.sqlite3"
+            with closing(sqlite3.connect(
+                "file:"+source.resolve().as_posix()+"?mode=ro",uri=True,timeout=10
+            )) as original:
+                if original.execute("PRAGMA integrity_check").fetchone()[0]!="ok":
+                    raise ValueError("Selected snapshot is damaged.")
+                with closing(sqlite3.connect(target,timeout=15)) as copy:
+                    original.backup(copy,pages=128,sleep=.02)
+                    if copy.execute("PRAGMA integrity_check").fetchone()[0]!="ok":
+                        raise ValueError("Rehearsal restore failed SQLite integrity check.")
+                    tables={r[0] for r in copy.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )}
+                    if not {"memory_items","messages","conversations"}<=tables:
+                        raise ValueError("Backup is missing the required history tables.")
+                    counts={
+                        table:copy.execute("SELECT COUNT(*) FROM "+table).fetchone()[0]
+                        for table in ("memory_items","messages","conversations")
+                    }
+        return {"name":backup_filename,"restorable":True,
+                "checked":"isolated_sqlite_restore_and_integrity",
+                "history_counts":counts,"live_database_modified":False,
+                "offline_manual_restore_still_required":True}
+
     def restore_offline(self, backup_filename: str, confirm: bool = False) -> dict:
         """Manually restore only while server is stopped, preserving safety copy.
 

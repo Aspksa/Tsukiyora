@@ -25,6 +25,9 @@ from precision_memory import PrecisionMemory
 from soul_academy import SoulAcademy
 from persona_continuity import PersonaContinuity
 from brain_atlas import BrainAtlas
+from rag_pipeline import RagPipeline
+from academy_metrics import AcademyMetrics
+from migration_guard import MigrationGuard
 
 
 class CognitiveCore:
@@ -43,6 +46,9 @@ class CognitiveCore:
         self.academy = SoulAcademy(path)
         self.continuity = PersonaContinuity(path)
         self.atlas = BrainAtlas(path)
+        self.rag = RagPipeline(path)
+        self.metrics = AcademyMetrics(path)
+        self.migrations = MigrationGuard(path)
         self.chat_priority = None
 
     def connect(self):
@@ -79,6 +85,7 @@ class CognitiveCore:
         self.precision.initialize()
         self.academy.initialize()
         self.continuity.initialize()
+        self.metrics.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -97,6 +104,7 @@ class CognitiveCore:
         category = self.experience.tag_feedback(message_id, note)
         self.update_lessons()
         self.academy.run_cycle()
+        self.metrics.evaluate()
         return {"message_id": message_id, "helpful": helpful, "category": category,
                 "recorded": True}
 
@@ -206,6 +214,7 @@ class CognitiveCore:
                 "guidance": self.guidance(), "vectors": self.vectors.stats(),
                 "experience": self.experience.state(),
                 "academy": self.academy.status(limit=5),
+                "academy_progress": self.metrics.status(),
                 "character": {
                     "continuity": "source_grounded",
                     "real_emotions": False,
@@ -237,6 +246,7 @@ class CognitiveCore:
             self.update_lessons()
             self.experience.consolidate()
             lessons = self.academy.run_cycle()
+            progress = self.metrics.evaluate()
             continuity = self.continuity.consolidate()
             quality = self.quality.review(limit=180)
             stats = self.status()
@@ -254,6 +264,7 @@ class CognitiveCore:
                 "memory_layers_repaired": layers["updated"],
                 "fts5_indexed": index["indexed"],
                 "academy_updated": lessons.get("updated",False),
+                "academy_evaluations_updated": progress.get("updated",False),
                 "stable_habits": continuity["stable_habits"],
                 "learning_goals": digest["practice_goals"],
             }, ensure_ascii=False)

@@ -1643,3 +1643,73 @@ $("brain-find-btn").addEventListener("click",async () => {
     memoryFeedback("Не удалось показать соту: "+error.message);
   } finally {button.disabled=false;}
 });
+
+
+// Documents remain local; importing requires a file picker, an explicit
+// confirmation and a same-origin JSON POST. Never read arbitrary disk paths.
+async function refreshDocuments() {
+  const pane=$("document-list");
+  pane.replaceChildren();
+  try {
+    const data=await requestJSON("/api/soul/documents");
+    for (const doc of data.items) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const label=document.createElement("small");
+      label.textContent="Документ #"+doc.id+" · "+doc.name+
+        " · редакция "+doc.revision+" · "+doc.bytes+" байт";
+      const button=document.createElement("button");
+      button.type="button";button.className="quiet-button";
+      button.textContent="Удалить";
+      button.addEventListener("click",async () => {
+        if (!window.confirm("Удалить документ и все его индексированные фрагменты?")) return;
+        button.disabled=true;
+        try {
+          await requestJSON("/api/soul/documents/delete","POST",
+                            {id:doc.id,confirmed:true});
+          $("document-status").textContent="Удалён локальный документ: "+doc.name;
+          await refreshDocuments();
+        } catch(error) {
+          $("document-status").textContent="Ошибка удаления: "+error.message;
+          button.disabled=false;
+        }
+      });
+      row.append(label,button);
+      pane.append(row);
+    }
+    if (!data.items.length) pane.textContent="Пока нет импортированных документов.";
+  } catch(error) {
+    $("document-status").textContent="Ошибка списка документов: "+error.message;
+  }
+}
+$("document-refresh").addEventListener("click",refreshDocuments);
+$("document-details").addEventListener("toggle",() => {
+  if ($("document-details").open) refreshDocuments();
+});
+$("document-import").addEventListener("click",async () => {
+  const chosen=$("document-file").files?.[0];
+  if (!chosen) {
+    $("document-status").textContent="Сначала выбери TXT или Markdown.";
+    return;
+  }
+  if (!/\.(txt|md)$/i.test(chosen.name) || chosen.size>50000) {
+    $("document-status").textContent="Разрешены только TXT/Markdown размером до 50 КБ.";
+    return;
+  }
+  if (!window.confirm("Добавить выбранный файл в локальный индекс SQLite? "+
+                      "В облако он автоматически не отправляется.")) return;
+  const button=$("document-import");
+  button.disabled=true;
+  try {
+    const body=await chosen.text();
+    if (body.length>44000) throw new Error("Текст превышает 44 000 символов.");
+    const result=await requestJSON("/api/soul/documents/import","POST",
+                                  {name:chosen.name,text:body,confirmed:true});
+    $("document-status").textContent="Индексировано локально: "+
+      result.name+" · фрагментов "+result.chunks+
+      " · редакция "+result.revision+".";
+    await refreshDocuments();
+  } catch(error) {
+    $("document-status").textContent="Ошибка импорта: "+error.message;
+  } finally {button.disabled=false;}
+});

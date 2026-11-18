@@ -127,5 +127,13 @@ class SemanticGroups:
             rows=db.execute(
                 "SELECT COUNT(*) AS n FROM semantic_groups"
             ).fetchone()
-        return {"groups":rows["n"],"auto_merge":False,
-                "all_original_rows_preserved":True}
+            stale=db.execute(
+                "SELECT COUNT(*) FROM semantic_groups g "
+                "JOIN memory_items a ON a.id=g.left_id "
+                "JOIN memory_items b ON b.id=g.right_id "
+                "WHERE a.status<>'active' OR b.status<>'active' "
+                "OR a.fingerprint<>g.left_fingerprint "
+                "OR b.fingerprint<>g.right_fingerprint"
+            ).fetchone()[0]
+        return {"groups":rows["n"],"stale_links":stale,
+                "auto_merge":False,"all_original_rows_preserved":True}

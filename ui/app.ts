@@ -196,15 +196,32 @@ function paint() {
   }
 }
 
+let renderCostMs = 0;
+let frameIntervalMs = 33;
+let fpsReportedAt = 0;
 function frame(timestamp) {
   if (document.hidden) {
     last = timestamp;
     requestAnimationFrame(frame);
     return;
   }
-  if (timestamp - last >= (brainGraph.nodes.length > 900 ? 55 : 33)) {
+  const crowded = brainGraph.nodes.length > 900 ||
+    (atlasView.active && atlasView.level === "nodes");
+  if (timestamp - last >= frameIntervalMs) {
     time = reducedMotion ? 0 : timestamp;
+    const before = performance.now();
     paint();
+    const cost = performance.now() - before;
+    renderCostMs = renderCostMs ? renderCostMs * .86 + cost * .14 : cost;
+    // Dynamic frame budget keeps the browser responsive. This is an
+    // observed target, not a claim that the device sustains 60 FPS.
+    frameIntervalMs = renderCostMs > 26 ? 85 :
+      renderCostMs > 12 || crowded ? 50 : 33;
+    if (timestamp - fpsReportedAt > 4500) {
+      $("brain-fps").textContent = " · цель " +
+        Math.round(1000 / frameIntervalMs) + " FPS";
+      fpsReportedAt = timestamp;
+    }
     last = timestamp;
   }
   if (!reducedMotion) requestAnimationFrame(frame);
@@ -1163,13 +1180,14 @@ $("memory-quality").addEventListener("toggle", () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography, cloud, character, academyMetrics, timeline] = await Promise.all([
+    const [status, biography, cloud, character, academyMetrics, timeline, experiments] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
       requestJSON("/api/soul/character"),
       requestJSON("/api/soul/academy/metrics"),
       requestJSON("/api/soul/character/timeline"),
+      requestJSON("/api/soul/academy/experiments"),
     ]);
     const academy=status.academy;
     $("academy-enabled").checked=Boolean(academy.enabled);
@@ -1198,6 +1216,19 @@ async function refreshCognition() {
         " · оценок: "+metric.sample_count;
       metricsPane.append(item);
     }
+    const experimentsPane=$("academy-experiments");
+    experimentsPane.replaceChildren();
+    const one=document.createElement("p");
+    one.className="memory-empty";
+    const concise=experiments.strategies.concise_first;
+    const clear=experiments.strategies.clear_steps;
+    one.textContent="Эксперименты манеры ответа: "+experiments.assigned_conversations+
+      " диалогов · кратко "+concise.successes+"/"+concise.samples+
+      " · по шагам "+clear.successes+"/"+clear.samples+
+      (experiments.comparison_ready ?
+        " · наблюдаемая разница "+Math.round(experiments.observed_difference*100)+" п.п." :
+        " · пока недостаточно оценок");
+    experimentsPane.append(one);
     const charPane=$("character-progress");
     charPane.replaceChildren();
     const summary=document.createElement("p");
@@ -1317,13 +1348,30 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups, selftest, migration] = await Promise.all([
+    const [report, workload, backups, selftest, migration, budget] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
       requestJSON("/api/system/selftest"),
       requestJSON("/api/system/migrations"),
+      requestJSON("/api/system/cloud-budget"),
     ]);
+    $("budget-chat").value=budget.limits.chat_per_day;
+    $("budget-embeddings").value=budget.limits.embeddings_per_day;
+    $("budget-minute").value=budget.limits.per_minute;
+    $("budget-status").textContent=
+      "Сегодня: диалогов "+(budget.today.chat||0)+"/"+budget.limits.chat_per_day+
+      ", embeddings "+(budget.today.embeddings||0)+"/"+
+      budget.limits.embeddings_per_day+
+      ". Это число попыток запросов, не счёт Cloud.ru.";
+    const eventsPane=$("budget-events");
+    eventsPane.replaceChildren();
+    for (const event of budget.recent_events.slice(0,6)) {
+      const entry=document.createElement("p");
+      entry.className="memory-empty";
+      entry.textContent=event.created_at+" · "+event.event+" · "+event.reason;
+      eventsPane.append(entry);
+    }
     const snapshotSelect=$("recovery-snapshot");
     const previousName=snapshotSelect.value;
     snapshotSelect.replaceChildren();
@@ -1500,4 +1548,42 @@ $("restore-test").addEventListener("click", async () => {
   } finally {
     button.disabled=false;
   }
+});
+
+$("budget-save").addEventListener("click",async () => {
+  const button=$("budget-save");
+  button.disabled=true;
+  try {
+    const report=await requestJSON("/api/system/cloud-budget","POST",{
+      chat_per_day:Number($("budget-chat").value),
+      embeddings_per_day:Number($("budget-embeddings").value),
+      per_minute:Number($("budget-minute").value)
+    });
+    $("budget-status").textContent="Лимиты сохранены локально в SQLite. "+
+      "Диалогов в день: "+report.limits.chat_per_day+".";
+  } catch (error) {
+    $("budget-status").textContent="Не удалось сохранить лимиты: "+error.message;
+  } finally {button.disabled=false;}
+});
+$("brain-find-btn").addEventListener("click",async () => {
+  const n=Number($("brain-find-id").value);
+  if (!Number.isSafeInteger(n) || n<=0) {
+    memoryFeedback("Введи целочисленный ID воспоминания.");
+    return;
+  }
+  const button=$("brain-find-btn");
+  button.disabled=true;
+  try {
+    const target=await requestJSON("/api/soul/atlas?"+
+      new URLSearchParams({level:"locate",id:String(n)}));
+    await atlasView.goto(target);
+    graphScale=1;graphPanX=0;graphPanY=0;
+    $("soul-live-state").textContent="Выбрана сота #"+target.memory_id+
+      " · "+target.kind;
+    dialog.close();
+    canvas.focus();
+    paint();
+  } catch (error) {
+    memoryFeedback("Не удалось показать соту: "+error.message);
+  } finally {button.disabled=false;}
 });

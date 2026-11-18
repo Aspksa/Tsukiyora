@@ -214,3 +214,20 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 #brain-fps{letter-spacing:.015em}
 @media(max-width:500px){#document-list .memory-record{flex-wrap:wrap}#document-file::file-selector-button{display:block;margin-bottom:7px}}
 @media(prefers-reduced-motion:reduce){#document-file::file-selector-button{transition:none}}
+
+/* SOUL NEXUS v1.2 — near-black canvas with restrained, meaningful gold. */
+:root{--nexus-ink:#030304;--nexus-gold:#e4bb7a;--nexus-muted:#9b8c74;--nexus-rule:rgba(208,162,92,.19)}
+body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58%,#030304 100%)}
+.soul-panel{background:radial-gradient(ellipse 43% 42% at 47% 46%,rgba(169,108,40,.07),transparent 85%),#050507}
+.soul-title h1{font-weight:440;letter-spacing:.06em}
+.soul-kicker{letter-spacing:.3em}
+.soul-canvas-shell{background:transparent}
+#document-list .memory-record .quiet-button{white-space:nowrap}
+#contract-insights{max-height:235px;overflow-y:auto;border-top:1px solid var(--nexus-rule);margin-top:9px}
+#contract-insights .memory-empty{font-size:11px;line-height:1.55;white-space:pre-wrap}
+#academy-practice-skill,#academy-practice-answer{width:100%;min-width:0;background:#0e0e10;color:#ebd4ac;border:1px solid #6b5031;border-radius:7px;padding:9px;margin:7px 0}
+#academy-rollback .memory-actions{align-items:center;justify-content:space-between}
+#academy-rollback .memory-empty{margin:4px 0}
+#atlas-health,#persona-link-summary{font-variant-numeric:tabular-nums}
+@media(max-width:600px){#document-list .memory-record{display:flex;flex-wrap:wrap}#academy-rollback .memory-actions{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.soul-panel{animation:none}}

@@ -1,0 +1,11 @@
+# Local runtime, logs and private data (never commit)
+runtime/
+data/
+*.sqlite3
+*.db
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/

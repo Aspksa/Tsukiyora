@@ -7,6 +7,7 @@ from __future__ import annotations
 from contextlib import closing
 from datetime import datetime, timezone, timedelta
 import json
+import hashlib
 import os
 import shutil
 from pathlib import Path
@@ -38,6 +39,35 @@ class Reliability:
                 )
             """)
             db.execute("INSERT OR IGNORE INTO backup_schedule(id) VALUES(1)")
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS backup_digests(
+                    filename TEXT PRIMARY KEY,
+                    sha256 TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        digest=hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda:stream.read(1024*1024),b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def wal_health(self) -> dict:
+        """Local SQLite journal and passive checkpoint, no delete/truncate."""
+        with closing(sqlite3.connect(self.db_path,timeout=5)) as db:
+            mode=db.execute("PRAGMA journal_mode").fetchone()[0]
+            result=db.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+            foreign=db.execute("PRAGMA foreign_key_check").fetchmany(10)
+            integrity=db.execute("PRAGMA quick_check").fetchone()[0]
+        return {"journal_mode":mode,"passive_checkpoint":{
+                    "busy":result[0],"wal_frames":result[1],"checkpointed":result[2]},
+                "foreign_key_errors":len(foreign),
+                "sqlite_ok":integrity=="ok",
+                "no_live_restore_performed":True}
 
     def local_checks(self) -> dict:
         checks = {}
@@ -101,6 +131,7 @@ class Reliability:
             except (ValueError, TypeError):
                 pass
         target = MemoryStore(self.db_path).backup(self.folder)
+        digest=self._sha256(target)
         saved_at = now.isoformat()
         # Don't report success until metadata has been committed.
         with closing(sqlite3.connect(self.db_path, timeout=10)) as db, db:
@@ -108,10 +139,17 @@ class Reliability:
                 "UPDATE backup_schedule SET last_success=?,last_filename=? WHERE id=1",
                 (saved_at, target.name)
             )
+            db.execute(
+                "INSERT OR REPLACE INTO backup_digests(filename,sha256,size_bytes) "
+                "VALUES(?,?,?)",(target.name,digest,target.stat().st_size)
+            )
         snapshots = sorted(self.folder.glob("memory-*.sqlite3"), reverse=True)
         for old in snapshots[keep:]:
             old.unlink(missing_ok=True)
-        return {"created": True, "name": target.name, "last_success": saved_at}
+            with closing(sqlite3.connect(self.db_path)) as db,db:
+                db.execute("DELETE FROM backup_digests WHERE filename=?",(old.name,))
+        return {"created": True, "name": target.name, "last_success": saved_at,
+                "checksum_algorithm":"sha256"}
 
     def verify_snapshots(self, limit: int = 3) -> dict:
         """Read-only SQLite check of a bounded set of local snapshots.
@@ -124,6 +162,10 @@ class Reliability:
         snapshots = sorted(self.folder.glob("memory-*.sqlite3"), reverse=True)[:limit] \
             if self.folder.is_dir() else []
         checks = []
+        with closing(sqlite3.connect(self.db_path,timeout=5)) as db:
+            digests={r[0]:(r[1],r[2]) for r in db.execute(
+                "SELECT filename,sha256,size_bytes FROM backup_digests"
+            )}
         for snapshot in snapshots:
             if snapshot.is_symlink() or not snapshot.is_file():
                 checks.append({"name": snapshot.name, "status": "invalid",
@@ -140,8 +182,17 @@ class Reliability:
                     )}
                 healthy = bool(result and result[0]=="ok"
                                and {"memory_items","messages","conversations"} <= tables)
-                checks.append({"name":snapshot.name,"status":"healthy" if healthy else "invalid",
-                               "detail":"quick_check+schema" if healthy else "failed_integrity_or_schema"})
+                expected=digests.get(snapshot.name)
+                matched=(expected is None or
+                         (snapshot.stat().st_size==expected[1] and
+                          self._sha256(snapshot)==expected[0]))
+                healthy=healthy and matched
+                checks.append({"name":snapshot.name,
+                               "status":"healthy" if healthy else "invalid",
+                               "checksum":"verified" if expected and matched else
+                                          "mismatch" if expected else "legacy_unrecorded",
+                               "detail":"quick_check+schema+sha256" if healthy and expected
+                               else "quick_check+schema" if healthy else "failed_integrity_schema_or_checksum"})
             except (sqlite3.Error, OSError, ValueError):
                 checks.append({"name":snapshot.name,"status":"invalid",
                                "detail":"unable_to_read"})
@@ -183,6 +234,14 @@ class Reliability:
             raise ValueError("Snapshot missing or not a regular file.")
         if source.stat().st_size > 1024*1024*1024:
             raise ValueError("Snapshot too large for automated recovery rehearsal.")
+        with closing(sqlite3.connect(self.db_path,timeout=5)) as current:
+            recorded=current.execute(
+                "SELECT sha256,size_bytes FROM backup_digests WHERE filename=?",
+                (backup_filename,)
+            ).fetchone()
+        if recorded is not None and (recorded[1]!=source.stat().st_size
+                                      or recorded[0]!=self._sha256(source)):
+            raise ValueError("Backup checksum mismatch; recovery rehearsal refused.")
         import tempfile
         with tempfile.TemporaryDirectory(prefix="tsukiyora-restore-") as temp:
             target=Path(temp)/"rehearsal.sqlite3"

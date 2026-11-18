@@ -225,9 +225,9 @@ class V08HttpTests(unittest.TestCase):
         self.assertFalse(self.get("/api/soul/character")[1]["feelings_claimed"])
         self.assertFalse(self.get("/api/system/selftest")[1]["cloud_live_verified"])
         self.assertEqual(self.get("/api/soul/precision/status")[1]["cloud_calls"],0)
-        s=self.get("/ui/atlas_view.ts")
-        # static JS is not JSON, tested separately below
-        self.assertEqual(s[0],200)
+        with self.opener.open(self.url+"/ui/atlas_view.ts",timeout=8) as res:
+            self.assertEqual(res.status,200)
+            self.assertIn(b"BrainAtlasView",res.read())
 
     def test_untrusted_requests_rejected_without_hidden_network(self):
         with self.assertRaises(HTTPError) as err:

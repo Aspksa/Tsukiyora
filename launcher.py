@@ -19,6 +19,7 @@ from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from cognitive_core import CognitiveCore, CognitiveWorker
 from migration_guard import MigrationGuard
+from reliability import Reliability
 from memory_quality import MemoryQuality
 from vector_memory import VectorMemory
 from stream_runtime import handle_stream, stop_stream
@@ -600,7 +601,7 @@ def run() -> int:
             init_database(candidate)
             probe=SoulServer(("127.0.0.1",0),persona,candidate)
             try:
-                report=probe.cognition.reliability.local_checks()
+                report=Reliability(candidate,ROOT).local_checks()
                 fts=probe.cognition.migrations.audit()
                 html=(UI/"index.html").read_text(encoding="utf-8")
                 script=(UI/"app.ts").read_text(encoding="utf-8")

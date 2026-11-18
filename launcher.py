@@ -325,6 +325,20 @@ class SoulHandler(BaseHTTPRequestHandler):
                     limit=int(args.get("limit",["30"])[0])))
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/evolution4":
+            return self.send_json(self.server.cognition.evolution4.report())
+        if path == "/api/soul/evolution4/cases":
+            return self.send_json(self.server.cognition.evolution4.case_index())
+        if path == "/api/soul/evolution4/budget":
+            return self.send_json(self.server.cognition.evolution4.budget_plan())
+        if path == "/api/soul/evolution4/signals":
+            return self.send_json(self.server.cognition.evolution4.signals())
+        if path == "/api/soul/evolution4/curriculum":
+            try:
+                return self.send_json(self.server.cognition.evolution4.curriculum(
+                    args.get("domain",["logic"])[0]))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/improvement":
             return self.send_json(self.server.cognition.improvement.report())
         if path == "/api/soul/improvement/cases":
@@ -525,6 +539,55 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cognition.skills.decide(
                     obj.get("candidate_id"),approve=obj.get("approve"),
                     confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path.startswith("/api/soul/evolution4/"):
+            try:
+                obj=self._read_body()
+                engine=self.server.cognition.evolution4
+                if path=="/api/soul/evolution4/generate":
+                    result=engine.generate(
+                        obj.get("domain"),count=obj.get("count",4),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/evolution4/case":
+                    result=engine.add_case(
+                        obj.get("domain"),obj.get("question"),obj.get("expected"),
+                        split=obj.get("split","holdout"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/evolution4/decision":
+                    result=engine.decide(
+                        obj.get("candidate_id"),approve=obj.get("approve"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/evolution4/recover":
+                    if not self.server.chat_lock.acquire(blocking=False):
+                        raise CloudError("Сначала дождись окончания текущего теста.",409)
+                    try:
+                        result=engine.recover(
+                            obj.get("run_id"),confirmed=obj.get("confirmed",False))
+                    finally:
+                        self.server.chat_lock.release()
+                elif path=="/api/soul/evolution4/peer-review":
+                    result=engine.peer_review(obj.get("candidate_id"))
+                elif path=="/api/soul/evolution4/transfer":
+                    result=engine.transfer(obj.get("candidate_id"))
+                elif path=="/api/soul/evolution4/evaluate":
+                    if not self.server.chat_lock.acquire(blocking=False):
+                        raise CloudError("Дождись окончания чата или другого теста.",409)
+                    try:
+                        prior=self.server.cognition.improvement.guidance()[1]
+                        result=engine.evaluate(
+                            obj.get("candidate_id"),obj.get("evaluation_domain"),
+                            self.server.cloud,self.server.persona,
+                            confirmed_send=obj.get("confirm_cloud_calls",False),
+                            batch_size=obj.get("batch_size",6),
+                            baseline_guidance=prior[:900])
+                    finally:
+                        self.server.chat_lock.release()
+                else:
+                    return self.send_json({"error":"Unknown evolution4 action."},404)
+                return self.send_json(result)
+            except CloudError as error:
+                return self.send_json({"error":str(error)},error.status)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path.startswith("/api/soul/improvement/"):
@@ -886,7 +949,10 @@ class SoulHandler(BaseHTTPRequestHandler):
             guidance = self.server.cognition.guidance()
             evolving = self.server.cognition.evolution.guidance_for_conversation(conversation_id)
             improvement_id, approved = self.server.cognition.improvement.guidance()
-            extra = (guidance + " " + evolving + " " + approved).strip()[:1800]
+            evol4_id, evol4_style = self.server.cognition.evolution4.guidance(content)
+            earlier = (guidance + " " + evolving + " " + approved).strip()
+            extra = (earlier[:max(0,1799-len(evol4_style))] +
+                     " " + evol4_style).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,
                                     extra_guidance=extra)
             assistant = store.append_messages(conversation_id, [{
@@ -896,6 +962,11 @@ class SoulHandler(BaseHTTPRequestHandler):
                 try:
                     self.server.cognition.improvement.applied(
                         assistant["id"],improvement_id)
+                except (ValueError,sqlite3.Error):
+                    pass
+            if evol4_id is not None:
+                try:
+                    self.server.cognition.evolution4.applied(assistant["id"],evol4_id)
                 except (ValueError,sqlite3.Error):
                     pass
             return self.send_json({"conversation_id": conversation_id,

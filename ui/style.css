@@ -284,3 +284,17 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
   overflow-wrap:anywhere}
 #improve-proposals,#improve-cases{max-height:350px;overflow:auto}
 #improve-feedback{line-height:1.65;overflow-wrap:anywhere}
+
+/* Cognitive Soul 4.0 stays in the existing black/gold settings panel. */
+#evolution4-details input,#evolution4-details select,
+#evolution4-details textarea{display:block;width:100%;min-width:0;
+  box-sizing:border-box;margin:8px 0;padding:9px;
+  color:#ebd4ac;background:#0e0e10;border:1px solid #6b5031;border-radius:7px}
+#evolution4-details label{display:block;margin-top:11px;
+  font-size:12px;color:#c7a77b}
+#evolution4-details .quiet-button{margin:5px 7px 5px 0}
+#evolution4-details .memory-record{padding:8px 0;
+  border-bottom:1px solid #ffffff13;overflow-wrap:anywhere}
+#evol4-candidates{max-height:440px;overflow:auto}
+#evol4-diagnostics{white-space:pre-wrap;overflow-wrap:anywhere;
+  font-size:12px;max-height:270px;overflow:auto}

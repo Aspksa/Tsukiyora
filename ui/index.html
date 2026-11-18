@@ -315,6 +315,41 @@
             <div id="improve-proposals" class="memory-results"></div>
             <p id="improve-feedback" class="memory-empty" role="status">Проверка Cloud.ru платная: ровно 8 попыток на 4 эталонах. Отзывы и оценки сами по себе не доказывают рост интеллекта.</p>
           </details>
+          <details class="memory-queue" id="evolution4-details">
+            <summary>Cognitive Soul 4.0 <span class="muted">12 направлений саморазвития</span></summary>
+            <p class="memory-empty">Генерация 3–5 новых комбинаций методов, развитие навыков по областям, независимые эталоны, сравнение и контроль регрессии. Генерация локальная, испытания с Cloud.ru только вручную.</p>
+            <label for="evol4-domain">Область навыков</label>
+            <select id="evol4-domain">
+              <option value="logic">Логика</option>
+              <option value="coding">Программирование</option>
+              <option value="legal">Юридический анализ</option>
+              <option value="rag">RAG и память</option>
+              <option value="documents">Документы</option>
+            </select>
+            <button type="button" class="quiet-button" id="evol4-generate">Создать 4 варианта стратегии</button>
+            <button type="button" class="quiet-button" id="evol4-curriculum">Учебная программа</button>
+            <p id="evol4-overview" class="memory-empty" role="status"></p>
+            <label for="evol4-question">Новое контрольное задание (уникальное, без личных данных)</label>
+            <textarea id="evol4-question" maxlength="500" rows="2" placeholder="Проверяемый вопрос с коротким однозначным ответом"></textarea>
+            <label for="evol4-gold">Эталон (сохраняется только в SQLite, не отправляется в Cloud.ru)</label>
+            <input id="evol4-gold" maxlength="200" placeholder="Точный проверенный ответ">
+            <select id="evol4-split">
+              <option value="holdout">Независимая проверка (holdout)</option>
+              <option value="train">Учебный набор (train)</option>
+            </select>
+            <button type="button" class="quiet-button" id="evol4-add-case">Добавить эталон</button>
+            <p class="memory-empty">Для активации нужно 30 разных holdout-заданий на одной модели с улучшением не менее 10 п.п. Запуск партии — максимум 6 пар ответов / 12 запросов; суточный предел — 24 обращения. Фактическую стоимость Cloud.ru система не знает.</p>
+            <label for="evol4-test-domain">Проверять стратегию на заданиях области (для переноса навыков)</label>
+            <select id="evol4-test-domain">
+              <option value="logic">Логика</option>
+              <option value="coding">Программирование</option>
+              <option value="legal">Юридический анализ</option>
+              <option value="rag">RAG и память</option>
+              <option value="documents">Документы</option>
+            </select>
+            <div id="evol4-candidates" class="memory-results"></div>
+            <div id="evol4-diagnostics" class="memory-results" aria-live="polite"></div>
+          </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>
             <div id="character-progress" class="memory-results"></div>

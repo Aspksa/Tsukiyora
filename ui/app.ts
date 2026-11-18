@@ -1969,6 +1969,134 @@ $("improve-propose").addEventListener("click",async()=>{
     confirmed:true},"Гипотеза добавлена.");
 });
 
+// Cognitive Soul 4.0: all generated strategies are drafts until approved.
+async function evol4Action(endpoint,payload,success) {
+  try {
+    const result=await requestJSON("/api/soul/evolution4/"+endpoint,"POST",payload);
+    $("evol4-diagnostics").textContent=success+" "+
+      JSON.stringify(result,null,2).slice(0,2200);
+    await refreshEvolution4();
+  } catch(error) {
+    $("evol4-diagnostics").textContent="Не выполнено: "+error.message;
+  }
+}
+async function refreshEvolution4() {
+  if(!$("evolution4-details").open) return;
+  try {
+    const report=await requestJSON("/api/soul/evolution4");
+    const domain=$("evol4-domain").value;
+    const active=report.active.find(x=>x.domain===domain);
+    const tests=report.cases.find(x=>x.domain===domain && x.split==="holdout");
+    $("evol4-overview").textContent="Область: "+domain+
+      " · тесты: "+(tests?.n||0)+" / 30"+
+      " · активная стратегия: "+(active?.candidate_id??"отсутствует")+
+      " · запросов на эксперименты сегодня: "+report.daily_calls_reserved+
+      " / "+report.daily_call_limit+
+      ". Генерация и учебная программа — без облака.";
+    const pane=$("evol4-candidates");
+    pane.replaceChildren();
+    for(const candidate of report.candidates.filter(x=>x.domain===domain).slice(0,35)) {
+      const card=document.createElement("div");
+      card.className="memory-record";
+      addCognitiveLine(card,"Кандидат #"+candidate.id+" · поколение "+
+        candidate.generation+" · "+candidate.state+
+        " · методы: "+candidate.recipe.join(", ")+
+        " · предок: "+(candidate.parent_id??"нет"));
+      for(const score of candidate.own_results) {
+        addCognitiveLine(card,"Проверено "+score.cases+" /30 · модель "+
+          score.model+" · базовый "+score.baseline_correct+"/"+score.cases+
+          " · новый "+score.candidate_correct+"/"+score.cases+
+          " · регрессий "+score.regressions+
+          " · улучшение "+Math.round(score.gain*100)+" п.п."+
+          " · средняя задержка "+score.mean_baseline_ms+
+          "/"+score.mean_candidate_ms+" мс");
+      }
+      for(const score of candidate.transfer_results) {
+        addCognitiveLine(card,"Проверка переноса: "+score.domain+
+          ", "+score.cases+" задач, разница "+Math.round(score.gain*100)+" п.п.");
+      }
+      const controls=[];
+      if(candidate.state==="proposed" && !candidate.running) {
+        controls.push(["Тестировать парно (12 вызовов)",async()=>{
+          const evalDomain=$("evol4-test-domain").value;
+          if(!window.confirm("Разрешить до 12 платных запросов Cloud.ru для 6 новых holdout-вопросов области "+evalDomain+"? Эталоны остаются локально.")) return;
+          await evol4Action("evaluate",{candidate_id:candidate.id,
+            evaluation_domain:evalDomain,batch_size:6,
+            confirm_cloud_calls:true},"Парное испытание завершено.");
+        }]);
+        if(candidate.eligible) {
+          controls.push(["Применить после испытаний",async()=>{
+            if(!window.confirm("Применить стратегию #"+candidate.id+
+              " для области "+domain+"? Будет доступен ручной откат.")) return;
+            await evol4Action("decision",{candidate_id:candidate.id,
+              approve:true,confirmed:true},"Стратегия активирована.");
+          }]);
+        }
+      }
+      if(candidate.last_status==="running") {
+        controls.push(["Закрыть прерванный тест",async()=>{
+          if(!window.confirm("Убедись, что тест больше не выполняется. Пометить его неудачным?")) return;
+          await evol4Action("recover",{run_id:candidate.last_run_id,
+            confirmed:true},"Прерванный тест закрыт.");
+        }]);
+      }
+      if(candidate.state==="active") {
+        controls.push(["Откатить",async()=>{
+          if(!window.confirm("Отключить активную стратегию #"+candidate.id+"?")) return;
+          await evol4Action("decision",{candidate_id:candidate.id,
+            approve:false,confirmed:true},"Стратегия отключена.");
+        }]);
+      }
+      controls.push(["Многоуровневая проверка",async()=>{
+        await evol4Action("peer-review",{candidate_id:candidate.id},
+          "Аудит стратегии.");
+      }]);
+      for(const [label,fn] of controls) {
+        const button=document.createElement("button");
+        button.type="button";
+        button.className="quiet-button";
+        button.textContent=label;
+        button.addEventListener("click",fn);
+        card.append(button);
+      }
+      pane.append(card);
+    }
+    if(!pane.childElementCount) addCognitiveLine(pane,
+      "Нет гипотез. Создай несколько локальных вариантов, затем добавь эталоны.");
+  } catch(error) {
+    $("evol4-overview").textContent="Ошибка Cognitive Soul 4.0: "+error.message;
+  }
+}
+$("evolution4-details").addEventListener("toggle",refreshEvolution4);
+$("evol4-domain").addEventListener("change",()=>{
+  $("evol4-test-domain").value=$("evol4-domain").value;
+  refreshEvolution4();
+});
+$("evol4-generate").addEventListener("click",()=>{
+  if(!window.confirm("Создать четыре новых безопасных варианта локально? Они не изменят поведение до подтверждения.")) return;
+  evol4Action("generate",{domain:$("evol4-domain").value,count:4,
+    confirmed:true},"Созданы гипотезы.");
+});
+$("evol4-add-case").addEventListener("click",()=>{
+  const domain=$("evol4-domain").value;
+  const question=$("evol4-question").value.trim();
+  const expected=$("evol4-gold").value.trim();
+  const split=$("evol4-split").value;
+  if(!window.confirm("Сохранить контрольный вопрос и правильный ответ в локальную SQLite?")) return;
+  evol4Action("case",{domain,question,expected,split,confirmed:true},
+    "Эталон сохранён.");
+});
+$("evol4-curriculum").addEventListener("click",async()=>{
+  try {
+    const domain=$("evol4-domain").value;
+    const data=await requestJSON("/api/soul/evolution4/curriculum?domain="+
+      encodeURIComponent(domain));
+    $("evol4-diagnostics").textContent=JSON.stringify(data,null,2);
+  } catch(error) {
+    $("evol4-diagnostics").textContent="Учебная программа: "+error.message;
+  }
+});
+
 $("academy-enabled").addEventListener("change",async () => {
   const control=$("academy-enabled");
   const value=control.checked;

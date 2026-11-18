@@ -21,6 +21,8 @@ JOBS = {
     "academy_cycle": 300,
     "persona_continuity": 1200,
     "backup_verify": 3600,
+    "academy_metrics": 600,
+    "migration_audit": 3600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -153,6 +155,18 @@ class Maintenance:
                 report = core.reliability.verify_snapshots(limit=3)
                 result = {"checked":report["checked"],"healthy":report["healthy"],
                           "invalid":report["invalid"]}
+            elif kind == "academy_metrics":
+                report = core.metrics.evaluate()
+                result = {"updated":report.get("updated",False),
+                          "assessed":len(report.get("evaluations",[]))}
+            elif kind == "migration_audit":
+                report = core.migrations.audit()
+                result = {"version":report["version"],
+                          "integrity":report["sqlite_integrity"],
+                          "missing_fts":report["fts_missing_rows"],
+                          "foreign_key_errors":report["foreign_key_errors"]}
+                if not report["sqlite_integrity"] or report["foreign_key_errors"]:
+                    raise sqlite3.DatabaseError("SQLite migration integrity warning")
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

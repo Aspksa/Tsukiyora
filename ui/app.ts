@@ -221,6 +221,7 @@ async function refreshBrain() {
       $("soul-live-state").textContent = overview.total.toLocaleString("ru-RU") +
         " воспоминаний · " + overview.connections + " связей · " +
         (atlasView.level==="overview"?"8 секторов":
+         atlasView.level==="regions"?"области памяти":
          atlasView.level==="clusters"?"кластеры памяти":"отдельные соты");
       if (reducedMotion) paint();
       return;
@@ -329,6 +330,7 @@ canvas.addEventListener("click", async (event) => {
       await atlasView.open(node);
       graphScale=1;graphPanX=0;graphPanY=0;
       $("soul-live-state").textContent =
+        atlasView.level==="regions" ? "Области памяти · выбери область" :
         atlasView.level==="clusters" ? "Кластеры памяти · выбери соту" :
         atlasView.level==="nodes" ? "Воспоминания · выбери запись" :
         "Обзор памяти";
@@ -969,8 +971,8 @@ $("precision-search").addEventListener("click", async () => {
   const button=$("precision-search");
   button.disabled=true;
   try {
-    const result=await requestJSON("/api/soul/precision","POST", {
-      query,limit:20,include_links:true,
+    const result=await requestJSON("/api/soul/rag","POST", {
+      query,limit:20,max_age_days:365,
     });
     const target=$("memory-results");
     target.replaceChildren();
@@ -982,7 +984,10 @@ $("precision-search").addEventListener("click", async () => {
         (item.source_ref || item.source_type) +
         " · релевантность: "+Math.round(item.score*100)+"%" +
         (item.match==="related" ? " · связь с #"+item.related_to : "") +
-        (item.possible_conflict ? " · возможное противоречие" : "");
+        (item.possible_conflict ? " · возможное противоречие" : "")+
+        (item.potentially_stale ? " · возможно устарело" : "")+
+        (!item.source_exists ? " · источник не найден" : "")+
+        " · "+item.citation;
       const body=document.createElement("p");
       body.textContent=item.content;
       row.append(label,body);
@@ -994,8 +999,9 @@ $("precision-search").addEventListener("click", async () => {
       empty.textContent="По этому запросу записей не найдено.";
       target.append(empty);
     }
-    memoryFeedback("Локальный поиск "+result.mode+
-      ". Источники — записи пользователя, а не независимая проверка фактов. Cloud.ru не вызывается.");
+    memoryFeedback("Локальный RAG: "+result.passes.length+
+      " шага поиска, связи и источники проверены на наличие. "+
+      "Истинность записей не доказана. Cloud.ru не вызывается.");
   } catch (error) {
     memoryFeedback("Ошибка точного поиска: "+error.message);
   } finally {
@@ -1157,11 +1163,13 @@ $("memory-quality").addEventListener("toggle", () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography, cloud, character] = await Promise.all([
+    const [status, biography, cloud, character, academyMetrics, timeline] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
       requestJSON("/api/soul/character"),
+      requestJSON("/api/soul/academy/metrics"),
+      requestJSON("/api/soul/character/timeline"),
     ]);
     const academy=status.academy;
     $("academy-enabled").checked=Boolean(academy.enabled);
@@ -1179,6 +1187,17 @@ async function refreshCognition() {
     }
     if (!academyPane.children.length) academyPane.textContent=
       "Циклы начнутся после оценок реальных ответов. Программу можно отключить.";
+    const metricsPane=$("academy-metrics");
+    metricsPane.replaceChildren();
+    for (const metric of academyMetrics.metrics) {
+      const item=document.createElement("p");
+      item.className="memory-empty";
+      item.textContent=metric.skill+": "+metric.assessment+
+        (metric.change_points===null ? " · данных пока недостаточно" :
+         " · изменение полезности: "+metric.change_points+" п.п.")+
+        " · оценок: "+metric.sample_count;
+      metricsPane.append(item);
+    }
     const charPane=$("character-progress");
     charPane.replaceChildren();
     const summary=document.createElement("p");
@@ -1193,6 +1212,16 @@ async function refreshCognition() {
       line.className="memory-empty";
       line.textContent="Память #"+habit.id+": "+habit.content;
       charPane.append(line);
+    }
+    const historyPane=$("character-timeline");
+    historyPane.replaceChildren();
+    for (const entry of timeline.items.slice(0,8)) {
+      const line=document.createElement("p");
+      line.className="memory-empty";
+      line.textContent=entry.timestamp+" · "+entry.event+
+        (entry.memory_id ? " · память #"+entry.memory_id : "")+
+        " · источник: "+(entry.source_ref || entry.source_type);
+      historyPane.append(line);
     }
     vectorAvailableForSearch = Boolean(
       cloud.configured && cloud.verified && cloud.embedding_model
@@ -1288,12 +1317,24 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups, selftest] = await Promise.all([
+    const [report, workload, backups, selftest, migration] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
       requestJSON("/api/system/selftest"),
+      requestJSON("/api/system/migrations"),
     ]);
+    const snapshotSelect=$("recovery-snapshot");
+    const previousName=snapshotSelect.value;
+    snapshotSelect.replaceChildren();
+    for (const entry of backups.items) {
+      const option=document.createElement("option");
+      option.value=entry.filename;option.textContent=entry.filename;
+      snapshotSelect.append(option);
+    }
+    if (backups.items.some(x=>x.filename===previousName)) {
+      snapshotSelect.value=previousName;
+    }
     const required=["cloud-connect","cloud-model","cloud-select","cloud-diagnose",
       "message","send-message","stop-message","memory-save","memory-search",
       "precision-search","rag-search","memory-backup","run-system-check",
@@ -1324,6 +1365,8 @@ async function refreshDiagnostics() {
       " · оценка токенов (не данные провайдера): запросы " + q.approx_prompt_tokens +
       ", ответы " + q.approx_answer_tokens +
       " · резервных копий " + backups.items.length +
+      " · схема SQLite v"+migration.version+
+      (migration.fts_missing_rows ? " · неполный FTS индекс: "+migration.fts_missing_rows : "")+
       ". Общение имеет приоритет; фоновые задачи не вызывают Cloud.ru.";
   } catch (error) {
     const item = document.createElement("p");
@@ -1432,4 +1475,29 @@ canvas.addEventListener("keydown", (event) => {
   else return;
   event.preventDefault();
   if (reducedMotion) paint();
+});
+
+$("restore-test").addEventListener("click", async () => {
+  const name=$("recovery-snapshot").value;
+  if (!name) {
+    $("restore-result").textContent="Сначала создай или выбери резервную копию.";
+    return;
+  }
+  const button=$("restore-test");
+  button.disabled=true;
+  $("restore-result").textContent="Проверяю копию во временной SQLite…";
+  try {
+    const result=await requestJSON("/api/system/recovery-check?"+
+      new URLSearchParams({name}));
+    $("restore-result").textContent=result.restorable
+      ? "✓ Копия прошла тест восстановления, диалогов: "+
+        result.history_counts.conversations+
+        ", сообщений: "+result.history_counts.messages+
+        ". Рабочая база не изменялась."
+      : "Не удалось подтвердить восстановление.";
+  } catch (error) {
+    $("restore-result").textContent="Ошибка проверки копии: "+error.message;
+  } finally {
+    button.disabled=false;
+  }
 });

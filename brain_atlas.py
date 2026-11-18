@@ -68,7 +68,7 @@ class BrainAtlas:
                 "WHERE status='active' AND kind=? AND (id%2)=? "
                 "AND (? IS NULL OR id<?) "
                 "GROUP BY region ORDER BY region DESC LIMIT ?",
-                (REGION_SPAN, kind, parity, cursor, cursor*REGION_SPAN+REGION_SPAN+1
+                (REGION_SPAN, kind, parity, cursor, cursor*REGION_SPAN+1
                  if cursor is not None else None, MAX_REGIONS+1)
             ).fetchall()
             total=db.execute(

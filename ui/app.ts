@@ -963,6 +963,46 @@ async function loadSoulJournal() {
   }
 }
 
+$("precision-search").addEventListener("click", async () => {
+  const query = $("memory-search").value.trim();
+  if (!query) return memoryFeedback("Напиши запрос для локального поиска.");
+  const button=$("precision-search");
+  button.disabled=true;
+  try {
+    const result=await requestJSON("/api/soul/precision","POST", {
+      query,limit:20,include_links:true,
+    });
+    const target=$("memory-results");
+    target.replaceChildren();
+    for (const item of result.items) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const label=document.createElement("small");
+      label.textContent="Память #"+item.id+" · источник: "+
+        (item.source_ref || item.source_type) +
+        " · релевантность: "+Math.round(item.score*100)+"%" +
+        (item.match==="related" ? " · связь с #"+item.related_to : "") +
+        (item.possible_conflict ? " · возможное противоречие" : "");
+      const body=document.createElement("p");
+      body.textContent=item.content;
+      row.append(label,body);
+      target.append(row);
+    }
+    if (!result.items.length) {
+      const empty=document.createElement("p");
+      empty.className="memory-empty";
+      empty.textContent="По этому запросу записей не найдено.";
+      target.append(empty);
+    }
+    memoryFeedback("Локальный поиск "+result.mode+
+      ". Источники — записи пользователя, а не независимая проверка фактов. Cloud.ru не вызывается.");
+  } catch (error) {
+    memoryFeedback("Ошибка точного поиска: "+error.message);
+  } finally {
+    button.disabled=false;
+  }
+});
+
 $("rag-search").addEventListener("click", async () => {
   const query = $("memory-search").value.trim();
   if (!query) {
@@ -1117,11 +1157,43 @@ $("memory-quality").addEventListener("toggle", () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography, cloud] = await Promise.all([
+    const [status, biography, cloud, character] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
+      requestJSON("/api/soul/character"),
     ]);
+    const academy=status.academy;
+    $("academy-enabled").checked=Boolean(academy.enabled);
+    const academyPane=$("academy-progress");
+    academyPane.replaceChildren();
+    for (const goal of academy.goals) {
+      if (!goal.samples) continue;
+      const item=document.createElement("p");
+      item.className="memory-empty";
+      item.textContent=goal.category+" · "+goal.state+
+        " · полезных: "+goal.helpful+"/"+goal.samples+
+        " · изменение оценки: "+(goal.trend>=0?"+":"")+
+        Math.round(goal.trend*100)+" п.п.";
+      academyPane.append(item);
+    }
+    if (!academyPane.children.length) academyPane.textContent=
+      "Циклы начнутся после оценок реальных ответов. Программу можно отключить.";
+    const charPane=$("character-progress");
+    charPane.replaceChildren();
+    const summary=document.createElement("p");
+    summary.className="memory-empty";
+    summary.textContent="Диалогов: "+character.conversations+
+      " · подтверждённых привычек: "+character.stable_habits.length+
+      " · событий: "+character.accepted_events+
+      ". Состояние — программная модель, не эмоции.";
+    charPane.append(summary);
+    for (const habit of character.stable_habits.slice(0,8)) {
+      const line=document.createElement("p");
+      line.className="memory-empty";
+      line.textContent="Память #"+habit.id+": "+habit.content;
+      charPane.append(line);
+    }
     vectorAvailableForSearch = Boolean(
       cloud.configured && cloud.verified && cloud.embedding_model
       && status.vectors.indexed_memories > 0
@@ -1181,6 +1253,21 @@ async function refreshCognition() {
   }
 }
 
+$("academy-enabled").addEventListener("change",async () => {
+  const control=$("academy-enabled");
+  const value=control.checked;
+  control.disabled=true;
+  try {
+    await requestJSON("/api/soul/academy/enabled","POST",{enabled:value});
+    await refreshCognition();
+  } catch (error) {
+    control.checked=!value;
+    $("chat-notice").textContent="Настройка SOUL ACADEMY: "+error.message;
+  } finally {
+    control.disabled=false;
+  }
+});
+
 $("cognitive-details").addEventListener("toggle", () => {
   if ($("cognitive-details").open) refreshCognition();
 });
@@ -1201,11 +1288,28 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups] = await Promise.all([
+    const [report, workload, backups, selftest] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
+      requestJSON("/api/system/selftest"),
     ]);
+    const required=["cloud-connect","cloud-model","cloud-select","cloud-diagnose",
+      "message","send-message","stop-message","memory-save","memory-search",
+      "precision-search","rag-search","memory-backup","run-system-check",
+      "academy-enabled","layer-selector","soul-canvas"];
+    const missing=required.filter(id=>!$(id));
+    const hasCanvas=Boolean(canvas.getContext("2d"));
+    $("browser-selftest").textContent=
+      (!missing.length && hasCanvas ? "✓" : "!")+
+      " Интерфейс: "+(required.length-missing.length)+"/"+required.length+
+      " элементов · Canvas: "+(hasCanvas?"OK":"ошибка")+
+      (missing.length ? " · отсутствуют: "+missing.join(", ") : "")+
+      " · это проверка DOM, а не нажатий всех кнопок."+
+      " Резервные копии: "+selftest.backups.healthy+
+      " исправных из "+selftest.backups.checked+
+      ", повреждённых: "+selftest.backups.invalid+
+      ". Реальный Cloud.ru — отдельной кнопкой.";
     for (const [name, info] of Object.entries(report.checks)) {
       const item = document.createElement("p");
       item.className = "memory-empty";

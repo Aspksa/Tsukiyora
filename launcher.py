@@ -778,7 +778,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             if not history or history[-1]["id"] != user["id"]:
                 raise ValueError("Нельзя повторить старое сообщение после новых. Начни новый диалог.")
             memories = store.find_memories(limit=20)
-            answer = cloud.complete(self.server.persona, history, memories)
+            guidance = self.server.cognition.guidance()
+            evolving = self.server.cognition.evolution.guidance_for_conversation(conversation_id)
+            extra = (guidance + " " + evolving).strip()[:1800]
+            answer = cloud.complete(self.server.persona, history, memories,
+                                    extra_guidance=extra)
             store.append_messages(conversation_id, [{
                 "role": "assistant", "content": answer, "client_message_id": key
             }])

@@ -60,7 +60,32 @@
       <div><dt>Память SQLite</dt><dd id="memory-info">Проверка…</dd></div>
       <div><dt>Нейросеть</dt><dd id="model-info">Не подключена</dd></div>
     </dl>
-    <p class="dialog-note">Новые настройки появятся здесь только тогда, когда соответствующие функции будут действительно работать. Ключи и личная память не хранятся в GitHub.</p>
+    <details class="memory-details" id="memory-details">
+      <summary>Воспоминания <span class="muted">добавить · найти · исправить</span></summary>
+      <div class="memory-form">
+        <label class="sr-only" for="memory-kind">Тип воспоминания</label>
+        <select id="memory-kind">
+          <option value="fact">Факт</option>
+          <option value="preference">Предпочтение</option>
+          <option value="event">Событие</option>
+          <option value="biography">Биография</option>
+        </select>
+        <label class="sr-only" for="memory-text">Запись для памяти</label>
+        <textarea id="memory-text" rows="3" maxlength="8000" placeholder="Что Цукиёра должна помнить?"></textarea>
+        <div class="memory-actions">
+          <button type="button" id="memory-save" class="accent-button">Запомнить</button>
+          <button type="button" id="memory-cancel" class="quiet-button" hidden>Отмена</button>
+        </div>
+        <label class="sr-only" for="memory-search">Найти воспоминания</label>
+        <input id="memory-search" type="search" maxlength="300" placeholder="Поиск по памяти">
+        <div id="memory-results" class="memory-results" aria-live="polite"></div>
+        <div class="memory-footer">
+          <button type="button" id="memory-backup" class="quiet-button">Создать резервную копию</button>
+          <span id="memory-feedback" role="status"></span>
+        </div>
+      </div>
+    </details>
+    <p class="dialog-note">Память сохраняется только на этом компьютере. Пока записи добавляются вручную: автоматическое запоминание диалогов появится с рабочим чатом.</p>
   </dialog>
 </body>
 </html>

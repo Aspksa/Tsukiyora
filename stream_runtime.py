@@ -116,6 +116,9 @@ def handle_stream(handler, obj: dict):
                        + json.dumps([{"id": m["id"], "source_type": m["source_type"],
                                       "source_ref": m["source_ref"], "text": m["content"][:500]}
                                      for m in memories], ensure_ascii=False))
+        if cancelled.is_set():
+            send_event(handler, "stopped", {"conversation_id": conversation_id})
+            return
         parts = []
         for token in cloud.stream(prompt, history, cancelled):
             if cancelled.is_set():

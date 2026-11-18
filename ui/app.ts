@@ -1836,6 +1836,139 @@ $("next-simulate").addEventListener("click",()=>{
   },true);
 });
 
+// Cognitive Soul 3.0: no paid work without a click and explicit consent.
+async function improvementAction(path,body,message) {
+  try {
+    const result=await requestJSON("/api/soul/improvement/"+path,"POST",body);
+    $("improve-feedback").textContent=message+
+      (result.run ? " · эталонов "+result.run.cases+
+       " · выигрыш "+Math.round((result.run.gain??0)*100)+" п.п." : "");
+    await refreshImprovement();
+  } catch(error) {
+    $("improve-feedback").textContent="Не выполнено: "+error.message;
+  }
+}
+async function refreshImprovement() {
+  if(!$("self-improvement").open) return;
+  try {
+    const [report,cases,diagnostics]=await Promise.all([
+      requestJSON("/api/soul/improvement"),
+      requestJSON("/api/soul/improvement/cases"),
+      requestJSON("/api/soul/improvement/diagnostics")
+    ]);
+    const diagnosticPane=$("improvement-diagnostics");
+    diagnosticPane.replaceChildren();
+    const negatives=diagnostics.negative_feedback_by_category
+      .map(x=>x.category+": "+x.n).join(", ");
+    addCognitiveLine(diagnosticPane,
+      "Проблемы по отзывам: "+(negatives||"пока нет данных")+
+      " · контрольных заданий: "+(report.case_counts.holdout||0)+
+      "/4 · активный вариант: "+(report.active_id??"нет"));
+    const casePane=$("improve-cases");
+    casePane.replaceChildren();
+    for(const testCase of cases.items) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      addCognitiveLine(row,"#"+testCase.id+" ["+testCase.split+"] "+
+        testCase.question+" · эталон: "+testCase.expected);
+      const remove=document.createElement("button");
+      remove.type="button";remove.className="quiet-button";
+      remove.textContent="Удалить эталон";
+      remove.addEventListener("click",async()=>{
+        if(!window.confirm("Удалить эталон? Использованные в тестах задания удалять нельзя.")) return;
+        await improvementAction("case/delete",{id:testCase.id,confirmed:true},
+          "Эталон удалён.");
+      });
+      row.append(remove);casePane.append(row);
+    }
+    if(!cases.items.length) addCognitiveLine(casePane,
+      "Добавь четыре независимых проверенных эталона для реального сравнения.");
+    const pane=$("improve-proposals");
+    pane.replaceChildren();
+    for(const proposal of report.proposals) {
+      const block=document.createElement("div");
+      block.className="memory-record";
+      const run=proposal.last_run;
+      addCognitiveLine(block,"Гипотеза #"+proposal.id+" · "+proposal.strategy+
+        " · "+proposal.state+" · "+proposal.rationale);
+      if(run) {
+        addCognitiveLine(block,"Последний тест #"+run.id+" · "+run.status+
+          " · вызовов: "+run.provider_calls+
+          " · базовая стратегия: "+run.baseline_correct+"/"+run.cases+
+          " · новая: "+run.candidate_correct+"/"+run.cases+
+          " · регрессий: "+run.regressions+
+          " · выигрыш: "+(run.gain===null?"нет данных":Math.round(run.gain*100)+" п.п.")+
+          " · среднее время: "+run.baseline_mean_ms+"/"+run.candidate_mean_ms+" мс"+
+          (run.ready_for_review?" · готова к подтверждению":""));
+      }
+      const controls=[];
+      if(proposal.state==="proposed" && !run?.ready_for_review) {
+        controls.push(["Проверить Cloud.ru",async()=>{
+          if((report.case_counts.holdout||0)<4) {
+            $("improve-feedback").textContent="Сначала добавь четыре эталонных задания holdout.";
+            return;
+          }
+          if(!window.confirm("Отправить 4 вопроса в Cloud.ru: максимум 8 платных запросов? Эталонные ответы в облако не отправляются.")) return;
+          await improvementAction("run",{proposal_id:proposal.id,max_pairs:4,
+            confirm_cloud_calls:true},"Парное сравнение завершено");
+        }]);
+      } else if(proposal.state==="proposed" && run?.ready_for_review) {
+        controls.push(["Повторить тест",async()=>{
+          if(!window.confirm("Снова выполнить 8 платных запросов Cloud.ru?")) return;
+          await improvementAction("run",{proposal_id:proposal.id,max_pairs:4,
+            confirm_cloud_calls:true},"Повторная проверка");
+        }]);
+        controls.push(["Одобрить улучшение",async()=>{
+          if(!window.confirm("Применять эту стратегию в дальнейших диалогах? Можно откатить.")) return;
+          await improvementAction("decide",{proposal_id:proposal.id,approve:true,
+            confirmed:true},"Улучшение одобрено.");
+        }]);
+      }
+      if(run?.status==="running") {
+        controls.push(["Закрыть прерванный тест",async()=>{
+          if(!window.confirm("Убедись, что тест не выполняется. Пометить его неудачным?")) return;
+          await improvementAction("recover",{run_id:run.id,confirmed:true},
+            "Прерванный тест закрыт без активации.");
+        }]);
+      }
+      if(report.active_id===proposal.id) {
+        controls.push(["Откатить",async()=>{
+          if(!window.confirm("Откатить активную стратегию и вернуть предыдущую?")) return;
+          await improvementAction("decide",{proposal_id:proposal.id,approve:false,
+            confirmed:true},"Стратегия откатилась.");
+        }]);
+      }
+      for(const [name,act] of controls) {
+        const button=document.createElement("button");
+        button.type="button";button.className="quiet-button";
+        button.textContent=name;
+        button.addEventListener("click",act);
+        block.append(button);
+      }
+      pane.append(block);
+    }
+    if(!report.proposals.length) addCognitiveLine(pane,
+      "Гипотез нет. Они могут появляться после повторных ошибок и отрицательных оценок.");
+  } catch(error) {
+    $("improve-feedback").textContent=
+      "Не удалось открыть самоулучшение: "+error.message;
+  }
+}
+$("self-improvement").addEventListener("toggle",refreshImprovement);
+$("improve-add-case").addEventListener("click",async()=>{
+  const question=$("improve-question").value.trim();
+  const expected=$("improve-expected").value.trim();
+  const split=$("improve-split").value;
+  if(!window.confirm("Сохранить вопрос и эталон только в локальной SQLite?")) return;
+  await improvementAction("case",{question,expected,split,confirmed:true},
+    "Эталон сохранён локально.");
+});
+$("improve-propose").addEventListener("click",async()=>{
+  if(!window.confirm("Создать новую гипотезу? Без облачных вызовов и без активации.")) return;
+  await improvementAction("propose",{strategy:$("improve-strategy").value,
+    confirmed:true},"Гипотеза добавлена.");
+});
+
 $("academy-enabled").addEventListener("change",async () => {
   const control=$("academy-enabled");
   const value=control.checked;

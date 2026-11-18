@@ -23,6 +23,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import launcher
 from memory_store import MemoryStore
+from migration_guard import SCHEMA_VERSION
 from document_parser import extract_document
 from contract_insights import ContractInsights
 from atlas_materializer import AtlasMaterializer
@@ -204,7 +205,7 @@ class V12HttpTests(unittest.TestCase):
 
     def test_binary_import_consent_source_analysis_and_reversible_controls(self):
         self.assertTrue(self.get("/api/soul/atlas/cache")["verified"])
-        self.assertEqual(self.get("/api/system/migrations")["version"],12)
+        self.assertEqual(self.get("/api/system/migrations")["version"],SCHEMA_VERSION)
         self.assertTrue(self.get("/api/system/wal")["sqlite_ok"])
         self.assertEqual(len(self.get("/api/soul/academy/practice")["questions"]),4)
         self.assertEqual(self.get("/api/soul/persona/links")["links"],[])

@@ -94,7 +94,11 @@ def handle_stream(handler, obj: dict):
             send_event(handler, "done", {"cached": True, "conversation_id": conversation_id, "message_id": old_answer["id"]})
             return
 
-        matches = growth.retrieve(content, limit=18)
+        # Rank across the approved SQLite corpus (FTS5 when supported),
+        # expanding grounded one-hop links without introducing invented facts.
+        matches = handler.server.cognition.precision.search(
+            content[:500], limit=18, include_links=True
+        )["items"]
         used_vectors = False
         # An embedding model must be explicitly selected and records indexed.
         # Failed or unsupported embedding API never blocks the local fallback.
@@ -125,6 +129,8 @@ def handle_stream(handler, obj: dict):
         learned = handler.server.cognition.guidance()
         if learned:
             prompt += "\n\nБезопасная стратегия ответа на основе явной обратной связи: " + learned
+        # The biography and habits are explicitly approved local data.
+        prompt += "\n\n" + handler.server.cognition.continuity.context()
         if memories:
             prompt += ("\nКогда вспоминаешь факты, по возможности укажи источник "
                        "в формате [Память #ID]. ID и source_ref бери только из "

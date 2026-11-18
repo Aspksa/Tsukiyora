@@ -115,8 +115,14 @@ def handle_stream(handler, obj: dict):
         if learned:
             prompt += "\n\nБезопасная стратегия ответа на основе явной обратной связи: " + learned
         academy_on = handler.server.cognition.academy.status(limit=1)["enabled"]
-        experiment_style = handler.server.cognition.experiments.guidance(
+        style_name = handler.server.cognition.experiments.assign(
             conversation_id, enabled=academy_on)
+        experiment_style = (
+            handler.server.cognition.experiments.guidance(
+                conversation_id, enabled=academy_on)
+            if style_name and handler.server.cognition.rollback.permitted(style_name)
+            else ""
+        )
         if experiment_style:
             prompt += "\n\nНебольшой тест манеры ответа (не меняет характер): " + experiment_style
         # The biography and habits are explicitly approved local data.

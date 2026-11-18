@@ -87,6 +87,7 @@
         <button type="button" id="run-system-check" class="quiet-button">Проверить систему</button>
         <div id="diagnostics-results" class="memory-results" aria-live="polite"></div>
         <div id="evidence-audit-summary" class="memory-results" aria-live="polite"></div>
+        <div id="atlas-health" class="memory-results" aria-live="polite"></div>
         <p id="browser-selftest" class="memory-empty" role="status">Проверка интерфейса ещё не выполнялась.</p>
         <div id="workload-status" class="memory-empty"></div>
         <details class="memory-queue" id="cloud-budget-details">
@@ -158,10 +159,10 @@
           <div id="layer-results" class="memory-results" aria-live="polite"></div>
         </details>
         <details class="memory-queue" id="document-details">
-          <summary>Документы <span class="muted">TXT / Markdown · локально</span></summary>
+          <summary>Документы <span class="muted">TXT · Markdown · DOCX · текстовый PDF</span></summary>
           <p class="memory-empty">Импорт только по твоему нажатию. Файлы хранятся в SQLite; никакой автоматической отправки в Cloud.ru.</p>
-          <label for="document-file" class="memory-empty">Выбрать TXT или Markdown (до 44 000 символов)</label>
-          <input id="document-file" type="file" accept=".txt,.md,text/plain,text/markdown">
+          <label for="document-file" class="memory-empty">Выбрать TXT, Markdown, DOCX или текстовый PDF (до 1 МБ)</label>
+          <input id="document-file" type="file" accept=".txt,.md,.docx,.pdf,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
           <div class="memory-actions">
             <button type="button" id="document-import" class="quiet-button">Индексировать документ</button>
             <button type="button" id="document-refresh" class="quiet-button">Обновить список</button>
@@ -170,6 +171,8 @@
             Разрешить Cloud.ru получать найденные фрагменты документов в ответах (только текущий сеанс)
           </label>
           <p id="document-status" class="memory-empty" role="status">По умолчанию импорт и поиск локальные. Передача фрагментов в Cloud.ru выключена.</p>
+          <p class="memory-empty">PDF: только поддерживаемые машиночитаемые текстовые потоки. Сканам нужен OCR, которого здесь нет. Выводы по договорам требуют проверки человеком.</p>
+          <div id="contract-insights" class="memory-results" aria-live="polite"></div>
           <div id="document-list" class="memory-results" aria-live="polite"></div>
         </details>
         <details class="memory-queue" id="memory-quality">
@@ -201,12 +204,23 @@
             <div id="academy-metrics" class="memory-results" aria-live="polite"></div>
             <div id="academy-experiments" class="memory-results"></div>
             <div id="academy-curriculum" class="memory-results" aria-live="polite"></div>
+            <div id="academy-rollback" class="memory-results" aria-live="polite"></div>
+            <details class="memory-queue" id="academy-practice-details">
+              <summary>Контрольные вопросы <span class="muted">оценка без Cloud.ru</span></summary>
+              <label for="academy-practice-skill" class="memory-empty">Выбери навык</label>
+              <select id="academy-practice-skill"></select>
+              <p id="academy-practice-question" class="memory-empty">Ответ на контрольный вопрос оценивается по простым правилам, не LLM.</p>
+              <textarea id="academy-practice-answer" rows="2" maxlength="2000" placeholder="Вставь проверяемый ответ"></textarea>
+              <button type="button" class="quiet-button" id="academy-practice-evaluate">Проверить ответ локально</button>
+              <p class="memory-empty" id="academy-practice-result" role="status"></p>
+            </details>
           </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>
             <div id="character-progress" class="memory-results"></div>
             <div id="character-timeline" class="memory-results"></div>
             <div id="persona-arc" class="memory-results"></div>
+            <p id="persona-link-summary" class="memory-empty" aria-live="polite"></p>
           </details>
           <div id="audit-status" class="memory-empty"></div>
           <div id="biography-notes" class="memory-results"></div>

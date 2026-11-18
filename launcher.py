@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from contextlib import closing
 import json
+import base64
+import binascii
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -187,13 +189,13 @@ class SoulHandler(BaseHTTPRequestHandler):
             return False
         return self.headers.get("Content-Type", "").split(";")[0].strip().lower() == "application/json"
 
-    def _read_body(self) -> dict:
+    def _read_body(self, max_bytes: int = 65536) -> dict:
         try:
             length = int(self.headers.get("Content-Length", ""))
         except ValueError:
             raise ValueError("Missing Content-Length.") from None
-        if not 1 <= length <= 65536:
-            raise ValueError("JSON request size must be between 1 and 65536 bytes.")
+        if not 1 <= length <= max_bytes:
+            raise ValueError("JSON request exceeds the allowed size.")
         try:
             obj = json.loads(self.rfile.read(length).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -225,6 +227,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.reliability.local_selftest())
         if path == "/api/system/migrations":
             return self.send_json(self.server.cognition.migrations.audit())
+        if path == "/api/system/wal":
+            try:
+                return self.send_json(self.server.cognition.reliability.wal_health())
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/system/recovery-check":
             try:
                 name = args.get("name", [""])[0]
@@ -273,12 +280,29 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self._handle_error(error)
         if path == "/api/soul/documents":
             return self.send_json({"items":self.server.cognition.evidence.documents.list()})
+        if path == "/api/soul/contracts/insights":
+            try:
+                doc_id=int(args.get("id",["0"])[0])
+                return self.send_json(self.server.cognition.contracts.inspect(doc_id))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/academy/rollback":
+            return self.send_json(self.server.cognition.rollback.status())
+        if path == "/api/soul/atlas/cache":
+            return self.send_json(self.server.cognition.materializer.verify())
         if path == "/api/soul/evidence/audits":
             return self.send_json(self.server.cognition.evidence.status())
         if path == "/api/soul/academy/curriculum":
             return self.send_json(self.server.cognition.curriculum.status())
         if path == "/api/soul/persona/arc":
             return self.send_json(self.server.cognition.persona_arc.history())
+        if path == "/api/soul/persona/links":
+            return self.send_json(self.server.cognition.persona_arc.links())
+        if path == "/api/soul/academy/practice":
+            return self.send_json({
+                **self.server.cognition.practice.questions(),
+                **self.server.cognition.practice.status()
+            })
         if path == "/api/soul/academy":
             return self.send_json(self.server.cognition.academy.status())
         if path == "/api/soul/academy/metrics":
@@ -400,6 +424,42 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cloud.enable_document_context(
                     obj.get("allowed")))
             except (ValueError,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/academy/practice/evaluate":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.practice.evaluate(
+                    obj.get("skill"),obj.get("answer"),
+                    confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/academy/rollback/resume":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.rollback.resume(
+                    obj.get("strategy"),confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/documents/import-binary":
+            try:
+                obj=self._read_body(max_bytes=1500000)
+                if obj.get("confirmed") is not True:
+                    raise ValueError("Требуется подтверждение импорта.")
+                encoded=obj.get("base64")
+                if not isinstance(encoded,str) or len(encoded)>1400000:
+                    raise ValueError("Файл превышает допустимый размер.")
+                from document_parser import extract_document
+                try:
+                    binary=base64.b64decode(encoded,validate=True)
+                except (ValueError,binascii.Error):
+                    raise ValueError("Повреждённый Base64.") from None
+                parsed=extract_document(obj.get("name"),binary)
+                record=self.server.cognition.evidence.documents.import_text(
+                    obj.get("name"),parsed["text"],confirmed=True)
+                record["extraction_method"]=parsed["method"]
+                record["complete_extraction_guaranteed"]=parsed["complete_extraction_guaranteed"]
+                return self.send_json(record)
+            except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/documents/import":
             try:

@@ -16,6 +16,7 @@ sys.path.insert(0,str(ROOT))
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from brain_atlas import BrainAtlas
+from atlas_materializer import AtlasMaterializer
 
 COUNT=1_000_000
 
@@ -48,11 +49,16 @@ with tempfile.TemporaryDirectory(prefix="tsukiyora-million-") as folder:
         ).fetchone()[0]
     assert count==COUNT, f"Only {count} rows inserted"
     inserted=time.monotonic()-begin
+    materializer=AtlasMaterializer(dbfile)
+    materializer.initialize()
+    cache=materializer.verify()
+    assert cache["verified"] and cache["cached_count"]==COUNT
     atlas=BrainAtlas(dbfile)
     start=time.monotonic()
     view=atlas.overview()
     overview_s=time.monotonic()-start
     assert view["total"]==COUNT
+    assert view["materialized"]
     assert sum(x["count"] for x in view["sectors"])==COUNT
     assert len(view["sectors"])==8
     for sector in view["sectors"]:
@@ -84,6 +90,8 @@ with tempfile.TemporaryDirectory(prefix="tsukiyora-million-") as folder:
         "insert_seconds":round(inserted,2),
         "overview_query_seconds":round(overview_s,3),
         "sectors":len(view["sectors"]),
+        "materialized_regions":materializer.status()["regions"],
+        "materialized_counts_verified":cache["verified"],
         "max_nodes_in_detail":160,
         "cloud_calls":0,
         "user_browser_fps_verified":False,

@@ -33,14 +33,41 @@ class BrainAtlas:
 
     def overview(self) -> dict:
         with closing(self.connect()) as db:
-            data = db.execute(
-                "SELECT kind,(id % 2) AS parity,COUNT(*) n,MAX(id) last_id "
-                "FROM memory_items WHERE status='active' "
-                "GROUP BY kind,(id % 2)"
-            ).fetchall()
-            total = db.execute(
-                "SELECT COUNT(*) FROM memory_items WHERE status='active'"
-            ).fetchone()[0]
+            cache_ready = db.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='table' AND name='atlas_cache_meta'"
+            ).fetchone() is not None
+            if cache_ready:
+                cache_ready = db.execute(
+                    "SELECT initialized FROM atlas_cache_meta WHERE id=1"
+                ).fetchone()[0] == 1
+            if cache_ready:
+                cached = db.execute(
+                    "SELECT sector,SUM(n) AS n FROM atlas_region_totals "
+                    "GROUP BY sector"
+                ).fetchall()
+                data=[]
+                for item in cached:
+                    sector=item["sector"]
+                    kind=KINDS[sector//2]
+                    parity=sector%2
+                    last_id=db.execute(
+                        "SELECT MAX(id) FROM memory_items "
+                        "WHERE status='active' AND kind=? AND (id%2)=?",
+                        (kind,parity)
+                    ).fetchone()[0]
+                    data.append({"kind":kind,"parity":parity,
+                                 "n":item["n"],"last_id":last_id})
+                total=sum(x["n"] for x in data)
+            else:
+                data = db.execute(
+                    "SELECT kind,(id % 2) AS parity,COUNT(*) n,MAX(id) last_id "
+                    "FROM memory_items WHERE status='active' "
+                    "GROUP BY kind,(id % 2)"
+                ).fetchall()
+                total = db.execute(
+                    "SELECT COUNT(*) FROM memory_items WHERE status='active'"
+                ).fetchone()[0]
             edgeRows=db.execute(
                 "SELECT a.kind AS a_kind,(a.id%2) AS a_parity,"
                 "b.kind AS b_kind,(b.id%2) AS b_parity,COUNT(*) AS n "
@@ -60,7 +87,8 @@ class BrainAtlas:
                        "count":x["n"]} for x in edgeRows]
         return {"level":"overview","total":total,"sectors":sectors,
                 "connections":edge_count,"sector_links":sector_links,
-                "page_size":BUCKET_SIZE,"region_span":REGION_SPAN,"hierarchical":True,
+                "page_size":BUCKET_SIZE,"region_span":REGION_SPAN,
+                "materialized":bool(cache_ready),"hierarchical":True,
                 "maximum_records_in_response":MAX_BUCKETS}
 
     def regions(self, sector: int, cursor: int | None = None) -> dict:
@@ -69,20 +97,57 @@ class BrainAtlas:
         if cursor is not None and (type(cursor) is not int or cursor < 0):
             raise ValueError("Invalid region cursor.")
         with closing(self.connect()) as db:
-            rows = db.execute(
-                "SELECT CAST((id-1)/? AS INTEGER) region, COUNT(*) n,"
-                "MIN(id) first_id,MAX(id) last_id FROM memory_items "
-                "WHERE status='active' AND kind=? AND (id%2)=? "
-                "AND (? IS NULL OR id<?) "
-                "GROUP BY region ORDER BY region DESC LIMIT ?",
-                (REGION_SPAN, kind, parity, cursor, cursor*REGION_SPAN+1
-                 if cursor is not None else None, MAX_REGIONS+1)
-            ).fetchall()
-            total=db.execute(
-                "SELECT COUNT(*) FROM memory_items "
-                "WHERE status='active' AND kind=? AND (id%2)=?",
-                (kind,parity)
-            ).fetchone()[0]
+            cache_ready=db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='atlas_cache_meta'"
+            ).fetchone() is not None
+            if cache_ready:
+                cache_ready = db.execute(
+                    "SELECT initialized FROM atlas_cache_meta WHERE id=1"
+                ).fetchone()[0] == 1
+            if cache_ready:
+                cached=db.execute(
+                    "SELECT region,n FROM atlas_region_totals "
+                    "WHERE sector=? AND (? IS NULL OR region<?) "
+                    "ORDER BY region DESC LIMIT ?",
+                    (sector,cursor,cursor,MAX_REGIONS+1)
+                ).fetchall()
+                rows=[]
+                for x in cached:
+                    low=x["region"]*REGION_SPAN+1
+                    high=(x["region"]+1)*REGION_SPAN
+                    lower=db.execute(
+                        "SELECT MIN(id) FROM memory_items "
+                        "WHERE status='active' AND kind=? AND (id%2)=? "
+                        "AND id BETWEEN ? AND ?",
+                        (kind,parity,low,high)
+                    ).fetchone()[0]
+                    upper=db.execute(
+                        "SELECT MAX(id) FROM memory_items "
+                        "WHERE status='active' AND kind=? AND (id%2)=? "
+                        "AND id BETWEEN ? AND ?",
+                        (kind,parity,low,high)
+                    ).fetchone()[0]
+                    rows.append({"region":x["region"],"n":x["n"],
+                                 "first_id":lower,"last_id":upper})
+                total=db.execute(
+                    "SELECT COALESCE(SUM(n),0) FROM atlas_region_totals WHERE sector=?",
+                    (sector,)
+                ).fetchone()[0]
+            else:
+                rows = db.execute(
+                    "SELECT CAST((id-1)/? AS INTEGER) region, COUNT(*) n,"
+                    "MIN(id) first_id,MAX(id) last_id FROM memory_items "
+                    "WHERE status='active' AND kind=? AND (id%2)=? "
+                    "AND (? IS NULL OR id<?) "
+                    "GROUP BY region ORDER BY region DESC LIMIT ?",
+                    (REGION_SPAN, kind, parity, cursor, cursor*REGION_SPAN+1
+                     if cursor is not None else None, MAX_REGIONS+1)
+                ).fetchall()
+                total=db.execute(
+                    "SELECT COUNT(*) FROM memory_items "
+                    "WHERE status='active' AND kind=? AND (id%2)=?",
+                    (kind,parity)
+                ).fetchone()[0]
         more=len(rows)>MAX_REGIONS
         visible=rows[:MAX_REGIONS]
         return {"level":"regions","sector":sector,"kind":kind,"total":total,
@@ -91,7 +156,7 @@ class BrainAtlas:
                            for x in visible],
                 "next_cursor":visible[-1]["region"] if more else None,
                 "has_more":more,"region_span":REGION_SPAN,
-                "bounded":True}
+                "materialized":bool(cache_ready),"bounded":True}
 
     def clusters(self, sector: int, cursor: int | None = None, region: int | None = None) -> dict:
         kind, parity = decode_sector(sector)

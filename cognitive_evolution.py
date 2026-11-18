@@ -163,11 +163,11 @@ class CognitiveEvolution:
         with closing(self.store.connect()) as db, db:
             parent = db.execute(
                 "SELECT c.id,c.recipe FROM evol4_candidates c "
-                "JOIN evol4_runs r ON r.candidate_id=c.id AND r.status='completed'"
-                " AND r.evaluation_domain=c.domain "
-                "WHERE c.domain=? GROUP BY c.id ORDER BY "
-                "SUM((SELECT SUM(s.candidate_correct-s.baseline_correct) "
-                "FROM evol4_scores s WHERE s.run_id=r.id)) DESC,c.id DESC LIMIT 1",
+                "JOIN evol4_runs r ON r.candidate_id=c.id AND r.status='completed' "
+                "JOIN evol4_scores s ON s.run_id=r.id "
+                "WHERE c.domain=? AND r.evaluation_domain=c.domain "
+                "GROUP BY c.id "
+                "ORDER BY SUM(s.candidate_correct-s.baseline_correct) DESC,c.id DESC LIMIT 1",
                 (domain,)
             ).fetchone()
             generation = db.execute(

@@ -241,6 +241,8 @@ class CloudSession:
             "model": model, "messages": messages, "stream": True,
             "max_tokens": 1200,
         }, ensure_ascii=False).encode("utf-8")
+        if cancellation.is_set():
+            return
         req = Request(BASE_URL + "/chat/completions", data=payload, method="POST",
                       headers={"Authorization": "Bearer " + key,
                                "Accept": "text/event-stream", "Content-Type": "application/json",

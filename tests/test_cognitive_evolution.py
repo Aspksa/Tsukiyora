@@ -116,7 +116,9 @@ class Evolution4Tests(unittest.TestCase):
         self.assertTrue(measured["eligible"])
         self.assertFalse(report["auto_activation"])
         self.assertIsNone(self.engine.guidance("python код")[0])
-        self.assertIn("checked",self.engine.peer_review(candidate)["layers"]["objective_testing"].replace("normalized_exact_match_only","checked").lower())
+        self.assertEqual(
+            self.engine.peer_review(candidate)["layers"]["objective_testing"],
+            "normalized_exact_match_only")
         with self.assertRaises(ValueError):
             self.engine.decide(candidate,approve=True)
         self.assertEqual(self.engine.decide(candidate,approve=True,confirmed=True)["state"],"activated")
@@ -125,7 +127,8 @@ class Evolution4Tests(unittest.TestCase):
         self.assertEqual(self.engine.decide(candidate,approve=False,
                                             confirmed=True)["state"],"rolled_back")
         self.assertIsNone(self.engine.guidance("code python")[0])
-        self.assertEqual(self.store.connect().execute("PRAGMA integrity_check").fetchone()[0],"ok")
+        with closing(self.store.connect()) as db:
+            self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
 
     def test_draft_generation_from_negative_ratings(self):
         conversation=self.store.create_conversation()

@@ -1,0 +1,50 @@
+:root{color-scheme:dark;font-family:Inter,"Segoe UI",system-ui,sans-serif;background:#07080b;color:#eee5d4;font-synthesis:none}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 27% 41%,#171411 0%,#09090d 49%,#07080b 100%);font-size:14px}
+button,textarea{font:inherit}
+button:focus-visible,textarea:focus-visible{outline:2px solid #e7bd80;outline-offset:3px}
+.app{max-width:1600px;min-height:100vh;margin:auto;padding:0 46px}
+.topbar{height:86px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff13}
+.identity{display:flex;gap:12px;align-items:center;letter-spacing:.32em;font-size:12px;font-weight:700;color:#dfc08c}
+.identity-mark{font-size:23px;color:#e5bb79}
+.top-actions{display:flex;align-items:center;gap:23px}
+.status{font-size:11px;color:#ada89e;letter-spacing:.07em}
+.icon-button{display:grid;place-items:center;width:36px;height:36px;border:1px solid #ffffff18;border-radius:50%;color:#cab99d;background:transparent;cursor:pointer;transition:border-color .2s,background .2s}
+.icon-button:hover{border-color:#d7a86b80;background:#ffffff0a}
+.icon-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round}
+.stage{min-height:calc(100vh - 86px);display:grid;grid-template-columns:minmax(0,1.08fr) minmax(380px,.92fr);gap:34px}
+.soul-panel{min-height:620px;position:relative;display:flex;justify-content:center;align-items:center;overflow:hidden}
+#soul-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.soul-title{pointer-events:none;text-align:center;z-index:1;transform:translateY(6px);text-shadow:0 0 35px #000}
+.soul-kicker{font-size:10px;letter-spacing:.39em;color:#c9a16c}
+.soul-title h1{font-size:clamp(36px,4vw,65px);letter-spacing:.075em;margin:12px 0 9px;font-weight:400}
+.soul-title p{font-size:12px;color:#c2b1a0;letter-spacing:.09em;margin:0}
+.soul-footnote{position:absolute;bottom:46px;left:0;display:flex;align-items:center;gap:9px;color:#968e81;font-size:11px;letter-spacing:.05em}
+.signal{width:6px;height:6px;border-radius:50%;background:#be9867;box-shadow:0 0 15px #c99c6d}
+.chat-panel{min-height:620px;display:flex;flex-direction:column;padding:50px 0 39px 5px}
+.chat-heading{display:flex;justify-content:space-between;align-items:center;color:#d9b786;letter-spacing:.25em;font-size:11px;border-bottom:1px solid #ffffff13;padding-bottom:23px}
+.muted{color:#8b847a;font-size:10px;letter-spacing:.07em}
+.conversation{flex:1;display:flex;align-items:center;padding:18px 20px}
+.greeting{max-width:410px}
+.greeting-mark{display:block;color:#d6aa72;font-size:28px;margin-bottom:21px}
+.greeting p{font-size:clamp(18px,2vw,24px);line-height:1.65;font-weight:350;color:#e3d7c6;margin:0}
+.greeting-detail{font-size:12px;line-height:1.8;color:#a9a092;margin-top:24px}
+.composer{border:1px solid #54422f;border-radius:13px;background:#161411;display:flex;align-items:center;min-height:70px;padding:11px}
+.composer textarea{background:transparent;color:#a7a19a;border:none;resize:none;outline:none;flex:1;padding:11px;min-width:0}
+.composer textarea::placeholder{color:#948b7f}
+.composer .send{width:37px;height:37px;border-radius:10px;border:0;background:#413425;color:#b8a588;opacity:.65}
+.composer-note{font-size:11px;color:#837d75;line-height:1.6;margin:13px 2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+dialog{background:#121214;color:#ede0cb;border:1px solid #654d32;border-radius:19px;padding:25px;max-width:min(440px,calc(100vw - 30px));width:100%;box-shadow:0 35px 130px #000c}
+dialog::backdrop{background:#000b}
+.dialog-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.dialog-header h2{font-size:20px;font-weight:500;margin:0}
+.dialog-header .icon-button{font-size:25px}
+.settings-list{margin:0}
+.settings-list>div{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:17px 0;border-bottom:1px solid #ffffff15}
+.settings-list dt{font-size:13px}
+.settings-list dd{font-size:12px;margin:0;color:#c7a77b;text-align:right}
+.dialog-note{font-size:12px;color:#968f83;line-height:1.7;margin:22px 0 0}
+@media(max-width:900px){.app{padding:0 22px}.stage{grid-template-columns:1fr;gap:0}.soul-panel{min-height:315px}.soul-title h1{font-size:43px}.soul-footnote{bottom:18px}.chat-panel{min-height:470px;padding:10px 0 24px}.conversation{min-height:225px;padding:25px 7px}.chat-heading{padding-bottom:15px}.greeting p{font-size:19px}}
+@media(max-width:480px){.app{padding:0 16px}.topbar{height:64px}.stage{min-height:calc(100vh - 64px)}.soul-panel{min-height:280px}.top-actions{gap:10px}.status{max-width:125px;text-align:right}.chat-panel{min-height:calc(100vh - 344px)}.chat-heading .muted{font-size:9px}.greeting p{font-size:18px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}

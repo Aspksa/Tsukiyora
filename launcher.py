@@ -546,6 +546,14 @@ class SoulHandler(BaseHTTPRequestHandler):
                     result=engine.decide(
                         obj.get("proposal_id"),approve=obj.get("approve"),
                         confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/improvement/recover":
+                    if not self.server.chat_lock.acquire(blocking=False):
+                        raise CloudError("Нельзя закрыть тест во время активного чата или проверки.",409)
+                    try:
+                        result=engine.recover_interrupted(
+                            obj.get("run_id"),confirmed=obj.get("confirmed",False))
+                    finally:
+                        self.server.chat_lock.release()
                 elif path=="/api/soul/improvement/run":
                     if not self.server.chat_lock.acquire(blocking=False):
                         raise CloudError("Дождись окончания чата или другого теста.",409)

@@ -30,6 +30,9 @@ from rag_fusion import RagFusion
 from academy_experiments import AcademyExperiments
 from academy_metrics import AcademyMetrics
 from migration_guard import MigrationGuard
+from evidence_review import EvidenceReview
+from academy_curriculum import AcademyCurriculum
+from persona_arc import PersonaArc
 
 
 class CognitiveCore:
@@ -53,6 +56,9 @@ class CognitiveCore:
         self.experiments = AcademyExperiments(path)
         self.metrics = AcademyMetrics(path)
         self.migrations = MigrationGuard(path)
+        self.evidence = EvidenceReview(path)
+        self.curriculum = AcademyCurriculum(path)
+        self.persona_arc = PersonaArc(path)
         self.chat_priority = None
 
     def connect(self):
@@ -91,6 +97,9 @@ class CognitiveCore:
         self.continuity.initialize()
         self.metrics.initialize()
         self.experiments.initialize()
+        self.evidence.initialize()
+        self.curriculum.initialize()
+        self.persona_arc.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -111,7 +120,9 @@ class CognitiveCore:
         self.academy.run_cycle()
         self.metrics.evaluate()
         experiment = self.experiments.record(message_id, helpful)
+        curriculum = self.curriculum.advance()
         return {"message_id": message_id, "helpful": helpful, "category": category,
+                "curriculum_review_required": len(curriculum.get("regressions",[])),
                 "experiment":experiment,
                 "recorded": True}
 
@@ -223,6 +234,8 @@ class CognitiveCore:
                 "academy": self.academy.status(limit=5),
                 "academy_progress": self.metrics.status(),
                 "academy_experiments": self.experiments.report(),
+                "academy_curriculum": self.curriculum.status(),
+                "persona_arc": self.persona_arc.history(limit=3),
                 "character": {
                     "continuity": "source_grounded",
                     "real_emotions": False,
@@ -256,6 +269,8 @@ class CognitiveCore:
             lessons = self.academy.run_cycle()
             progress = self.metrics.evaluate()
             continuity = self.continuity.consolidate()
+            arc = self.persona_arc.consolidate()
+            curriculum = self.curriculum.advance()
             quality = self.quality.review(limit=180)
             stats = self.status()
             digest = self.experience.snapshot(
@@ -274,6 +289,8 @@ class CognitiveCore:
                 "academy_updated": lessons.get("updated",False),
                 "academy_evaluations_updated": progress.get("updated",False),
                 "stable_habits": continuity["stable_habits"],
+                "persona_arc_updated": arc["changed"],
+                "learning_regressions": len(curriculum.get("regressions", [])),
                 "learning_goals": digest["practice_goals"],
             }, ensure_ascii=False)
             with closing(self.connect()) as db:

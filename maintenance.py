@@ -27,6 +27,9 @@ JOBS = {
     "persona_arc": 1800,
     "document_index": 1800,
     "source_audit": 1800,
+    "atlas_verify": 1500,
+    "academy_rollback": 600,
+    "wal_check": 7200,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -175,6 +178,19 @@ class Maintenance:
                 result = {"reviewed":len(status["items"]),
                           "requiring_review":sum(
                               x["label"]=="review_required" for x in status["items"])}
+            elif kind == "atlas_verify":
+                result = core.materializer.verify()
+                if not result["verified"]:
+                    result = core.materializer.rebuild()
+            elif kind == "academy_rollback":
+                result = core.rollback.evaluate()
+            elif kind == "wal_check":
+                report = core.reliability.wal_health()
+                result = {"wal":report["journal_mode"],
+                          "sqlite_ok":report["sqlite_ok"],
+                          "foreign_keys":report["foreign_key_errors"]}
+                if not report["sqlite_ok"] or report["foreign_key_errors"]:
+                    raise sqlite3.DatabaseError("SQLite WAL health warning")
             elif kind == "migration_audit":
                 report = core.migrations.audit()
                 result = {"version":report["version"],

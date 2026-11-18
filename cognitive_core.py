@@ -10,12 +10,17 @@ import json
 from pathlib import Path
 import sqlite3
 import threading
+import time
 
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from vector_memory import VectorMemory
 from memory_quality import MemoryQuality
 from experience_engine import ExperienceEngine
+from layered_memory import LayeredMemory
+from reliability import Reliability
+from maintenance import Maintenance
+from reasoning import ReasoningAudit
 
 
 class CognitiveCore:
@@ -26,6 +31,11 @@ class CognitiveCore:
         self.vectors = VectorMemory(path)
         self.quality = MemoryQuality(path)
         self.experience = ExperienceEngine(path)
+        self.layers = LayeredMemory(path)
+        self.reliability = Reliability(path)
+        self.scheduler = Maintenance(path)
+        self.audit = ReasoningAudit(path)
+        self.chat_priority = None
 
     def connect(self):
         return self.store.connect()
@@ -54,6 +64,10 @@ class CognitiveCore:
                 );
             """)
         self.experience.initialize()
+        self.layers.initialize()
+        self.reliability.initialize()
+        self.scheduler.initialize()
+        self.audit.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -130,8 +144,8 @@ class CognitiveCore:
                 "tone_model": self.experience.state(),
                 "learned_guidance": self.guidance()}
 
-    def graph(self, node_limit: int = 180) -> dict:
-        if type(node_limit) is not int or not 1 <= node_limit <= 300:
+    def graph(self, node_limit: int = 2400) -> dict:
+        if type(node_limit) is not int or not 1 <= node_limit <= 4000:
             raise ValueError("Некорректный размер графа.")
         with closing(self.connect()) as db:
             nodes = [dict(x) for x in db.execute(
@@ -142,14 +156,21 @@ class CognitiveCore:
             ids = {n["id"] for n in nodes}
             links = [dict(x) for x in db.execute(
                 "SELECT source_id,target_id,relation FROM memory_links "
-                "ORDER BY created_at DESC LIMIT 1500"
+                "ORDER BY created_at DESC LIMIT 3500"
             )]
+            total = db.execute(
+                "SELECT count(*) FROM memory_items WHERE status='active'"
+            ).fetchone()[0]
             pending = db.execute(
                 "SELECT count(*) FROM memory_suggestions WHERE state='pending'"
             ).fetchone()[0]
+        kinds = {}
+        for node in nodes:
+            kinds[node["kind"]] = kinds.get(node["kind"], 0) + 1
         return {"nodes": nodes,
-                "edges": [x for x in links if x["source_id"] in ids and x["target_id"] in ids][:400],
-                "pending": pending}
+                "edges": [x for x in links if x["source_id"] in ids and x["target_id"] in ids][:2400],
+                "pending": pending, "total": total, "clusters": kinds,
+                "truncated": total > len(nodes)}
 
     def status(self) -> dict:
         with closing(self.connect()) as db:
@@ -171,7 +192,8 @@ class CognitiveCore:
                 "feedback": {"total": reviews["n"], "helpful": reviews["likes"]},
                 "possible_conflicts": conflicts, "pending": pending,
                 "guidance": self.guidance(), "vectors": self.vectors.stats(),
-                "experience": self.experience.state()}
+                "experience": self.experience.state(),
+                "maintenance": self.scheduler.pending()}
 
     def cycle(self) -> dict:
         """Local maintenance only: bounded and repeatable, no cloud/key access."""
@@ -183,6 +205,7 @@ class CognitiveCore:
             if integrity != "ok":
                 raise sqlite3.DatabaseError("SQLite integrity check did not pass.")
             repairs = self.vectors.repair(limit=2000)
+            layers = self.layers.repair(limit=2000)
             # Only a small local batch per cycle, never expensive cloud requests.
             with closing(self.connect()) as db:
                 recent = [row[0] for row in db.execute(
@@ -206,6 +229,7 @@ class CognitiveCore:
                 "approved": stats["vectors"]["active_memories"],
                 "indexed": stats["vectors"]["indexed_memories"],
                 "cached_links_repaired": repairs["cache_restored"],
+                "memory_layers_repaired": layers["updated"],
                 "learning_goals": digest["practice_goals"],
             }, ensure_ascii=False)
             with closing(self.connect()) as db:
@@ -245,11 +269,22 @@ class CognitiveWorker:
             return
         while not self._stop.is_set():
             try:
-                self.core.cycle()
+                self.core.scheduler.tick(self.core, chat_lock=self.core.chat_priority,
+                                         max_millis=850)
             except (OSError, sqlite3.Error, ValueError):
-                # A failed iteration never kills the application.
+                # An isolated maintenance failure must not stop the server.
                 pass
-            if self._stop.wait(self.interval):
+            # The traditional consolidation diary is less frequent than jobs.
+            # It never calls remote models and does not run during active chat.
+            if (not self.core.chat_priority or not self.core.chat_priority.locked()):
+                if not hasattr(self, "_last_full_cycle") or (
+                    time.monotonic() - self._last_full_cycle >= self.interval):
+                    self._last_full_cycle = time.monotonic()
+                    try:
+                        self.core.cycle()
+                    except (OSError, sqlite3.Error, ValueError):
+                        pass
+            if self._stop.wait(15):
                 return
 
     def stop(self):

@@ -146,3 +146,16 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
 .vector-opt-in{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.6;color:#bcaa90;padding:9px 3px}
 .vector-opt-in input{accent-color:#ba996c;width:16px;height:16px;flex:0 0 16px;margin-top:2px;cursor:pointer}
 .vector-opt-in input:disabled{cursor:not-allowed;opacity:.5}
+
+/* v0.7: diagnostics and layered memory share the current settings dialog. */
+#soul-canvas:focus-visible{outline:1px solid #c9a170;outline-offset:-4px;border-radius:12px}
+#soul-zoom-note{font-size:10px;opacity:.7}
+#system-diagnostics{margin-top:15px}
+#system-diagnostics .cloud-form{gap:8px}
+#diagnostics-results{max-height:200px;overflow-y:auto}
+#diagnostics-results .memory-empty{margin:3px 0;line-height:1.55}
+#layer-selector{width:100%;background:#181715;color:#e8d4b6;border:1px solid #59452e;border-radius:8px;font-size:12px;padding:9px 10px}
+#layer-results{max-height:230px}
+#audit-status{margin-top:9px;line-height:1.55}
+@media(max-width:580px){#soul-zoom-note{display:none}}
+@media(prefers-reduced-motion:reduce){#soul-canvas{scroll-behavior:auto}}

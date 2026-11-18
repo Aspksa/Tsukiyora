@@ -105,8 +105,10 @@ class ResourceGuard:
                     raise LimitReached("Лимит запросов Cloud.ru достигнут. Измени его в настройках или подожди.")
                 db.execute("INSERT INTO cloud_attempts(kind,minute_bucket,day_bucket) "
                            "VALUES(?,?,?)",(kind,minute,day))
-                db.execute("DELETE FROM cloud_attempts WHERE day_bucket<?",
-                           ((now.date().toordinal()-8),)) if False else None
+                # Retain only 8 days of coarse request counts.
+                from datetime import timedelta
+                old=(now-timedelta(days=8)).strftime("%Y-%m-%d")
+                db.execute("DELETE FROM cloud_attempts WHERE day_bucket<?",(old,))
                 db.commit()
             except Exception:
                 if db.in_transaction: db.rollback()

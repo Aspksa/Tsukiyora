@@ -43,18 +43,14 @@ class PrecisionMemory:
                             INSERT INTO memory_fts(rowid,content)
                             VALUES(new.id,new.content);
                         END;
-                        CREATE TRIGGER IF NOT EXISTS memory_fts_au_del
+                        DROP TRIGGER IF EXISTS memory_fts_au_del;
+                        DROP TRIGGER IF EXISTS memory_fts_au_ins;
+                        CREATE TRIGGER IF NOT EXISTS memory_fts_au
                         AFTER UPDATE OF content,status ON memory_items
-                        WHEN old.status='active'
                         BEGIN
                             DELETE FROM memory_fts WHERE rowid=old.id;
-                        END;
-                        CREATE TRIGGER IF NOT EXISTS memory_fts_au_ins
-                        AFTER UPDATE OF content,status ON memory_items
-                        WHEN new.status='active'
-                        BEGIN
                             INSERT INTO memory_fts(rowid,content)
-                            VALUES(new.id,new.content);
+                            SELECT new.id,new.content WHERE new.status='active';
                         END;
                         CREATE TRIGGER IF NOT EXISTS memory_fts_ad
                         AFTER DELETE ON memory_items WHEN old.status='active'

@@ -571,8 +571,10 @@ function attachFeedback(node, messageId) {
     button.setAttribute("aria-label", label);
     button.addEventListener("click", async () => {
       try {
+        const note = helpful ? "" :
+          (window.prompt("Что улучшить? Например: точность, краткость, понятность, источники. Можно оставить пустым.", "") || "").slice(0, 400);
         await requestJSON("/api/soul/feedback", "POST", {
-          message_id: messageId, helpful,
+          message_id: messageId, helpful, note,
         });
         controls.querySelectorAll("button").forEach(item => item.disabled = true);
         $("chat-notice").textContent = "Оценку сохранила. Учту её в будущих ответах.";
@@ -803,14 +805,26 @@ $("message").addEventListener("keydown", (event) => {
 });
 
 $("cloud-diagnose").addEventListener("click", async () => {
+  if (!window.confirm("Сделать реальные запросы Cloud.ru для моделей, чата, потока и эмбеддингов (если модель выбрана)? Это может расходовать токены.")) return;
   const button = $("cloud-diagnose");
   button.disabled = true;
-  cloudMessage("Проверяю настоящий ответ Cloud.ru…");
+  cloudMessage("Проверяю настоящие ответы Cloud.ru…");
   try {
-    const result = await requestJSON("/api/cloud/diagnose", "POST", {});
-    cloudMessage("Связь работает: " + result.model + " · " + result.answer);
+    const result = await requestJSON("/api/cloud/checkup", "POST", {
+      include_stream: true, include_embeddings: true,
+    });
+    const labels = {models: "Каталог", chat: "Ответ модели", stream: "Поток",
+                    embeddings: "Эмбеддинги"};
+    const lines = Object.entries(result.checks).map(([name, check]) => {
+      const state = check.state === "passed" ? "OK" :
+        check.state === "skipped" ? "пропущено" : "ошибка";
+      const extra = check.message || check.sample || (check.dimension ? "размерность " + check.dimension : "");
+      return (labels[name] || name) + ": " + state + (extra ? " · " + extra : "");
+    });
+    cloudMessage((result.live ? "Проверка пройдена." : "Есть проблемы с подключением.") +
+                 "\n" + lines.join("\n"));
   } catch (error) {
-    cloudMessage("Проверка не пройдена: " + error.message);
+    cloudMessage("Живая проверка не выполнена: " + error.message);
   } finally {
     button.disabled = !cloudReady;
   }
@@ -954,6 +968,48 @@ $("embedding-index").addEventListener("click", async () => {
   }
 });
 
+async function refreshQuality() {
+  const target = $("quality-results");
+  target.replaceChildren();
+  const loading = document.createElement("p");
+  loading.className = "memory-empty";
+  loading.textContent = "Проверяю утверждения и источники…";
+  target.append(loading);
+  try {
+    const result = await requestJSON("/api/soul/quality");
+    target.replaceChildren();
+    for (const [field, label] of [["duplicates", "Похожая запись"],
+                                   ["conflicts", "Возможное противоречие"]]) {
+      for (const issue of result[field]) {
+        const block = document.createElement("div");
+        block.className = "memory-record";
+        const name = document.createElement("small");
+        name.textContent = label + " · сходство " + Math.round(issue.score * 100) + "%";
+        const first = document.createElement("p");
+        const second = document.createElement("p");
+        first.textContent = "#" + issue.left.id + " (" +
+          (issue.left.source_ref || issue.left.source_type) + "): " + issue.left.content;
+        second.textContent = "#" + issue.right.id + " (" +
+          (issue.right.source_ref || issue.right.source_type) + "): " + issue.right.content;
+        block.append(name, first, second);
+        target.append(block);
+      }
+    }
+    if (!result.duplicates.length && !result.conflicts.length) {
+      const empty = document.createElement("p");
+      empty.className = "memory-empty";
+      empty.textContent = "Подозрительных совпадений среди " +
+        result.scanned + " последних записей не найдено.";
+      target.append(empty);
+    }
+  } catch (error) {
+    target.textContent = "Ошибка анализа: " + error.message;
+  }
+}
+$("memory-quality").addEventListener("toggle", () => {
+  if ($("memory-quality").open) refreshQuality();
+});
+
 async function refreshCognition() {
   try {
     const [status, biography, cloud] = await Promise.all([
@@ -975,6 +1031,26 @@ async function refreshCognition() {
       + ", оценок ответов: " + status.feedback.total + ".";
     $("vector-count").textContent = status.vectors.indexed_memories
       ? "(" + status.vectors.indexed_memories + ")" : "опционально";
+    const state = status.experience;
+    $("tone-status").textContent = "Тон общения (программная модель, не чувства): " +
+      "теплота " + Math.round(state.warmth * 100) + "% · " +
+      "внимательность " + Math.round(state.focus * 100) + "% · " +
+      "любопытство " + Math.round(state.curiosity * 100) + "%. " +
+      "Оценок: " + state.feedback_samples + ".";
+    const goals = $("learning-goals");
+    goals.replaceChildren();
+    const names = {accuracy: "Точность", brevity: "Краткость",
+                   clarity: "Ясность", sources: "Источники"};
+    for (const goal of state.goals) {
+      if (!goal.attempts) continue;
+      const item = document.createElement("p");
+      item.className = "memory-empty";
+      item.textContent = (names[goal.category] || goal.category) +
+        ": " + (goal.status === "practice" ? "нужно улучшить" :
+        goal.status === "improving" ? "улучшается" : "наблюдение") +
+        " · обратная связь: " + goal.attempts;
+      goals.append(item);
+    }
     const list = $("biography-notes");
     list.replaceChildren();
     for (const entry of biography.approved_history.slice(0, 12)) {

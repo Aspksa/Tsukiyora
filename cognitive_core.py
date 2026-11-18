@@ -36,6 +36,7 @@ from persona_arc import PersonaArc
 from atlas_materializer import AtlasMaterializer
 from contract_insights import ContractInsights
 from academy_rollback import AcademyRollback
+from academy_practice import AcademyPractice
 
 
 class CognitiveCore:
@@ -65,6 +66,7 @@ class CognitiveCore:
         self.materializer = AtlasMaterializer(path)
         self.contracts = ContractInsights(path)
         self.rollback = AcademyRollback(path)
+        self.practice = AcademyPractice(path)
         self.chat_priority = None
 
     def connect(self):
@@ -107,6 +109,7 @@ class CognitiveCore:
         self.curriculum.initialize()
         self.persona_arc.initialize()
         self.rollback.initialize()
+        self.practice.initialize()
         self.materializer.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
@@ -246,6 +249,7 @@ class CognitiveCore:
                 "academy_experiments": self.experiments.report(),
                 "academy_curriculum": self.curriculum.status(),
                 "academy_rollback": self.rollback.status(),
+                "academy_practice": self.practice.status(),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

@@ -166,7 +166,10 @@
             <button type="button" id="document-import" class="quiet-button">Индексировать документ</button>
             <button type="button" id="document-refresh" class="quiet-button">Обновить список</button>
           </div>
-          <p id="document-status" class="memory-empty" role="status">Текст будет добавлен только после подтверждения.</p>
+          <label class="vector-opt-in"><input id="document-cloud-consent" type="checkbox">
+            Разрешить Cloud.ru получать найденные фрагменты документов в ответах (только текущий сеанс)
+          </label>
+          <p id="document-status" class="memory-empty" role="status">По умолчанию импорт и поиск локальные. Передача фрагментов в Cloud.ru выключена.</p>
           <div id="document-list" class="memory-results" aria-live="polite"></div>
         </details>
         <details class="memory-queue" id="memory-quality">

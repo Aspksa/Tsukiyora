@@ -36,6 +36,7 @@ class ResourceGuard:
         return db
 
     def initialize(self):
+        self.path.parent.mkdir(parents=True,exist_ok=True)
         with closing(self.connect()) as db:
             with db:
                 db.executescript("""

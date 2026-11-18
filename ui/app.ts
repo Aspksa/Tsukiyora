@@ -295,6 +295,7 @@ function setCloudReady(ready, model = "") {
     : "Подключи Cloud.ru в настройках";
   $("model-info").textContent = cloudReady ? model : "Не подключена";
   $("status").textContent = cloudReady ? "● CLOUD.RU · ОНЛАЙН" : "● ЯДРО ЗАГРУЖЕНО";
+  $("cloud-diagnose").disabled = !cloudReady;
   $("chat-notice").textContent = cloudReady
     ? "Диалоги сохраняются в локальной SQLite. Важные факты добавляй в памяти."
     : "Подключи Cloud.ru через значок настроек. История останется в локальной SQLite.";
@@ -458,46 +459,243 @@ $("chat-sessions").addEventListener("change", async () => {
   await loadChatHistory();
 });
 
+// Streaming API emits start/token/done/stopped/error events.
+let activeStreamId = "";
+let pendingClientId = "";
+let currentPrompt = "";
+
+async function parseEventStream(response, receive) {
+  if (!response.body) throw new Error("Браузер не поддерживает потоковые ответы.");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, {stream: true}).replace(/\r\n/g, "\n");
+    if (buffer.length > 200000) throw new Error("Слишком большой поток сервера.");
+    let end;
+    while ((end = buffer.indexOf("\n\n")) >= 0) {
+      const raw = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      const lines = raw.split("\n");
+      const type = lines.find(x => x.startsWith("event: "))?.slice(7);
+      const data = lines.filter(x => x.startsWith("data: ")).map(x => x.slice(6)).join("\n");
+      if (type && data) receive(type, JSON.parse(data));
+    }
+  }
+}
+
+function autoScrollChat() {
+  const log = $("conversation");
+  if (log.scrollHeight - log.scrollTop - log.clientHeight < 165) {
+    log.scrollTo({top: log.scrollHeight, behavior: "smooth"});
+  }
+}
+
 async function sendMessage() {
   if (!cloudReady || chatBusy) return;
   const content = $("message").value.trim();
   if (!content) return;
   const previousSession = activeSession;
-  $("message").value = "";
+  if (content !== currentPrompt || !pendingClientId) {
+    pendingClientId = window.crypto.randomUUID();
+    currentPrompt = content;
+  }
   chatBusy = true;
+  $("message").value = "";
   setCloudReady(true, $("model-info").textContent);
+  $("stop-message").hidden = false;
+  $("stop-message").disabled = true;
   if (!$("conversation").classList.contains("has-messages")) {
     $("conversation").replaceChildren();
     $("conversation").classList.add("has-messages");
   }
   addChatBubble("user", content);
-  const placeholder = addChatBubble("assistant", "Отвечаю…");
+  const placeholder = addChatBubble("assistant", "");
+  const body = placeholder.querySelector("p");
+  body.textContent = "Цукиёра думает…";
+  let received = false;
+  let complete = false;
+  let stopped = false;
   try {
-    // The database, not browser memory, is the source of truth for history.
-    const result = await requestJSON("/api/chat", "POST", {
-      content, conversation_id: previousSession || null,
-      client_message_id: window.crypto.randomUUID(),
+    const response = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        content, conversation_id: previousSession || null,
+        client_message_id: pendingClientId,
+      }),
     });
-    activeSession = result.conversation_id;
-    preferNewConversation = false;
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || "Ошибка потокового чата.");
+    }
+    await parseEventStream(response, (event, data) => {
+      if (event === "start") {
+        activeStreamId = data.stream_id;
+        activeSession = data.conversation_id;
+        $("stop-message").disabled = false;
+      } else if (event === "token") {
+        if (!received) body.textContent = "";
+        received = true;
+        body.textContent += data.text || "";
+        autoScrollChat();
+      } else if (event === "done") {
+        complete = true;
+        pendingClientId = "";
+        currentPrompt = "";
+        $("chat-notice").textContent = "Ответ и история сохранены локально.";
+        if (data.pending) $("chat-notice").textContent += " Новые воспоминания ждут подтверждения: " + data.pending;
+      } else if (event === "stopped") {
+        stopped = true;
+        body.textContent += "\n[Ответ остановлен. Неполный текст не сохранён.]";
+        pendingClientId = "";
+        currentPrompt = "";
+        $("chat-notice").textContent = "Остановлено. Неполный ответ не сохранён.";
+      } else if (event === "error") {
+        throw new Error(data.message || "Ошибка Cloud.ru.");
+      }
+    });
+    if (!complete && !stopped) throw new Error("Поток закончился без подтверждения.");
     await refreshChatSessions();
-    $("chat-notice").textContent = "Диалог сохранён локально.";
+    await loadPendingMemories();
+    await loadSoulJournal();
   } catch (error) {
-    placeholder.remove();
     $("message").value = content;
-    $("chat-notice").textContent = "Ошибка: " + error.message + " Проверь историю диалога.";
-    await refreshChatSessions();
+    if (!received) placeholder.remove();
+    $("chat-notice").textContent = "Ошибка: " + error.message + ". Можно повторить сообщение.";
   } finally {
+    activeStreamId = "";
     chatBusy = false;
+    $("stop-message").hidden = true;
     setCloudReady(cloudReady, $("model-info").textContent);
     $("message").focus();
   }
 }
+
+$("stop-message").addEventListener("click", async () => {
+  if (!activeStreamId) return;
+  $("stop-message").disabled = true;
+  try {
+    await requestJSON("/api/chat/stop", "POST", {stream_id: activeStreamId});
+  } catch (error) {
+    $("chat-notice").textContent = "Не удалось остановить: " + error.message;
+  }
+});
 
 $("send-message").addEventListener("click", sendMessage);
 $("message").addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendMessage();
+  }
+});
+
+$("cloud-diagnose").addEventListener("click", async () => {
+  const button = $("cloud-diagnose");
+  button.disabled = true;
+  cloudMessage("Проверяю настоящий ответ Cloud.ru…");
+  try {
+    const result = await requestJSON("/api/cloud/diagnose", "POST", {});
+    cloudMessage("Связь работает: " + result.model + " · " + result.answer);
+  } catch (error) {
+    cloudMessage("Проверка не пройдена: " + error.message);
+  } finally {
+    button.disabled = !cloudReady;
+  }
+});
+
+async function loadPendingMemories() {
+  try {
+    const data = await requestJSON("/api/soul/suggestions");
+    $("pending-count").textContent = data.items.length ? "(" + data.items.length + ")" : "";
+    const target = $("memory-pending");
+    target.replaceChildren();
+    for (const item of data.items) {
+      const row = document.createElement("div");
+      row.className = "memory-record";
+      const caption = document.createElement("small");
+      caption.textContent = item.kind + " · сообщение #" + item.message_id;
+      const text = document.createElement("p");
+      text.textContent = item.content;
+      const actions = document.createElement("div");
+      actions.className = "memory-actions";
+      for (const [label, approve] of [["Запомнить", true], ["Отклонить", false]]) {
+        actions.append(makeMemoryButton(label, async () => {
+          try {
+            await requestJSON("/api/soul/review", "POST", {id: item.id, approve});
+            await loadPendingMemories();
+            await refreshMemory();
+            await loadSoulJournal();
+          } catch (error) {
+            memoryFeedback(error.message);
+          }
+        }));
+      }
+      row.append(caption, text, actions);
+      target.append(row);
+    }
+    if (!data.items.length) {
+      const p = document.createElement("p");
+      p.className = "memory-empty";
+      p.textContent = "Неподтверждённых воспоминаний нет.";
+      target.append(p);
+    }
+  } catch (error) {
+    memoryFeedback(error.message);
+  }
+}
+
+async function loadSoulJournal() {
+  try {
+    const data = await requestJSON("/api/soul/journal");
+    const target = $("soul-timeline");
+    target.replaceChildren();
+    for (const item of data.items) {
+      const p = document.createElement("p");
+      p.className = "memory-empty";
+      p.textContent = item.created_at + " · " + item.detail;
+      target.append(p);
+    }
+  } catch (error) {
+    memoryFeedback(error.message);
+  }
+}
+
+$("rag-search").addEventListener("click", async () => {
+  const query = $("memory-search").value.trim();
+  if (!query) {
+    memoryFeedback("Напиши вопрос для поиска по смыслу.");
+    return;
+  }
+  const button = $("rag-search");
+  button.disabled = true;
+  try {
+    const result = await requestJSON("/api/soul/search", "POST", {query, semantic: true});
+    const target = $("memory-results");
+    target.replaceChildren();
+    for (const item of result.items) {
+      const node = document.createElement("div");
+      node.className = "memory-record";
+      const title = document.createElement("small");
+      title.textContent = "Память #" + item.id + " · источник: " + (item.source_ref || item.source_type);
+      const text = document.createElement("p");
+      text.textContent = item.content;
+      node.append(title, text);
+      target.append(node);
+    }
+    memoryFeedback(result.semantic ? "Смысловой поиск Cloud.ru выполнен." : "Результаты локального поиска.");
+  } catch (error) {
+    memoryFeedback("Смысловой поиск: " + error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("memory-details").addEventListener("toggle", () => {
+  if ($("memory-details").open) {
+    loadPendingMemories();
+    loadSoulJournal();
   }
 });

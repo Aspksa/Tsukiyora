@@ -110,6 +110,10 @@ class UnifiedCoreTests(unittest.TestCase):
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM cognitive_cycles").fetchone()[0],1)
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+        # Legacy experience clients still have their aggregate timeline.
+        self.assertEqual(len(self.core.experience.timeline()),1)
+        self.assertIn("sessions",
+                      json.loads(self.core.experience.timeline()[0]["summary"]))
 
     def test_chat_priority_retry_and_bounded_logs(self):
         lock=threading.Lock()
@@ -143,6 +147,18 @@ class UnifiedCoreTests(unittest.TestCase):
         retry=self.run_one("cog5_simulator")
         self.assertEqual(retry["status"],"ok")
         self.assertEqual(self.core.cycle()["status"],"ok")
+        # Unexpected exceptions do not kill the sole worker or leak details.
+        with patch.object(self.core.orchestrator,"run_job",
+                          side_effect=TypeError("private content in exception")):
+            crashed=self.run_one("cog5_budget")
+        self.assertEqual(crashed["status"],"warning")
+        self.assertNotIn("private content",json.dumps(crashed))
+        with closing(self.store.connect()) as db:
+            recovered=db.execute(
+                "SELECT state,last_status FROM maintenance_queue "
+                "WHERE kind='cog5_budget'"
+            ).fetchone()
+        self.assertEqual(tuple(recovered),("waiting","warning"))
 
     def test_user_feedback_still_creates_reversible_v3_v4_drafts(self):
         convo=self.store.create_conversation()

@@ -60,6 +60,19 @@ class MemoryQualityTests(FreshDatabase):
         self.assertFalse(compare("Я люблю чай", "Я не люблю машины")["conflict"])
         self.assertTrue(compare("Я люблю зелёный чай", "Я люблю зеленый чай!")["duplicate"])
 
+    def test_cached_vector_semantic_signal_does_not_delete(self):
+        a = self.memory.add_memory("fact", "Предпочитаю пешие путешествия")
+        b = self.memory.add_memory("fact", "Люблю походы и долгие прогулки")
+        index = VectorMemory(self.db_path)
+        index._remember("mock/embedding", a["content"], [1.0, 0.0, 0.0], a["id"])
+        index._remember("mock/embedding", b["content"], [0.999, 0.001, 0.0], b["id"])
+        report = MemoryQuality(self.db_path).review()
+        pairs = [{r["left"]["id"], r["right"]["id"]}
+                 for r in report["semantic_duplicates"]]
+        self.assertIn({a["id"], b["id"]}, pairs)
+        self.assertEqual(report["outbound_cloud_requests"], 0)
+        self.assertEqual(self.memory.stats()["memories"], 2)
+
     def test_unapproved_suggestions_are_not_in_quality(self):
         conv = self.memory.create_conversation()
         user = self.memory.append_messages(conv["id"], [

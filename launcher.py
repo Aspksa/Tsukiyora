@@ -252,6 +252,8 @@ class SoulHandler(BaseHTTPRequestHandler):
                 atlas = self.server.cognition.atlas
                 if level == "overview":
                     return self.send_json(atlas.overview())
+                if level == "locate":
+                    return self.send_json(atlas.locate(int(args.get("id",["0"])[0])))
                 sector = int(args.get("sector", ["-1"])[0])
                 if level == "regions":
                     cursor = args.get("cursor", [None])[0]

@@ -189,6 +189,21 @@ class ConversationMemory:
                 "method":"local_source_excerpts",
                 "not_an_llm_summary":True,"cloud_requests":0}
 
+    def refresh_recent(self,limit:int=4)->dict:
+        """Maintain at most four long-chat recaps in one LOCAL worker tick."""
+        if type(limit) is not int or not 1<=limit<=8:
+            raise ValueError("Invalid recap maintenance limit.")
+        with closing(self.connect()) as db:
+            convs=[r[0] for r in db.execute(
+                "SELECT id FROM conversations ORDER BY updated_at DESC,id DESC "
+                "LIMIT ?",(limit,)
+            )]
+        built=0
+        for conversation_id in convs:
+            report=self.summary(conversation_id)
+            built+=int(report["ready"])
+        return {"checked":len(convs),"ready":built,"cloud_requests":0}
+
     def health(self)->dict:
         with closing(self.connect()) as db:
             fts=self._fts_available(db)

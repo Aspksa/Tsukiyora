@@ -43,6 +43,7 @@ from reflective_recall import ReflectiveRecall
 from experience_skills import ExperienceSkills
 from reflective_optimization import ReflectiveOptimization
 from cognitive_next import CognitiveNext
+from self_improvement import SelfImprovement
 
 
 class CognitiveCore:
@@ -79,6 +80,7 @@ class CognitiveCore:
         self.skills = ExperienceSkills(path)
         self.evolution = ReflectiveOptimization(path)
         self.next = CognitiveNext(path, core=self)
+        self.improvement = SelfImprovement(path)
         self.chat_priority = None
 
     def connect(self):
@@ -128,6 +130,7 @@ class CognitiveCore:
         self.skills.initialize()
         self.evolution.initialize()
         self.next.initialize()
+        self.improvement.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -152,8 +155,11 @@ class CognitiveCore:
         rollback = self.rollback.evaluate()
         skill = self.skills.capture(message_id)
         evolution = self.evolution.record(message_id, helpful)
+        improvement = self.improvement.feedback(message_id, helpful)
+        hypothesis = self.improvement.observe()
         return {"message_id": message_id, "helpful": helpful, "category": category,
                 "skill_candidate": skill, "strategy_trial": evolution,
+                "self_improvement": improvement, "new_hypothesis": hypothesis,
                 "suspended_styles":rollback.get("suspended",[]),
                 "curriculum_review_required": len(curriculum.get("regressions",[])),
                 "experiment":experiment,
@@ -274,6 +280,7 @@ class CognitiveCore:
                 "experience_skills": self.skills.list(limit=10),
                 "prompt_evolution": self.evolution.report(),
                 "cognitive_next": self.next.working_state(),
+                "self_improvement": self.improvement.report(),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {
@@ -309,6 +316,7 @@ class CognitiveCore:
             self.update_lessons()
             self.experience.consolidate()
             lessons = self.academy.run_cycle()
+            self.improvement.observe()
             progress = self.metrics.evaluate()
             continuity = self.continuity.consolidate()
             arc = self.persona_arc.consolidate()

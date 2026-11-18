@@ -290,6 +290,31 @@
             <div id="next-result" class="memory-results" role="status" aria-live="polite"></div>
             <div id="next-research" class="memory-results"></div>
           </details>
+          <details class="memory-queue" id="self-improvement">
+            <summary>Cognitive Soul 3.0 <span class="muted">интеллектуальное самоулучшение</span></summary>
+            <p class="memory-empty">Сначала эталоны и безопасная гипотеза, затем тест старой и новой стратегии на одинаковых заданиях. Никаких автоматических платных запросов и внедрений.</p>
+            <div id="improvement-diagnostics" class="memory-results" role="status"></div>
+            <label for="improve-question" class="memory-empty">Независимый контрольный вопрос (отправляется в Cloud.ru только по явному разрешению)</label>
+            <textarea id="improve-question" rows="2" maxlength="500" placeholder="Вопрос с однозначным кратким ответом"></textarea>
+            <label for="improve-expected" class="memory-empty">Эталонный ответ (никогда не отправляется модели)</label>
+            <input id="improve-expected" type="text" maxlength="200" placeholder="Точный проверенный ответ">
+            <label for="improve-split" class="memory-empty">Назначение эталона</label>
+            <select id="improve-split">
+              <option value="holdout">Независимый тест (holdout)</option>
+              <option value="train">Учебный набор (без платных запусков)</option>
+            </select>
+            <button id="improve-add-case" type="button" class="quiet-button">Добавить проверенный эталон</button>
+            <div id="improve-cases" class="memory-results"></div>
+            <label for="improve-strategy" class="memory-empty">Проверяемая гипотеза</label>
+            <select id="improve-strategy">
+              <option value="causal_steps">Отличать причинность от предположений</option>
+              <option value="alternatives">Сравнивать альтернативы</option>
+              <option value="uncertainty">Показывать неопределённость</option>
+            </select>
+            <button id="improve-propose" type="button" class="quiet-button">Предложить улучшение</button>
+            <div id="improve-proposals" class="memory-results"></div>
+            <p id="improve-feedback" class="memory-empty" role="status">Проверка Cloud.ru платная: ровно 8 попыток на 4 эталонах. Отзывы и оценки сами по себе не доказывают рост интеллекта.</p>
+          </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>
             <div id="character-progress" class="memory-results"></div>

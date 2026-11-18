@@ -325,6 +325,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                     limit=int(args.get("limit",["30"])[0])))
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/improvement":
+            return self.send_json(self.server.cognition.improvement.report())
+        if path == "/api/soul/improvement/cases":
+            return self.send_json(self.server.cognition.improvement.cases())
+        if path == "/api/soul/improvement/diagnostics":
+            return self.send_json(self.server.cognition.improvement.diagnose())
         if path == "/api/soul/evolution":
             return self.send_json(self.server.cognition.evolution.report())
         if path == "/api/soul/academy":
@@ -519,6 +525,51 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cognition.skills.decide(
                     obj.get("candidate_id"),approve=obj.get("approve"),
                     confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path.startswith("/api/soul/improvement/"):
+            try:
+                obj=self._read_body()
+                engine=self.server.cognition.improvement
+                if path=="/api/soul/improvement/propose":
+                    result=engine.propose(
+                        obj.get("strategy"),confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/improvement/case":
+                    result=engine.add_case(
+                        obj.get("question"),obj.get("expected"),
+                        split=obj.get("split","holdout"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/improvement/case/delete":
+                    result=engine.remove_case(
+                        obj.get("id"),confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/improvement/decide":
+                    result=engine.decide(
+                        obj.get("proposal_id"),approve=obj.get("approve"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/improvement/recover":
+                    if not self.server.chat_lock.acquire(blocking=False):
+                        raise CloudError("Нельзя закрыть тест во время активного чата или проверки.",409)
+                    try:
+                        result=engine.recover_interrupted(
+                            obj.get("run_id"),confirmed=obj.get("confirmed",False))
+                    finally:
+                        self.server.chat_lock.release()
+                elif path=="/api/soul/improvement/run":
+                    if not self.server.chat_lock.acquire(blocking=False):
+                        raise CloudError("Дождись окончания чата или другого теста.",409)
+                    try:
+                        result=engine.evaluate(
+                            obj.get("proposal_id"),self.server.cloud,
+                            self.server.persona,
+                            confirmed_send=obj.get("confirm_cloud_calls",False),
+                            max_pairs=obj.get("max_pairs",4))
+                    finally:
+                        self.server.chat_lock.release()
+                else:
+                    return self.send_json({"error":"Unknown improvement action."},404)
+                return self.send_json(result)
+            except CloudError as error:
+                return self.send_json({"error":str(error)},error.status)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/evolution/propose":
@@ -834,12 +885,19 @@ class SoulHandler(BaseHTTPRequestHandler):
             memories = store.find_memories(limit=20)
             guidance = self.server.cognition.guidance()
             evolving = self.server.cognition.evolution.guidance_for_conversation(conversation_id)
-            extra = (guidance + " " + evolving).strip()[:1800]
+            improvement_id, approved = self.server.cognition.improvement.guidance()
+            extra = (guidance + " " + evolving + " " + approved).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,
                                     extra_guidance=extra)
-            store.append_messages(conversation_id, [{
+            assistant = store.append_messages(conversation_id, [{
                 "role": "assistant", "content": answer, "client_message_id": key
-            }])
+            }])[0]
+            if improvement_id is not None:
+                try:
+                    self.server.cognition.improvement.applied(
+                        assistant["id"],improvement_id)
+                except (ValueError,sqlite3.Error):
+                    pass
             return self.send_json({"conversation_id": conversation_id,
                                    "answer": answer, "cached": False})
 

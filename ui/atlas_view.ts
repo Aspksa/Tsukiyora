@@ -139,6 +139,15 @@ export class BrainAtlasView {
     this.shapes=[];
     const cx=width/2+panX,cy=height*.48+panY;
     const base=Math.min(width*.34,height*.35,242);
+    // A single dark central ring whose luminosity follows only real records.
+    const realCount=Math.max(0,Number(this.data?.total||0));
+    if (realCount>0 && this.level==="overview") {
+      ctx.beginPath();
+      ctx.arc(cx,cy,base*.24*zoom,0,Math.PI*2);
+      ctx.strokeStyle="rgba(192,139,71,"+
+        Math.min(.35,.07+Math.log2(realCount+1)*.014).toFixed(3)+")";
+      ctx.lineWidth=1.1;ctx.stroke();
+    }
     const halo=ctx.createRadialGradient(cx,cy,3,cx,cy,base*1.5);
     halo.addColorStop(0,"rgba(185,132,72,.14)");
     halo.addColorStop(1,"rgba(185,132,72,0)");
@@ -173,8 +182,15 @@ export class BrainAtlasView {
         const py=cy+Math.sin(angle)*base*.68*zoom;
         const radius=18+Math.min(12,Math.log2(item.count+1)*1.8);
         if (px<-40||px>width+40||py<-40||py>height+40) continue;
+        // Glow only on actual local memory updates or navigation events.
+        // Idle frames remain inexpensive, and reduced-motion removes pulses.
+        if (flicker>0) {
+          ctx.save();ctx.shadowBlur=15+flicker*55;
+          ctx.shadowColor="rgba(228,164,72,.6)";
+        }
         hex(ctx,px,py,radius*zoom,"rgba(174,125,67,.22)",
             "rgba(234,186,116,"+(.72+flicker)+")");
+        if (flicker>0) ctx.restore();
         ctx.textAlign="center";ctx.textBaseline="middle";
         ctx.fillStyle="#f0d0a0";ctx.font="12px system-ui,sans-serif";
         ctx.fillText(compact(item.count),px,py-4);

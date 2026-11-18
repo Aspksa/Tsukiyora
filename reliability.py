@@ -8,6 +8,7 @@ from contextlib import closing
 from datetime import datetime, timezone, timedelta
 import json
 import os
+import shutil
 from pathlib import Path
 import sqlite3
 import sys
@@ -136,9 +137,18 @@ class Reliability:
         # Force WAL checkpoint before taking a safety backup. This is safe only
         # because the CLI holds the launcher lock and checks the health URL.
         if self.db_path.exists():
-            with closing(sqlite3.connect(self.db_path, timeout=5)) as db:
-                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            safety = MemoryStore(self.db_path).backup(self.folder)
+            try:
+                with closing(sqlite3.connect(self.db_path, timeout=5)) as db:
+                    db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                safety = MemoryStore(self.db_path).backup(self.folder)
+            except sqlite3.DatabaseError:
+                # A damaged database still deserves a byte-for-byte safety copy.
+                # The copy is NOT a valid SQLite backup and is named accordingly.
+                damaged_name = "damaged-" + datetime.now(timezone.utc).strftime(
+                    "%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:8] + ".sqlite3"
+                destination = self.folder / damaged_name
+                shutil.copy2(self.db_path, destination)
+                safety = destination
         else:
             safety = None
         staged = self.db_path.with_name(self.db_path.name + ".restore-" + uuid.uuid4().hex)

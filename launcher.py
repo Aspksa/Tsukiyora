@@ -227,6 +227,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.reliability.local_selftest())
         if path == "/api/system/migrations":
             return self.send_json(self.server.cognition.migrations.audit())
+        if path == "/api/system/wal":
+            try:
+                return self.send_json(self.server.cognition.reliability.wal_health())
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/system/recovery-check":
             try:
                 name = args.get("name", [""])[0]

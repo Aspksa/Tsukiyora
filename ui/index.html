@@ -205,12 +205,22 @@
             <div id="academy-experiments" class="memory-results"></div>
             <div id="academy-curriculum" class="memory-results" aria-live="polite"></div>
             <div id="academy-rollback" class="memory-results" aria-live="polite"></div>
+            <details class="memory-queue" id="academy-practice-details">
+              <summary>Контрольные вопросы <span class="muted">оценка без Cloud.ru</span></summary>
+              <label for="academy-practice-skill" class="memory-empty">Выбери навык</label>
+              <select id="academy-practice-skill"></select>
+              <p id="academy-practice-question" class="memory-empty">Ответ на контрольный вопрос оценивается по простым правилам, не LLM.</p>
+              <textarea id="academy-practice-answer" rows="2" maxlength="2000" placeholder="Вставь проверяемый ответ"></textarea>
+              <button type="button" class="quiet-button" id="academy-practice-evaluate">Проверить ответ локально</button>
+              <p class="memory-empty" id="academy-practice-result" role="status"></p>
+            </details>
           </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>
             <div id="character-progress" class="memory-results"></div>
             <div id="character-timeline" class="memory-results"></div>
             <div id="persona-arc" class="memory-results"></div>
+            <p id="persona-link-summary" class="memory-empty" aria-live="polite"></p>
           </details>
           <div id="audit-status" class="memory-empty"></div>
           <div id="biography-notes" class="memory-results"></div>

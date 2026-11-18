@@ -425,6 +425,20 @@ $("cloud-connect").addEventListener("click", async () => {
     select.disabled = result.models.length === 0;
     $("cloud-select").disabled = result.models.length === 0;
     if (result.models.includes(previous.model)) select.value = previous.model;
+    const vectorSelect = $("embedding-model");
+    vectorSelect.replaceChildren();
+    for (const model of result.models.filter(x => /embed|bge-/i.test(x))) {
+      const option = document.createElement("option");
+      option.value = model;
+      option.textContent = model;
+      vectorSelect.append(option);
+    }
+    vectorSelect.disabled = vectorSelect.options.length === 0;
+    $("embedding-select").disabled = vectorSelect.disabled;
+    if (result.models.includes(previous.embedding_model)) {
+      vectorSelect.value = previous.embedding_model;
+      $("embedding-index").disabled = false;
+    }
     cloudMessage(result.models.length
       ? "Моделей найдено: " + result.models.length + ". Выбери модель и нажми «Использовать»."
       : "Cloud.ru не вернул доступных моделей для этого ключа.");
@@ -821,3 +835,93 @@ $("memory-details").addEventListener("toggle", () => {
     loadSoulJournal();
   }
 });
+
+
+// Vector embeddings are opt-in, never silently sent in background maintenance.
+$("embedding-select").addEventListener("click", async () => {
+  const model = $("embedding-model").value;
+  if (!model) return;
+  try {
+    const status = await requestJSON("/api/cloud/embedding/model", "POST", {model});
+    $("embedding-index").disabled = false;
+    $("vector-feedback").textContent = "Выбрана " + status.embedding_model
+      + ". Индексацию выполняем только после отдельного согласия.";
+    await refreshCognition();
+  } catch (error) {
+    $("vector-feedback").textContent = error.message;
+  }
+});
+
+$("embedding-index").addEventListener("click", async () => {
+  if (!window.confirm("Отправить до 40 подтверждённых воспоминаний в Cloud.ru для создания эмбеддингов? Запрос может расходовать токены.")) return;
+  const button = $("embedding-index");
+  button.disabled = true;
+  $("vector-feedback").textContent = "Индексирую…";
+  try {
+    const info = await requestJSON("/api/soul/vectors/index", "POST", {
+      confirm_send_to_cloud: true, limit: 40,
+    });
+    $("vector-feedback").textContent = "Готово: " + info.processed +
+      " записей, новых облачных векторов: " + info.remote_vectors +
+      ", из кэша: " + info.cache_hits + ".";
+    await refreshCognition();
+  } catch (error) {
+    $("vector-feedback").textContent = "Не удалось создать индекс: " + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function refreshCognition() {
+  try {
+    const [status, biography] = await Promise.all([
+      requestJSON("/api/soul/cognition"),
+      requestJSON("/api/soul/biography"),
+    ]);
+    const recent = status.last_cycle;
+    $("cognitive-status").textContent = (recent
+      ? "Локальная проверка: " + recent.status + " · " + recent.created_at
+      : "Первый фоновый цикл ещё не завершён")
+      + ". Воспоминания: " + status.vectors.active_memories
+      + ", проиндексировано: " + status.vectors.indexed_memories
+      + ", неоднозначных связей: " + status.possible_conflicts
+      + ", оценок ответов: " + status.feedback.total + ".";
+    $("vector-count").textContent = status.vectors.indexed_memories
+      ? "(" + status.vectors.indexed_memories + ")" : "опционально";
+    const list = $("biography-notes");
+    list.replaceChildren();
+    for (const entry of biography.approved_history.slice(0, 12)) {
+      const item = document.createElement("p");
+      item.className = "memory-empty";
+      item.textContent = "№" + entry.id + " · " + entry.kind + ": " + entry.content;
+      list.append(item);
+    }
+    if (biography.learned_guidance) {
+      const item = document.createElement("p");
+      item.className = "memory-empty";
+      item.textContent = "Опыт общения: " + biography.learned_guidance;
+      list.append(item);
+    }
+    if (!biography.approved_history.length) {
+      const item = document.createElement("p");
+      item.className = "memory-empty";
+      item.textContent = "Биография пополняется только подтверждёнными воспоминаниями.";
+      list.append(item);
+    }
+  } catch (error) {
+    $("cognitive-status").textContent = "Состояние памяти недоступно: " + error.message;
+  }
+}
+
+$("cognitive-details").addEventListener("toggle", () => {
+  if ($("cognitive-details").open) refreshCognition();
+});
+$("vector-details").addEventListener("toggle", () => {
+  if ($("vector-details").open) refreshCognition();
+});
+$("settings-open").addEventListener("click", refreshCognition);
+
+// Avoid constant UI/API work when browser is hidden or user is offline.
+window.setInterval(() => {
+  if (!document.hidden) refreshBrain();
+}, 30000);

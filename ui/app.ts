@@ -77,19 +77,35 @@ function paint() {
   ctx.fill();
   // Only records returned by SQLite are rendered as cells, no fake neurons.
   const counts = Array(8).fill(0);
+  const kindCounts = {fact: 0, preference: 0, event: 0, biography: 0};
   const section = {fact: 0, preference: 2, event: 4, biography: 6};
-  const radius = Math.max(2.4, Math.min(4.9, r / 42)) * Math.sqrt(graphScale);
-  const ringCapacity = 28;
-  const step = Math.max(5, r / 34);
+  const radius = Math.max(2.1, Math.min(3.6, r / 68)) * Math.sqrt(graphScale);
+  const unit = Math.max(2.1, Math.min(3.6, r / 68));
+  const step = unit * 1.88;
+  const wedge = .69;
+  function capacity(level) {
+    const dist = r * .22 + level * step;
+    return Math.max(4, Math.floor(dist * wedge / (unit * 2.12)));
+  }
   graphPositions = new Map();
   for (const node of brainGraph.nodes) {
-    const sector = (section[node.kind] ?? 0) + (node.id % 2);
-    const slot = counts[sector]++;
-    const level = Math.floor(slot / ringCapacity);
-    const index = slot % ringCapacity;
+    const kindIndex = kindCounts[node.kind] ?? 0;
+    kindCounts[node.kind] = kindIndex + 1;
+    // Large memory types expand into neighbouring sectors instead of
+    // endlessly growing beyond the viewport.
+    const sector = ((section[node.kind] ?? 0) +
+       (kindIndex % 2) + Math.floor(kindIndex / 320) * 2) % 8;
+    let slot = counts[sector]++;
+    let level = 0;
+    while (slot >= capacity(level) && level < 110) {
+      slot -= capacity(level);
+      level++;
+    }
+    const columns = capacity(level);
     const angle = -Math.PI / 2 + sector * Math.PI / 4 +
-       ((index + .5) / ringCapacity - .5) * .67 + (level % 2 ? .012 : 0);
-    const distance = r * .28 + level * step;
+      ((slot + .5) / columns - .5) * wedge +
+      (level % 2 ? .009 : 0);
+    const distance = r * .22 + level * step;
     graphPositions.set(node.id, {
       id: node.id, kind: node.kind, preview: node.preview,
       x: x + graphPanX + Math.cos(angle) * distance * graphScale,

@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feat/soul-core-runtime, feat/long-term-memory, feat/cloudru-chat, feat/living-memory-v2, feat/tsukiyora-cognitive-v05, feat/tsukiyora-v06-intelligence, feat/tsukiyora-v07-reliability, main]
+    branches: [feat/soul-core-runtime, feat/long-term-memory, feat/cloudru-chat, feat/living-memory-v2, feat/tsukiyora-cognitive-v05, feat/tsukiyora-v06-intelligence, feat/tsukiyora-v07-reliability, feat/tsukiyora-v08-intelligence, main]
   workflow_dispatch:
 
 permissions:
@@ -26,11 +26,15 @@ jobs:
         with:
           python-version: '3.13'
       - name: Compile Python sources
-        run: python -m compileall -q launcher.py memory_store.py cloudru.py soul_growth.py stream_runtime.py vector_memory.py cognitive_core.py memory_quality.py experience_engine.py layered_memory.py reliability.py maintenance.py reasoning.py restore_memory.py tests
+        run: python -m compileall -q launcher.py memory_store.py cloudru.py soul_growth.py stream_runtime.py vector_memory.py cognitive_core.py memory_quality.py experience_engine.py layered_memory.py reliability.py maintenance.py reasoning.py restore_memory.py precision_memory.py soul_academy.py persona_continuity.py brain_atlas.py tests
       - name: Check browser JS syntax
         run: |
           python -c "from pathlib import Path; Path('ui/app.check.mjs').write_bytes(Path('ui/app.ts').read_bytes())"
           node --check ui/app.check.mjs
+      - name: Check progressive atlas module syntax
+        run: |
+          python -c "from pathlib import Path; Path('ui/atlas_view.check.mjs').write_bytes(Path('ui/atlas_view.ts').read_bytes())"
+          node --check ui/atlas_view.check.mjs
       - name: Validate JSON personality
         run: python -m json.tool soul/personality.json
       - name: Run tests

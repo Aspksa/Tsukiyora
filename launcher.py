@@ -10,7 +10,10 @@ from pathlib import Path
 import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
+import re
+
+from memory_store import MemoryStore
 from urllib.request import build_opener, ProxyHandler
 import webbrowser
 
@@ -51,6 +54,7 @@ def init_database(db_path: Path = DATABASE) -> None:
         )
         db.execute("INSERT INTO runtime_events (event) VALUES (?)", ("startup",))
         db.commit()
+    MemoryStore(db_path).initialize()
 
 
 def setup_logs() -> None:
@@ -114,8 +118,9 @@ class SoulServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
-    def __init__(self, address, persona: dict):
+    def __init__(self, address, persona: dict, memory_path: Path = DATABASE):
         self.persona = persona
+        self.memory_path = memory_path
         super().__init__(address, SoulHandler)
 
 
@@ -139,19 +144,89 @@ class SoulHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(value)
 
-    def send_json(self, value: dict):
+    def send_json(self, value: dict, status: int = 200):
         payload = json.dumps(value, ensure_ascii=False).encode("utf-8")
-        self.send_bytes(200, payload, "application/json; charset=utf-8")
+        self.send_bytes(status, payload, "application/json; charset=utf-8")
+
+    def _valid_host(self) -> bool:
+        # Reject DNS-rebinding via a non-loopback Host header.
+        host = self.headers.get("Host", "").split(":")[0].lower()
+        return host in ("127.0.0.1", "localhost")
+
+    def _valid_write_origin(self) -> bool:
+        origin = self.headers.get("Origin")
+        site = self.headers.get("Sec-Fetch-Site")
+        if site == "cross-site":
+            return False
+        if origin is not None and origin != "http://" + self.headers.get("Host", ""):
+            return False
+        return self.headers.get("Content-Type", "").split(";")[0].strip().lower() == "application/json"
+
+    def _read_body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            raise ValueError("Missing Content-Length.") from None
+        if not 1 <= length <= 65536:
+            raise ValueError("JSON request size must be between 1 and 65536 bytes.")
+        try:
+            obj = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Invalid UTF-8 JSON.") from None
+        if not isinstance(obj, dict):
+            raise ValueError("JSON body must be an object.")
+        return obj
+
+    def _memory(self):
+        return MemoryStore(self.server.memory_path)
+
+    def _handle_error(self, error):
+        if isinstance(error, ValueError):
+            return self.send_json({"error": str(error)}, 400)
+        LOG.exception("Local memory API failed")
+        return self.send_json({"error": "Local memory storage error."}, 500)
 
     def do_GET(self):
-        path = urlsplit(self.path).path
+        if not self._valid_host():
+            return self.send_json({"error": "Invalid Host."}, 400)
+        parsed = urlsplit(self.path)
+        path = parsed.path
+        args = parse_qs(parsed.query, keep_blank_values=True)
+        if path.startswith("/api/memory"):
+            try:
+                store = self._memory()
+                def arg(name, default=""):
+                    return args.get(name, [default])[0]
+                if path == "/api/memory/status":
+                    return self.send_json(store.stats())
+                if path == "/api/memory":
+                    return self.send_json({"items": store.find_memories(
+                        query=arg("query"), kind=arg("kind"),
+                        limit=int(arg("limit", "50")))})
+                if path == "/api/memory/conversations":
+                    return self.send_json({"conversations": store.list_conversations(
+                        limit=int(arg("limit", "30")))})
+                if path == "/api/memory/messages":
+                    before = arg("before_id")
+                    return self.send_json({"messages": store.list_messages(
+                        conversation_id=arg("conversation_id"),
+                        before_id=int(before) if before else None,
+                        limit=int(arg("limit", "100")))})
+                return self.send_json({"error": "Unknown memory endpoint."}, 404)
+            except (ValueError, sqlite3.Error, OSError) as error:
+                return self._handle_error(error)
         if path == "/api/health":
             return self.send_json({"app": "tsukiyora", "ok": True})
         if path == "/api/personality":
             return self.send_json(self.server.persona)
         if path == "/api/status":
+            try:
+                memory = self._memory().stats()
+                database = "ready"
+            except (sqlite3.Error, OSError):
+                memory, database = None, "not_initialized"
             return self.send_json({
-                "runtime": "local", "database": "ready",
+                "runtime": "local", "database": database, "memory": memory,
                 "cloud_model": "not_configured", "chat": "not_connected",
             })
         allowed = {
@@ -169,6 +244,51 @@ class SoulHandler(BaseHTTPRequestHandler):
             LOG.exception("Static file missing: %s", filename)
             return self.send_bytes(500, b"Local UI error", "text/plain")
         self.send_bytes(200, content, mime)
+
+    def _write(self, method: str):
+        if not self._valid_host():
+            return self.send_json({"error": "Invalid Host."}, 400)
+        if not self._valid_write_origin():
+            return self.send_json({"error": "Same-origin JSON request required."}, 403)
+        path = urlsplit(self.path).path
+        if not path.startswith("/api/memory"):
+            return self.send_json({"error": "Not found."}, 404)
+        try:
+            store = self._memory()
+            obj = self._read_body() if method in ("POST", "PUT") else {}
+            if method == "POST" and path == "/api/memory":
+                return self.send_json({"item": store.add_memory(
+                    kind=obj.get("kind"), content=obj.get("content"))}, 201)
+            if method == "POST" and path == "/api/memory/conversations":
+                return self.send_json({"conversation": store.create_conversation(
+                    title=obj.get("title", "Новый диалог"))}, 201)
+            if method == "POST" and path == "/api/memory/messages":
+                return self.send_json({"messages": store.append_messages(
+                    conversation_id=obj.get("conversation_id"),
+                    messages=obj.get("messages"))}, 201)
+            if method == "POST" and path == "/api/memory/backup":
+                target = store.backup()
+                return self.send_json({"saved": True, "filename": target.name}, 201)
+            match = re.fullmatch(r"/api/memory/([1-9][0-9]*)", path)
+            if match and method == "PUT":
+                return self.send_json({"item": store.correct_memory(
+                    int(match.group(1)), obj.get("content"),
+                    reason=obj.get("reason", "user correction"))})
+            if match and method == "DELETE":
+                store.delete_memory(int(match.group(1)))
+                return self.send_json({"deleted": True})
+            return self.send_json({"error": "Unknown memory endpoint."}, 404)
+        except (ValueError, sqlite3.Error, OSError) as error:
+            return self._handle_error(error)
+
+    def do_POST(self):
+        self._write("POST")
+
+    def do_PUT(self):
+        self._write("PUT")
+
+    def do_DELETE(self):
+        self._write("DELETE")
 
 
 def run() -> int:

@@ -1575,6 +1575,143 @@ async function refreshCognition() {
   }
 }
 
+// Three opt-in cognitive extensions live in the existing settings panel.
+function addCognitiveLine(parent, label) {
+  const line=document.createElement("p");
+  line.className="memory-empty";
+  line.textContent=label;
+  parent.append(line);
+  return line;
+}
+
+async function cognitiveAction(path, data, message) {
+  try {
+    await requestJSON(path,"POST",data);
+    $("cognitive-tools-feedback").textContent=message;
+    await refreshCognitiveTools();
+    await refreshCognition();
+  } catch(error) {
+    $("cognitive-tools-feedback").textContent="Не выполнено: "+error.message;
+  }
+}
+
+async function refreshCognitiveTools() {
+  if (!$("cognitive-tools").open) return;
+  try {
+    const [skills, evolution]=await Promise.all([
+      requestJSON("/api/soul/skills"),
+      requestJSON("/api/soul/evolution")
+    ]);
+    const skillPane=$("skill-candidates");
+    skillPane.replaceChildren();
+    for(const skill of skills.items) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const text=addCognitiveLine(row,"Навык #"+skill.id+" · "+skill.state+
+        " · "+skill.guidance);
+      text.title="Основание: ответ #"+skill.message_id;
+      if(skill.state==="pending" || skill.state==="approved") {
+        const accept=skill.state==="pending";
+        const button=document.createElement("button");
+        button.type="button";button.className="quiet-button";
+        button.textContent=accept?"Одобрить":"Отозвать";
+        button.addEventListener("click",()=>{
+          if(!window.confirm(accept
+             ?"Применять эту рекомендацию в будущих ответах?"
+             :"Отключить этот навык?")) return;
+          cognitiveAction("/api/soul/skills/decide",
+            {candidate_id:skill.id,approve:accept,confirmed:true},
+            accept?"Навык одобрен.":"Навык отключён.");
+        });
+        row.append(button);
+      }
+      skillPane.append(row);
+    }
+    if(!skills.items.length) addCognitiveLine(skillPane,
+      "Пока нет кандидатов. Поставь положительную оценку ответу и поясни почему.");
+    const trialPane=$("evolution-trials");
+    trialPane.replaceChildren();
+    for(const trial of evolution.trials) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const base=trial.arms.baseline, cand=trial.arms.candidate;
+      addCognitiveLine(row,trial.strategy+" · "+trial.state+
+        " · обычная "+base.helpful+"/"+base.samples+
+        " · кандидат "+cand.helpful+"/"+cand.samples+
+        (trial.gain===null?" · данных недостаточно":
+         " · разница "+Math.round(trial.gain*100)+" п.п."));
+      let action=null, label="", data=null;
+      if(trial.state==="draft") {
+        action="/api/soul/evolution/start";label="Начать тест";
+        data={trial_id:trial.id,confirmed:true};
+      } else if(trial.state==="testing" && trial.ready_for_review) {
+        action="/api/soul/evolution/decide";label="Применить";
+        data={trial_id:trial.id,activate:true,confirmed:true};
+      }
+      if(action) {
+        const button=document.createElement("button");
+        button.type="button";button.className="quiet-button";
+        button.textContent=label;
+        button.addEventListener("click",()=>{
+          if(window.confirm("Подтвердить: "+label+" для "+trial.strategy+"?")) {
+            cognitiveAction(action,data,"Решение подтверждено.");
+          }
+        });
+        row.append(button);
+      }
+      if(trial.state==="active" || trial.state==="testing") {
+        const stop=document.createElement("button");
+        stop.type="button";stop.className="quiet-button";
+        stop.textContent="Отключить";
+        stop.addEventListener("click",()=>{
+          if(window.confirm("Прекратить применение этой стратегии?")) {
+            cognitiveAction("/api/soul/evolution/decide",
+              {trial_id:trial.id,activate:false,confirmed:true},"Стратегия отключена.");
+          }
+        });
+        row.append(stop);
+      }
+      trialPane.append(row);
+    }
+    if(!evolution.trials.length) addCognitiveLine(trialPane,
+      "Эксперименты ещё не создавались. Все стратегии выключены.");
+  } catch(error) {
+    $("cognitive-tools-feedback").textContent=
+      "Не удалось загрузить Cognitive Soul: "+error.message;
+  }
+}
+
+$("cognitive-tools").addEventListener("toggle",refreshCognitiveTools);
+$("evolution-propose").addEventListener("click",async()=>{
+  const strategy=$("evolution-strategy").value;
+  await cognitiveAction("/api/soul/evolution/propose",{strategy},
+    "Кандидат создан. Он ещё не активирован.");
+});
+$("reflection-run").addEventListener("click",async()=>{
+  const query=$("reflection-query").value.trim();
+  const target=$("reflection-result");
+  target.replaceChildren();
+  if(!query) {
+    addCognitiveLine(target,"Введите вопрос об истории решения.");
+    return;
+  }
+  try {
+    const data=await requestJSON("/api/soul/reflect","POST",{query,limit:8});
+    for(const entry of data.items) {
+      const correction=entry.revisions.some(x=>x.operation==="correct")
+        ?" · история исправлений: "+entry.revisions.length:"";
+      addCognitiveLine(target,"Память #"+entry.id+" · "+entry.content+
+        correction+(entry.source_exists?" · источник сохранён":" · источник требует проверки"));
+    }
+    for(const warning of data.uncertainties.slice(0,8)) {
+      addCognitiveLine(target,"Проверь: "+warning);
+    }
+    if(!data.items.length) addCognitiveLine(target,"Совпадений не найдено.");
+  } catch(error) {
+    addCognitiveLine(target,"Ошибка поиска: "+error.message);
+  }
+});
+
 $("academy-enabled").addEventListener("change",async () => {
   const control=$("academy-enabled");
   const value=control.checked;

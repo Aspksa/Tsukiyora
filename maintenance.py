@@ -23,6 +23,10 @@ JOBS = {
     "backup_verify": 3600,
     "academy_metrics": 600,
     "migration_audit": 3600,
+    "academy_curriculum": 900,
+    "persona_arc": 1800,
+    "document_index": 1800,
+    "source_audit": 1800,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -159,6 +163,18 @@ class Maintenance:
                 report = core.metrics.evaluate()
                 result = {"updated":report.get("updated",False),
                           "assessed":len(report.get("evaluations",[]))}
+            elif kind == "academy_curriculum":
+                result = core.curriculum.advance()
+            elif kind == "persona_arc":
+                result = core.persona_arc.consolidate()
+            elif kind == "document_index":
+                # Bounded FTS repair; no user documents are read from disk.
+                result = core.evidence.documents.repair(limit=300)
+            elif kind == "source_audit":
+                status = core.evidence.status(limit=10)
+                result = {"reviewed":len(status["items"]),
+                          "requiring_review":sum(
+                              x["label"]=="review_required" for x in status["items"])}
             elif kind == "migration_audit":
                 report = core.migrations.audit()
                 result = {"version":report["version"],

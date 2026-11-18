@@ -1,4 +1,5 @@
 """Standard-library smoke tests for Tsukiyora runtime."""
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -24,7 +25,7 @@ class RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             db_file = Path(folder) / "memory.sqlite3"
             launcher.init_database(db_file)
-            with sqlite3.connect(db_file) as db:
+            with closing(sqlite3.connect(db_file)) as db:
                 rows = db.execute("SELECT COUNT(*) FROM runtime_events").fetchone()
             self.assertEqual(rows[0], 1)
 

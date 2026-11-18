@@ -247,6 +247,49 @@
             <div id="evolution-trials" class="memory-results"></div>
             <p id="cognitive-tools-feedback" class="memory-empty" role="status">Без согласия стратегии не применяются. Проверки — локальные.</p>
           </details>
+          <details class="memory-queue" id="cognitive-next">
+            <summary>Cognitive Soul 2.0 <span class="muted">10 механизмов логики и развития</span></summary>
+            <p class="memory-empty">Причины и сомнения проверяются по источникам. Автоматических исследований, удаления памяти или изменения личности нет.</p>
+            <p id="next-state" class="memory-empty" role="status">Локальный когнитивный статус загружается при открытии.</p>
+            <label for="next-query">Причинность и интеллектуальное любопытство</label>
+            <input id="next-query" type="search" maxlength="500" placeholder="Какое решение или знание исследовать?">
+            <div class="memory-actions">
+              <button id="next-causal" type="button" class="quiet-button">Причины и источники</button>
+              <button id="next-gap" type="button" class="quiet-button">Пробелы знаний</button>
+              <button id="next-save-question" type="button" class="quiet-button">Запомнить вопрос</button>
+            </div>
+            <label for="next-message-id">Метапознание — ID сохранённого ответа</label>
+            <input id="next-message-id" type="number" min="1" step="1" placeholder="Номер ответа">
+            <div class="memory-actions">
+              <button id="next-selfcheck" type="button" class="quiet-button">Проверить ответ</button>
+              <button id="next-review" type="button" class="quiet-button">Проверить качество памяти</button>
+              <button id="next-summary" type="button" class="quiet-button">Понимание и характер</button>
+            </div>
+            <label for="next-goal">Модель целей — записать собственную цель</label>
+            <input id="next-goal" type="text" maxlength="280" placeholder="Например: научиться точнее проверять договоры">
+            <button id="next-add-goal" type="button" class="quiet-button">Добавить цель</button>
+            <div id="next-goals" class="memory-results"></div>
+            <label for="next-scenario-a">Мысленный эксперимент — два заданных варианта</label>
+            <input id="next-scenario-a" type="text" maxlength="500" placeholder="Сценарий А">
+            <input id="next-scenario-b" type="text" maxlength="500" placeholder="Сценарий Б">
+            <button id="next-scenario" type="button" class="quiet-button">Сравнить условия</button>
+            <label for="next-sim-strategy">Когнитивный симулятор: стратегия и контрольное задание</label>
+            <select id="next-sim-strategy">
+              <option value="causal_steps">Причины и доказательства</option>
+              <option value="alternatives">Альтернативы</option>
+              <option value="uncertainty">Неопределённость</option>
+            </select>
+            <select id="next-sim-skill">
+              <option value="sources">Источники</option>
+              <option value="accuracy">Точность</option>
+              <option value="clarity">Ясность</option>
+              <option value="brevity">Краткость</option>
+            </select>
+            <textarea id="next-sim-answer" rows="2" maxlength="2000" placeholder="Вставь ответ для проверки, исходный текст не сохраняется"></textarea>
+            <button id="next-simulate" type="button" class="quiet-button">Проверить на контрольном задании</button>
+            <div id="next-result" class="memory-results" role="status" aria-live="polite"></div>
+            <div id="next-research" class="memory-results"></div>
+          </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>
             <div id="character-progress" class="memory-results"></div>

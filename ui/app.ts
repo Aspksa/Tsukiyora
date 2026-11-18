@@ -1200,7 +1200,7 @@ $("memory-quality").addEventListener("toggle", () => {
 async function refreshCognition() {
   try {
     const [status, biography, cloud, character, academyMetrics, timeline, experiments,
-      curriculum, personaArc] = await Promise.all([
+      curriculum, personaArc, rollback] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
@@ -1210,6 +1210,7 @@ async function refreshCognition() {
       requestJSON("/api/soul/academy/experiments"),
       requestJSON("/api/soul/academy/curriculum"),
       requestJSON("/api/soul/persona/arc"),
+      requestJSON("/api/soul/academy/rollback"),
     ]);
     const academy=status.academy;
     $("academy-enabled").checked=Boolean(academy.enabled);
@@ -1263,6 +1264,36 @@ async function refreshCognition() {
     }
     if (!curriculum.goals.length) curriculumPane.textContent=
       "Цели появятся после первого локального учебного цикла.";
+    const rollbackPane=$("academy-rollback");
+    rollbackPane.replaceChildren();
+    for (const strategy of rollback.strategies) {
+      const line=document.createElement("div");
+      line.className="memory-actions";
+      const status=document.createElement("span");
+      status.className="memory-empty";
+      status.textContent=strategy.strategy+" · "+strategy.state+
+        " · оценок "+strategy.evidence_count;
+      line.append(status);
+      if (strategy.state==="suspended") {
+        const resume=document.createElement("button");
+        resume.type="button";resume.className="quiet-button";
+        resume.textContent="Вернуть стиль";
+        resume.addEventListener("click",async () => {
+          if (!window.confirm("Вернуть этот стиль после отрицательных оценок?")) return;
+          resume.disabled=true;
+          try {
+            await requestJSON("/api/soul/academy/rollback/resume","POST",
+              {strategy:strategy.strategy,confirmed:true});
+            await refreshCognition();
+          } catch(error) {
+            $("chat-notice").textContent="Ошибка возврата стиля: "+error.message;
+            resume.disabled=false;
+          }
+        });
+        line.append(resume);
+      }
+      rollbackPane.append(line);
+    }
     const arcPane=$("persona-arc");
     arcPane.replaceChildren();
     const lastArc=personaArc.snapshots[0];
@@ -1394,7 +1425,8 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups, selftest, migration, budget, evidence] = await Promise.all([
+    const [report, workload, backups, selftest, migration, budget, evidence,
+      atlasHealth, wal] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
@@ -1402,7 +1434,16 @@ async function refreshDiagnostics() {
       requestJSON("/api/system/migrations"),
       requestJSON("/api/system/cloud-budget"),
       requestJSON("/api/soul/evidence/audits"),
+      requestJSON("/api/soul/atlas/cache"),
+      requestJSON("/api/system/wal"),
     ]);
+    $("atlas-health").textContent=
+      "Карта SQLite: "+(atlasHealth.verified?"✓":"требует восстановления индекса")+
+      " · записей "+atlasHealth.source_count+
+      " · агрегатов "+atlasHealth.cached_count+
+      " · WAL "+wal.journal_mode+
+      " · внешний ключ: "+(wal.foreign_key_errors?"ошибка":"OK")+
+      ". Реальный браузер и Cloud.ru проверяются отдельно.";
     const evidencePane=$("evidence-audit-summary");
     evidencePane.replaceChildren();
     const entry=document.createElement("p");

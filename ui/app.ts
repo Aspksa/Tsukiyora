@@ -467,6 +467,8 @@ async function refreshCloudStatus() {
   try {
     const status = await requestJSON("/api/cloud/status");
     setCloudReady(status.configured && status.verified && status.model, status.model);
+    $("embedding-auto").checked = Boolean(status.vector_chat_enabled);
+    $("embedding-auto").disabled = !(status.configured && status.verified && status.embedding_model);
     $("cloud-connect").textContent = status.configured ? "Обновить список моделей" : "Подключить и загрузить модели";
     if (status.model) {
       cloudMessage(status.configured
@@ -898,6 +900,8 @@ $("rag-search").addEventListener("click", async () => {
   const button = $("rag-search");
   button.disabled = true;
   try {
+    if (vectorAvailableForSearch &&
+        !window.confirm("Отправить этот поисковый запрос embedding-модели Cloud.ru? Это может расходовать токены.")) return;
     const result = vectorAvailableForSearch
       ? await requestJSON("/api/soul/vectors/search", "POST", {
           query, confirm_send_to_cloud: true,
@@ -940,11 +944,39 @@ $("embedding-select").addEventListener("click", async () => {
   try {
     const status = await requestJSON("/api/cloud/embedding/model", "POST", {model});
     $("embedding-index").disabled = false;
+    $("embedding-auto").checked = false;
+    $("embedding-auto").disabled = false;
     $("vector-feedback").textContent = "Выбрана " + status.embedding_model
       + ". Индексацию выполняем только после отдельного согласия.";
     await refreshCognition();
   } catch (error) {
     $("vector-feedback").textContent = error.message;
+  }
+});
+
+$("embedding-auto").addEventListener("change", async () => {
+  const checkbox = $("embedding-auto");
+  const enabled = checkbox.checked;
+  if (enabled && !window.confirm("Разрешить отправку будущих вопросов чата в embedding API Cloud.ru на время этого запуска? Запросы могут расходовать токены. По умолчанию функция выключена.")) {
+    checkbox.checked = false;
+    return;
+  }
+  checkbox.disabled = true;
+  try {
+    const state = await requestJSON("/api/cloud/embedding/auto", "POST", {
+      allowed: enabled,
+    });
+    checkbox.checked = Boolean(state.vector_chat_enabled);
+    $("vector-feedback").textContent = state.vector_chat_enabled
+      ? "Смысловой поиск для диалогов включён на этот сеанс. Запросы отправляются в Cloud.ru."
+      : "Автоматическая отправка в embedding API выключена.";
+  } catch (error) {
+    checkbox.checked = !enabled;
+    $("vector-feedback").textContent = error.message;
+  } finally {
+    const cloud = await requestJSON("/api/cloud/status").catch(() => null);
+    checkbox.disabled = !cloud?.configured || !cloud?.verified || !cloud?.embedding_model;
+    if (cloud) checkbox.checked = Boolean(cloud.vector_chat_enabled);
   }
 });
 

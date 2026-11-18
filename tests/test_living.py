@@ -227,7 +227,7 @@ class StreamingApiTests(unittest.TestCase):
         def cancel_while_searching(query, **kwargs):
             self.assertEqual(query, "Гараж")
             next(iter(self.server.active_streams.values())).set()
-            return {"items": []}
+            return {"memories": [], "documents": []}
         with patch.object(self.server.cognition.evidence, "search",
                           side_effect=cancel_while_searching):
             with patch.object(cloudru.CloudSession, "stream",

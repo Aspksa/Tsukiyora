@@ -24,15 +24,16 @@ export class BrainAtlasView {
   constructor(ctx) {
     this.ctx=ctx;
     this.active=false;this.level="overview";
-    this.data=null;this.sector=null;this.bucket=null;this.cursor=null;
+    this.data=null;this.sector=null;this.bucket=null;this.region=null;this.cursor=null;
     this.shapes=[];this.lastTotal=0;this.pulseAt=0;
   }
 
-  async fetch(level,sector=null,bucket=null,cursor=null) {
+  async fetch(level,sector=null,bucket=null,cursor=null,region=null) {
     const params = new URLSearchParams({level});
     if (sector!==null) params.set("sector", String(sector));
     if (bucket!==null) params.set("bucket", String(bucket));
     if (cursor!==null) params.set("cursor", String(cursor));
+    if (region!==null) params.set("region", String(region));
     const response=await window.fetch("/api/soul/atlas?"+params,{cache:"no-store"});
     if (!response.ok) {
       const err=await response.json();
@@ -46,14 +47,22 @@ export class BrainAtlasView {
     this.lastTotal=data.total;
     if (oldTotal && oldTotal !== data.total) this.pulseAt=performance.now();
     this.active=true;this.level="overview";
-    this.data=data;this.sector=null;this.bucket=null;this.cursor=null;
+    this.data=data;this.sector=null;this.bucket=null;this.region=null;this.cursor=null;
   }
 
   async open(node) {
     if (!node) return null;
     if (node.type==="sector") {
-      this.sector=node.sector;this.bucket=null;this.cursor=null;
-      this.data=await this.fetch("clusters",this.sector);
+      this.sector=node.sector;this.bucket=null;this.region=null;this.cursor=null;
+      const count=this.data?.sectors?.find(x=>x.id===this.sector)?.count || 0;
+      this.level=count>5000?"regions":"clusters";
+      this.data=await this.fetch(this.level,this.sector);
+      this.pulseAt=performance.now();
+      return null;
+    }
+    if (node.type==="region") {
+      this.region=node.region;this.cursor=null;this.bucket=null;
+      this.data=await this.fetch("clusters",this.sector,null,null,this.region);
       this.level="clusters";this.pulseAt=performance.now();
       return null;
     }
@@ -65,7 +74,7 @@ export class BrainAtlasView {
     }
     if (node.type==="more") {
       this.cursor=this.data.next_cursor;
-      this.data=await this.fetch("clusters",this.sector,null,this.cursor);
+      this.data=await this.fetch(this.level,this.sector,null,this.cursor,this.region);
       return null;
     }
     if (node.type==="memory") return node;
@@ -74,11 +83,14 @@ export class BrainAtlasView {
 
   async back() {
     if (this.level==="nodes") {
-      this.data=await this.fetch("clusters",this.sector,null,this.cursor);
+      this.data=await this.fetch("clusters",this.sector,null,this.cursor,this.region);
       this.level="clusters";this.bucket=null;
-    } else if (this.level==="clusters") {
+    } else if (this.level==="clusters" && this.region!==null) {
+      this.data=await this.fetch("regions",this.sector);
+      this.level="regions";this.region=null;this.cursor=null;
+    } else if (this.level==="regions" || this.level==="clusters") {
       this.data=await this.fetch("overview");
-      this.level="overview";this.sector=null;this.cursor=null;
+      this.level="overview";this.sector=null;this.region=null;this.cursor=null;
     }
   }
 
@@ -91,7 +103,7 @@ export class BrainAtlasView {
       this.pulseAt=performance.now();
     }
     this.lastTotal=overview.total;
-    this.data=await this.fetch(this.level,this.sector,this.bucket,this.cursor);
+    this.data=await this.fetch(this.level,this.sector,this.bucket,this.cursor,this.region);
   }
 
   hit(x,y) {
@@ -142,12 +154,12 @@ export class BrainAtlasView {
                           type:"sector",sector:item.id,
                           preview:NAMES[item.kind]+" · "+item.count+" записей"});
       }
-    } else if (this.level==="clusters") {
-      // Golden-angle packing displays hundreds of grounded 256-ID clusters,
-      // never thousands of individual cells at a distant zoom.
-      const groups=this.data.clusters||[];
+    } else if (this.level==="clusters" || this.level==="regions") {
+      // Regions and 256-ID clusters share one bounded virtualized renderer.
+      const groups=this.level==="regions"
+        ? (this.data.regions||[]) : (this.data.clusters||[]);
       const spacing=Math.min(15,Math.max(7,base/19))*zoom;
-      const center=groups.length/2;
+      // Stable golden-angle placement and screen-space culling keep draw bounded.
       for (let i=0;i<groups.length;i++) {
         const cluster=groups[i];
         const angle=i*GOLDEN;
@@ -163,9 +175,11 @@ export class BrainAtlasView {
           ctx.fillText(compact(cluster.count),px,py);
         }
         this.shapes.push({x:px,y:py,radius:Math.max(radius,8),
-                          type:"cluster",bucket:cluster.bucket,
-                          preview:"Сота-кластер · "+cluster.count+
-                                  " записей · ID "+cluster.first_id+"–"+cluster.last_id});
+                          type:this.level==="regions"?"region":"cluster",
+                          region:cluster.region,bucket:cluster.bucket,
+                          preview:(this.level==="regions"?"Область памяти":"Сота-кластер")+
+                            " · "+cluster.count+" записей · ID "+
+                            cluster.first_id+"–"+cluster.last_id});
       }
       if (this.data.has_more) {
         const px=width-45,py=height-37;
@@ -208,7 +222,8 @@ export class BrainAtlasView {
     }
     // One concise hint is sufficient; no overlay control panel.
     const label=this.level==="overview" ? "Нажми сектор · углубиться в память" :
-      this.level==="clusters" ? "Нажми кластер · двойной щелчок — обзор" :
+      this.level==="regions" ? "Нажми область · Esc — назад" :
+      this.level==="clusters" ? "Нажми кластер · Esc — назад" :
       "Нажми воспоминание · двойной щелчок — обзор";
     ctx.fillStyle="rgba(222,189,146,.65)";
     ctx.font="10px system-ui,sans-serif";ctx.textAlign="center";

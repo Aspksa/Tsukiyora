@@ -138,7 +138,7 @@ class PrecisionMemory:
             placeholder = ",".join("?" for _ in ids)
             records = [] if not ids else [dict(x) for x in db.execute(
                 "SELECT m.id,m.kind,m.content,m.source_type,m.source_ref,"
-                "m.verification_state,m.created_at,"
+                "m.verification_state,m.created_at,m.updated_at,"
                 "COALESCE(l.priority,2) AS priority,COALESCE(l.revision_id,0) AS revision_id "
                 "FROM memory_items m LEFT JOIN memory_layer_index l ON l.memory_id=m.id "
                 "WHERE m.status='active' AND m.id IN (" + placeholder + ")",
@@ -182,7 +182,7 @@ class PrecisionMemory:
                             continue
                         related = db.execute(
                             "SELECT id,kind,content,source_type,source_ref,"
-                            "verification_state,created_at FROM memory_items "
+                            "verification_state,created_at,updated_at FROM memory_items "
                             "WHERE id=? AND status='active'", (target,)
                         ).fetchone()
                         if related is None:

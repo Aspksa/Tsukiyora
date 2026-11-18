@@ -245,7 +245,7 @@ class V08HttpTests(unittest.TestCase):
         for control in ("precision-search","academy-enabled","character-progress",
                         "browser-selftest","soul-canvas","run-system-check"):
             self.assertIn('id="'+control+'"',html)
-        for endpoint in ("/api/soul/precision","/api/soul/academy",
+        for endpoint in ("/api/soul/rag","/api/soul/academy",
                          "/api/soul/character","/api/soul/atlas",
                          "/api/system/selftest"):
             self.assertIn(endpoint,script)

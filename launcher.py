@@ -18,6 +18,8 @@ import re
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from cognitive_core import CognitiveCore, CognitiveWorker
+from migration_guard import MigrationGuard
+from reliability import Reliability
 from memory_quality import MemoryQuality
 from vector_memory import VectorMemory
 from stream_runtime import handle_stream, stop_stream
@@ -53,6 +55,7 @@ def load_personality(path: Path = PROFILE) -> dict:
 
 def init_database(db_path: Path = DATABASE) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    MigrationGuard(db_path).prepare()
     with closing(sqlite3.connect(db_path)) as db:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute(
@@ -65,6 +68,7 @@ def init_database(db_path: Path = DATABASE) -> None:
     MemoryStore(db_path).initialize()
     SoulGrowth(db_path).initialize()
     CognitiveCore(db_path).initialize()
+    MigrationGuard(db_path).finish()
 
 
 def setup_logs() -> None:
@@ -213,6 +217,14 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.reliability.local_checks())
         if path == "/api/system/selftest":
             return self.send_json(self.server.cognition.reliability.local_selftest())
+        if path == "/api/system/migrations":
+            return self.send_json(self.server.cognition.migrations.audit())
+        if path == "/api/system/recovery-check":
+            try:
+                name = args.get("name", [""])[0]
+                return self.send_json(self.server.cognition.reliability.dry_run_restore(name))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/system/backups":
             return self.send_json({"items": self.server.cognition.reliability.backups()})
         if path == "/api/system/workload":
@@ -235,10 +247,16 @@ class SoulHandler(BaseHTTPRequestHandler):
                 if level == "overview":
                     return self.send_json(atlas.overview())
                 sector = int(args.get("sector", ["-1"])[0])
+                if level == "regions":
+                    cursor = args.get("cursor", [None])[0]
+                    return self.send_json(atlas.regions(
+                        sector,cursor=int(cursor) if cursor is not None else None))
                 if level == "clusters":
                     cursor = args.get("cursor", [None])[0]
+                    region = args.get("region", [None])[0]
                     return self.send_json(atlas.clusters(
-                        sector, cursor=int(cursor) if cursor is not None else None))
+                        sector, cursor=int(cursor) if cursor is not None else None,
+                        region=int(region) if region is not None else None))
                 if level == "nodes":
                     bucket = int(args.get("bucket", ["-1"])[0])
                     return self.send_json(atlas.nodes(sector,bucket))
@@ -247,6 +265,10 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self._handle_error(error)
         if path == "/api/soul/academy":
             return self.send_json(self.server.cognition.academy.status())
+        if path == "/api/soul/academy/metrics":
+            return self.send_json(self.server.cognition.metrics.status())
+        if path == "/api/soul/character/timeline":
+            return self.send_json(self.server.cognition.continuity.timeline())
         if path == "/api/soul/character":
             return self.send_json(self.server.cognition.continuity.state())
         if path == "/api/soul/precision/status":
@@ -345,6 +367,14 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/rag":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.rag.search(
+                    obj.get("query"),limit=obj.get("limit",12),
+                    max_age_days=obj.get("max_age_days",365)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/precision":
             try:
                 obj = self._read_body()
@@ -561,6 +591,38 @@ class SoulHandler(BaseHTTPRequestHandler):
 
 
 def run() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        # Real portable launcher smoke test. Uses TEMP SQLite, no browser,
+        # secrets, system services, network or the user's persistent database.
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="tsukiyora-smoke-") as folder:
+            candidate=Path(folder)/"data"/"memory.sqlite3"
+            persona=load_personality()
+            init_database(candidate)
+            probe=SoulServer(("127.0.0.1",0),persona,candidate)
+            try:
+                report=Reliability(candidate,ROOT).local_checks()
+                fts=probe.cognition.migrations.audit()
+                html=(UI/"index.html").read_text(encoding="utf-8")
+                script=(UI/"app.ts").read_text(encoding="utf-8")
+                buttons=("cloud-diagnose","send-message","stop-message",
+                         "run-system-check","precision-search","academy-enabled")
+                interface=all('id="'+name+'"' in html for name in buttons)
+                ok=bool(report["all_local_passed"] and
+                        fts["sqlite_integrity"] and interface and
+                        "/api/chat/stream" in script)
+                print(json.dumps({
+                    "portable_launch_smoke":"passed" if ok else "failed",
+                    "sqlite":fts["sqlite_integrity"],
+                    "ui_markup":interface,"cloud_live_tested":False,
+                    "browser_buttons_clicked":False,
+                }))
+                return 0 if ok else 1
+            finally:
+                probe.server_close()
+    if len(sys.argv)>1:
+        print("Usage: launcher.py [--self-test]", file=sys.stderr)
+        return 2
     if sys.version_info < (3, 10):
         print("Python 3.10+ required.", file=sys.stderr)
         return 1

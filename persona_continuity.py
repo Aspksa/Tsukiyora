@@ -102,6 +102,42 @@ class PersonaContinuity:
                 )
         return summary
 
+    def timeline(self, limit: int = 60) -> dict:
+        """Dated events from confirmed memory and conversation history only."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid biography timeline limit.")
+        with closing(self.connect()) as db:
+            notes=[dict(x) for x in db.execute(
+                "SELECT m.id,m.kind,m.content,m.source_type,m.source_ref,"
+                "m.created_at,m.updated_at,"
+                "(SELECT COUNT(*) FROM memory_revisions r WHERE r.memory_id=m.id) AS revisions "
+                "FROM memory_items m WHERE m.status='active' "
+                "AND m.kind IN ('biography','preference','event') "
+                "ORDER BY m.created_at DESC,m.id DESC LIMIT ?",(limit,)
+            )]
+            encounters=[dict(x) for x in db.execute(
+                "SELECT id,event,source_type,source_ref,created_at "
+                "FROM soul_journal WHERE event IN ('conversation_completed','memory_approved') "
+                "ORDER BY created_at DESC,id DESC LIMIT ?",(limit,)
+            )]
+        timeline=[
+            {"event":"approved_"+x["kind"],"memory_id":x["id"],
+             "timestamp":x["created_at"],"detail":x["content"],
+             "source_type":x["source_type"],"source_ref":x["source_ref"],
+             "revisions":x["revisions"],"truth_verified":False}
+            for x in notes
+        ]+[
+            {"event":x["event"],"memory_id":None,
+             "timestamp":x["created_at"],"detail":"Диалог или запись сохранены",
+             "source_type":x["source_type"],"source_ref":x["source_ref"],
+             "revisions":0,"truth_verified":False}
+            for x in encounters
+        ]
+        timeline.sort(key=lambda x:x["timestamp"],reverse=True)
+        return {"items":timeline[:limit],"source":"approved_local_SQLite",
+                "real_feelings_claimed":False,
+                "invented_relationship_events":False}
+
     def context(self) -> str:
         """Bounded, clearly labelled historical DATA for model context."""
         state = self.state()

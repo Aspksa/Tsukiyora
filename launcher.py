@@ -318,6 +318,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                     self._read_body().get("model")))
             except (ValueError, OSError) as error:
                 return self._handle_error(error)
+        if method == "POST" and path == "/api/cloud/embedding/auto":
+            try:
+                return self.send_json(self.server.cloud.enable_vector_chat(
+                    self._read_body().get("allowed")))
+            except ValueError as error:
+                return self.send_json({"error": str(error)}, 400)
         if method == "POST" and path == "/api/soul/vectors/index":
             try:
                 obj = self._read_body()

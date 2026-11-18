@@ -208,6 +208,57 @@ class CloudDiagnosticsTests(FreshDatabase):
         self.assertEqual(check["checks"]["embeddings"]["state"], "skipped")
         self.assertTrue(check["live"])
 
+    def test_embedding_chat_is_disabled_by_default_and_reset_by_key_change(self):
+        cloud = cloudru.CloudSession()
+        cloud.set_key("FAKE_OLD_KEY")
+        with patch.object(cloudru, "_request", return_value={
+                "data": [{"id": "BAAI/bge-m3"}, {"id": "chat/model"}]}):
+            cloud.models()
+        cloud.select("chat/model")
+        cloud.select_embedding("BAAI/bge-m3")
+        self.assertFalse(cloud.status()["vector_chat_enabled"])
+        self.assertTrue(cloud.enable_vector_chat(True)["vector_chat_enabled"])
+        self.assertFalse(cloud.enable_vector_chat(False)["vector_chat_enabled"])
+        self.assertTrue(cloud.enable_vector_chat(True)["vector_chat_enabled"])
+        cloud.set_key("FAKE_NEW_KEY")
+        self.assertFalse(cloud.status()["vector_chat_enabled"])
+        with self.assertRaises(ValueError):
+            cloud.enable_vector_chat(True)
+        self.assertNotIn("FAKE_NEW_KEY", json.dumps(cloud.status()))
+        with self.assertRaises(ValueError):
+            cloud.enable_vector_chat("yes")
+
+    def test_explicit_embedding_consent_endpoint_rejects_invalid_values(self):
+        server = launcher.SoulServer(("127.0.0.1", 0),
+                                     launcher.load_personality(), self.db_path)
+        server.cloud.set_key("FAKE_KEY")
+        server.cloud._verified = True
+        server.cloud._models = ["BAAI/bge-m3", "chat/model"]
+        server.cloud._model = "chat/model"
+        server.cloud.select_embedding("BAAI/bge-m3")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            base = "http://127.0.0.1:" + str(server.server_address[1])
+            opener = build_opener(ProxyHandler({}))
+            def post(value):
+                req = Request(base + "/api/cloud/embedding/auto", method="POST",
+                    data=json.dumps(value).encode(), headers={
+                        "Content-Type": "application/json", "Origin": base,
+                    })
+                with opener.open(req, timeout=5) as response:
+                    return json.load(response)
+            self.assertFalse(post({"allowed": False})["vector_chat_enabled"])
+            with self.assertRaises(HTTPError) as caught:
+                post({"allowed": "true"})
+            self.assertEqual(caught.exception.code, 400)
+            self.assertTrue(post({"allowed": True})["vector_chat_enabled"])
+            self.assertFalse(post({"allowed": False})["vector_chat_enabled"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
     def test_endpoint_requires_no_public_token_and_no_saved_report(self):
         server = launcher.SoulServer(("127.0.0.1", 0),
                                      launcher.load_personality(), self.db_path)

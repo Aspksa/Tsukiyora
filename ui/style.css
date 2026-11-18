@@ -142,3 +142,7 @@ dialog{max-height:min(86vh,850px);overflow-y:auto}
   .conversation{scroll-behavior:auto}
   #soul-canvas{transition:none}
 }
+
+.vector-opt-in{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.6;color:#bcaa90;padding:9px 3px}
+.vector-opt-in input{accent-color:#ba996c;width:16px;height:16px;flex:0 0 16px;margin-top:2px;cursor:pointer}
+.vector-opt-in input:disabled{cursor:not-allowed;opacity:.5}

@@ -104,8 +104,8 @@ class CloudSSEProtocolTests(unittest.TestCase):
 
     def response(self, include_done=True):
         chunks = [
-            b'data: {"choices":[{"delta":{"content":"Привет"}}]}\\n\\n'.replace(b"\\n", b"\n"),
-            b'data: {"choices":[{"delta":{"content":"! привет"}}]}\\n\\n'.replace(b"\\n", b"\n"),
+            'data: {"choices":[{"delta":{"content":"Привет"}}]}\\n\\n'.replace('\\n', '\n').encode("utf-8"),
+            'data: {"choices":[{"delta":{"content":"! привет"}}]}\\n\\n'.replace('\\n', '\n').encode("utf-8"),
         ]
         if include_done:
             chunks.append(b"data: [DONE]\n\n")

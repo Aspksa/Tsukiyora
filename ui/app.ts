@@ -995,12 +995,12 @@ $("precision-search").addEventListener("click", async () => {
   const button=$("precision-search");
   button.disabled=true;
   try {
-    const result=await requestJSON("/api/soul/rag4","POST", {
-      query,limit:20,max_age_days:365,
+    const result=await requestJSON("/api/soul/evidence","POST", {
+      query,limit:20,
     });
     const target=$("memory-results");
     target.replaceChildren();
-    for (const item of result.items) {
+    for (const item of result.memories) {
       const row=document.createElement("div");
       row.className="memory-record";
       const label=document.createElement("small");
@@ -1017,15 +1017,27 @@ $("precision-search").addEventListener("click", async () => {
       row.append(label,body);
       target.append(row);
     }
-    if (!result.items.length) {
+    for (const doc of result.documents) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const label=document.createElement("small");
+      label.textContent=doc.citation+" · "+doc.name+
+        " · ревизия "+doc.revision+" · сохранён локально";
+      const body=document.createElement("p");
+      body.textContent=doc.content;
+      row.append(label,body);
+      target.append(row);
+    }
+    if (!result.memories.length && !result.documents.length) {
       const empty=document.createElement("p");
       empty.className="memory-empty";
       empty.textContent="По этому запросу записей не найдено.";
       target.append(empty);
     }
-    memoryFeedback("Локальный RAG: "+result.passes.length+
-      " шага поиска, связи и источники проверены на наличие. "+
-      "Истинность записей не доказана. Cloud.ru не вызывается.");
+    memoryFeedback("RAG 5.0 · память "+result.memories.length+
+      ", фрагментов документов "+result.documents.length+
+      ", потенциальных противоречий "+result.flags.length+
+      ". Источники не являются проверкой истинности; Cloud.ru не вызывается.");
   } catch (error) {
     memoryFeedback("Ошибка точного поиска: "+error.message);
   } finally {
@@ -1382,14 +1394,24 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups, selftest, migration, budget] = await Promise.all([
+    const [report, workload, backups, selftest, migration, budget, evidence] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
       requestJSON("/api/system/selftest"),
       requestJSON("/api/system/migrations"),
       requestJSON("/api/system/cloud-budget"),
+      requestJSON("/api/soul/evidence/audits"),
     ]);
+    const evidencePane=$("evidence-audit-summary");
+    evidencePane.replaceChildren();
+    const entry=document.createElement("p");
+    entry.className="memory-empty";
+    const flagged=evidence.items.filter(x=>x.label==="review_required").length;
+    entry.textContent="Аудит ответов: "+evidence.items.length+
+      " проверено · требуют внимания: "+flagged+
+      " · проверяется наличие цитат, не фактическая истинность.";
+    evidencePane.append(entry);
     $("budget-chat").value=budget.limits.chat_per_day;
     $("budget-embeddings").value=budget.limits.embeddings_per_day;
     $("budget-minute").value=budget.limits.per_minute;

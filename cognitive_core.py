@@ -201,7 +201,7 @@ class CognitiveCore:
             # Only aggregate counts go into the periodic diary, never raw chats.
             summary = json.dumps({
                 "possible_conflicts": len(quality["conflicts"]),
-                "possible_duplicates": len(quality["duplicates"]),
+                "possible_duplicates": len(quality["duplicates"]) + len(quality["semantic_duplicates"]),
                 "pending": stats["pending"],
                 "approved": stats["vectors"]["active_memories"],
                 "indexed": stats["vectors"]["indexed_memories"],

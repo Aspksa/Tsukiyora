@@ -291,7 +291,7 @@ class CloudSession:
             if error.code == 429:
                 raise CloudError("Cloud.ru: превышен лимит запросов.", 429) from None
             raise CloudError(f"Cloud.ru вернул HTTP {error.code}.") from None
-        except (OSError, TimeoutError, URLError):
+        except (OSError, TimeoutError, URLError, ValueError):
             if not cancellation.is_set():
                 raise CloudError("Соединение с Cloud.ru было прервано.") from None
 

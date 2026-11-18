@@ -767,7 +767,9 @@ async function sendMessage() {
         attachFeedback(placeholder, data.message_id);
         pendingClientId = "";
         currentPrompt = "";
-        $("chat-notice").textContent = "Ответ и история сохранены локально.";
+        $("chat-notice").textContent = "Ответ и история сохранены локально." +
+          (data.audit === "needs_review" ? " Проверь источники в разделе опыта." :
+           data.audit === "source_checked" ? " Ссылки на память найдены; истинность не проверена." : "");
         if (data.pending) $("chat-notice").textContent += " Новые воспоминания ждут подтверждения: " + data.pending;
       } else if (event === "stopped") {
         stopped = true;
@@ -1131,3 +1133,123 @@ $("settings-open").addEventListener("click", refreshCognition);
 window.setInterval(() => {
   if (!document.hidden) refreshBrain();
 }, 30000);
+
+
+// v0.7 diagnostics are local by default. The Cloud.ru live check remains
+// an explicit separate button and NEVER runs automatically on page open.
+async function refreshDiagnostics() {
+  const target = $("diagnostics-results");
+  target.replaceChildren();
+  try {
+    const [report, workload, backups] = await Promise.all([
+      requestJSON("/api/system/diagnostics"),
+      requestJSON("/api/system/workload"),
+      requestJSON("/api/system/backups"),
+    ]);
+    for (const [name, info] of Object.entries(report.checks)) {
+      const item = document.createElement("p");
+      item.className = "memory-empty";
+      item.textContent = (info.status === "passed" ? "✓ " :
+        info.status === "pending" ? "· " : "! ") + name +
+        ": " + info.status + (info.integrity ? " · " + info.integrity : "");
+      target.append(item);
+    }
+    const q = workload.usage;
+    $("workload-status").textContent =
+      "Очередь обслуживания: " + workload.queue_depth +
+      " · оценка токенов (не данные провайдера): запросы " + q.approx_prompt_tokens +
+      ", ответы " + q.approx_answer_tokens +
+      " · резервных копий " + backups.items.length +
+      ". Общение имеет приоритет; фоновые задачи не вызывают Cloud.ru.";
+  } catch (error) {
+    const item = document.createElement("p");
+    item.className = "memory-empty";
+    item.textContent = "Ошибка диагностики: " + error.message;
+    target.append(item);
+  }
+}
+$("run-system-check").addEventListener("click", refreshDiagnostics);
+$("system-diagnostics").addEventListener("toggle", () => {
+  if ($("system-diagnostics").open) refreshDiagnostics();
+});
+$("diagnostics-backup").addEventListener("click", async () => {
+  const button = $("diagnostics-backup");
+  button.disabled = true;
+  try {
+    const result = await requestJSON("/api/system/backup", "POST", {});
+    $("workload-status").textContent = "Проверенная резервная копия: " + result.name +
+      ". Восстановление только после остановки сервера.";
+    await refreshDiagnostics();
+  } catch (error) {
+    $("workload-status").textContent = "Ошибка резервного копирования: " + error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function refreshMemoryLayers() {
+  const target = $("layer-results");
+  const layer = $("layer-selector").value;
+  try {
+    const params = new URLSearchParams({layer, limit: "35"});
+    if (layer === "short_term" && activeSession) {
+      params.set("conversation_id", activeSession);
+    }
+    const response = await requestJSON("/api/soul/layers?" + params);
+    target.replaceChildren();
+    if (!response.items.length) {
+      const empty = document.createElement("p");
+      empty.className = "memory-empty";
+      empty.textContent = "В этом уровне пока нет сохранённых записей.";
+      target.append(empty);
+    }
+    for (const memory of response.items) {
+      const node = document.createElement("div");
+      node.className = "memory-record";
+      const label = document.createElement("small");
+      label.textContent = memory.layer + " · источник: " +
+        (memory.source_ref || memory.source_type) +
+        " · приоритет: " + memory.priority +
+        (memory.revision_id ? " · версия: " + memory.revision_id : "");
+      const body = document.createElement("p");
+      body.textContent = memory.content;
+      node.append(label, body);
+      target.append(node);
+    }
+  } catch (error) {
+    target.textContent = "Ошибка чтения уровней памяти: " + error.message;
+  }
+}
+$("layer-selector").addEventListener("change", refreshMemoryLayers);
+$("memory-layers").addEventListener("toggle", () => {
+  if ($("memory-layers").open) refreshMemoryLayers();
+});
+
+async function refreshAudits() {
+  try {
+    const report = await requestJSON("/api/soul/audits");
+    const unresolved = report.items.filter(x => x.state === "needs_review").length;
+    $("audit-status").textContent = "Проверка ссылок на память: " +
+      report.items.length + " завершённых аудитов · требуют просмотра: " +
+      unresolved + ". Это не автоматическая проверка истинности ответов.";
+  } catch (error) {
+    $("audit-status").textContent = "Аудит источников: " + error.message;
+  }
+}
+$("cognitive-details").addEventListener("toggle", () => {
+  if ($("cognitive-details").open) refreshAudits();
+});
+
+canvas.addEventListener("keydown", (event) => {
+  const key = event.key;
+  if (key === "+" || key === "=") graphScale = Math.min(3.2, graphScale * 1.13);
+  else if (key === "-") graphScale = Math.max(.45, graphScale / 1.13);
+  else if (key === "ArrowLeft") graphPanX += 22;
+  else if (key === "ArrowRight") graphPanX -= 22;
+  else if (key === "ArrowUp") graphPanY += 22;
+  else if (key === "ArrowDown") graphPanY -= 22;
+  else if (key === "Home") {graphScale = 1; graphPanX = 0; graphPanY = 0;}
+  else return;
+  event.preventDefault();
+  if (reducedMotion) paint();
+});

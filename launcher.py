@@ -361,6 +361,16 @@ class SoulHandler(BaseHTTPRequestHandler):
                 if path == "/api/memory/conversations":
                     return self.send_json({"conversations": store.list_conversations(
                         limit=int(arg("limit", "30")))})
+                if path == "/api/memory/history/search":
+                    before=arg("before_id")
+                    return self.send_json(self.server.cognition.dialogues.search(
+                        arg("query"),limit=int(arg("limit","20")),
+                        before_id=int(before) if before else None))
+                if path == "/api/memory/history/recap":
+                    return self.send_json(self.server.cognition.dialogues.summary(
+                        arg("conversation_id")))
+                if path == "/api/memory/history/health":
+                    return self.send_json(self.server.cognition.dialogues.health())
                 if path == "/api/memory/messages":
                     before = arg("before_id")
                     return self.send_json({"messages": store.list_messages(

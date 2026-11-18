@@ -252,6 +252,60 @@ class CloudSession:
             raise CloudError("Модель не вернула текст на проверочный запрос.")
         return {"ok": True, "model": model, "answer": answer[:250]}
 
+    def checkup(self, include_stream: bool = True, include_embeddings: bool = True) -> dict:
+        """Manual, real-provider diagnostic. It spends tokens, saves no user content.
+
+        Results are not persisted; no fake 'live pass' is possible without the key.
+        """
+        if type(include_stream) is not bool or type(include_embeddings) is not bool:
+            raise ValueError("Invalid diagnostic switches.")
+        checks = {}
+        try:
+            available = self.models()
+            checks["models"] = {"state": "passed", "count": len(available)}
+        except (CloudError, ValueError) as error:
+            checks["models"] = {"state": "failed", "message": str(error)}
+            return {"live": False, "checks": checks, "requires_local_key": True}
+        try:
+            result = self.diagnostic()
+            checks["chat"] = {"state": "passed", "model": result["model"],
+                              "sample": result["answer"][:120]}
+        except (CloudError, ValueError) as error:
+            checks["chat"] = {"state": "failed", "message": str(error)}
+        if include_stream:
+            try:
+                pieces = list(self.stream(
+                    "Ответь одним словом на русском, без личных данных.",
+                    [{"role": "user", "content": "Проверка потокового ответа."}],
+                    threading.Event()
+                ))
+                if not "".join(pieces).strip():
+                    raise CloudError("Поток завершился без текста.")
+                checks["stream"] = {"state": "passed", "fragments": len(pieces)}
+            except (CloudError, ValueError, OSError) as error:
+                checks["stream"] = {"state": "failed", "message": str(error)}
+        else:
+            checks["stream"] = {"state": "skipped"}
+        if include_embeddings:
+            if not self.status()["embedding_model"]:
+                checks["embeddings"] = {
+                    "state": "skipped", "message": "Embedding-модель ещё не выбрана."
+                }
+            else:
+                try:
+                    vectors = self.embed(["Проверка векторного API Цукиёры"])
+                    checks["embeddings"] = {"state": "passed",
+                                            "dimension": len(vectors[0])}
+                except (CloudError, ValueError, OSError) as error:
+                    checks["embeddings"] = {"state": "failed", "message": str(error)}
+        else:
+            checks["embeddings"] = {"state": "skipped"}
+        live = bool(checks.get("chat", {}).get("state") == "passed" and
+                    checks.get("stream", {}).get("state") in ("passed", "skipped") and
+                    checks.get("embeddings", {}).get("state") in ("passed", "skipped"))
+        return {"live": live, "checks": checks, "requires_local_key": True,
+                "warning": "Это проверка доступности API, не гарантия качества будущих ответов."}
+
     def rerank(self, query: str, candidates: list[dict]) -> list[int]:
         """An actual semantic LLM judge for bounded local retrieval candidates."""
         if not candidates:

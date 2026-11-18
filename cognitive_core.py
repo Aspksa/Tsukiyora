@@ -30,6 +30,7 @@ from rag_fusion import RagFusion
 from academy_experiments import AcademyExperiments
 from academy_metrics import AcademyMetrics
 from migration_guard import MigrationGuard
+from conversation_memory import ConversationMemory
 from evidence_review import EvidenceReview
 from academy_curriculum import AcademyCurriculum
 from persona_arc import PersonaArc
@@ -60,6 +61,7 @@ class CognitiveCore:
         self.experiments = AcademyExperiments(path)
         self.metrics = AcademyMetrics(path)
         self.migrations = MigrationGuard(path)
+        self.dialogues = ConversationMemory(path)
         self.evidence = EvidenceReview(path)
         self.curriculum = AcademyCurriculum(path)
         self.persona_arc = PersonaArc(path)
@@ -111,6 +113,7 @@ class CognitiveCore:
         self.rollback.initialize()
         self.practice.initialize()
         self.materializer.initialize()
+        self.dialogues.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -258,6 +261,7 @@ class CognitiveCore:
                     "stable_habits": len(self.continuity.state()["stable_habits"])
                 },
                 "precision": {"fts5": self.precision.has_fts},
+                "dialogue_memory": self.dialogues.health(),
                 "maintenance": self.scheduler.pending()}
 
     def cycle(self) -> dict:

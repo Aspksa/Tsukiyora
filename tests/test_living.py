@@ -19,7 +19,7 @@ import cloudru
 import launcher
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
-from stream_runtime import stop_stream
+from stream_runtime import StreamCancellation, stop_stream
 
 
 def stream_stub(self, prompt, history, cancellation):
@@ -92,6 +92,65 @@ class SoulGrowthTests(unittest.TestCase):
         self.soul.journal("conversation_completed", "Первая беседа", "message", "88")
         self.soul.journal("conversation_completed", "Первая беседа", "message", "88")
         self.assertEqual(len(self.soul.journal_entries()), 1)
+
+
+class CloudSSEProtocolTests(unittest.TestCase):
+    def setUp(self):
+        self.cloud = cloudru.CloudSession()
+        self.cloud.set_key("FAKE_FOR_TEST")
+        self.cloud._model = "fake/ok"
+        self.cloud._models = ["fake/ok"]
+        self.cloud._verified = True
+
+    def response(self, include_done=True):
+        chunks = [
+            b'data: {"choices":[{"delta":{"content":"Привет"}}]}\\n\\n'.replace(b"\\n", b"\n"),
+            b'data: {"choices":[{"delta":{"content":"! привет"}}]}\\n\\n'.replace(b"\\n", b"\n"),
+        ]
+        if include_done:
+            chunks.append(b"data: [DONE]\n\n")
+        class FakeResponse:
+            headers = {"Content-Type": "text/event-stream; charset=utf-8"}
+            closed = False
+            def __init__(self, frames):
+                self.data = iter(frames)
+            def readline(self, limit):
+                if self.closed:
+                    return b""
+                return next(self.data, b"")
+            def close(self):
+                self.closed = True
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                self.close()
+        return FakeResponse(chunks)
+
+    def test_sse_frames_are_joined_and_stream_closed(self):
+        response = self.response()
+        class FakeOpener:
+            def open(self, request, timeout):
+                self.request = request
+                return response
+        opener = FakeOpener()
+        with patch.object(cloudru, "build_opener", return_value=opener):
+            tokens = list(self.cloud.stream("Характер Цукиёры", [
+                {"role": "user", "content": "Привет"}], StreamCancellation()))
+        self.assertEqual(tokens, ["Привет", "! привет"])
+        self.assertTrue(response.closed)
+        self.assertEqual(opener.request.full_url,
+                         "https://foundation-models.api.cloud.ru/v1/chat/completions")
+        self.assertIn(b'"stream": true', opener.request.data)
+
+    def test_missing_done_does_not_commit_partial_reply(self):
+        response = self.response(include_done=False)
+        class FakeOpener:
+            def open(self, request, timeout):
+                return response
+        with patch.object(cloudru, "build_opener", return_value=FakeOpener()):
+            with self.assertRaises(cloudru.CloudError):
+                list(self.cloud.stream("Характер", [{"role": "user", "content": "Привет"}],
+                                       StreamCancellation()))
 
 
 class StreamingApiTests(unittest.TestCase):

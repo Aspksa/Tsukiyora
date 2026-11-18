@@ -111,6 +111,7 @@ class CloudSession:
         self._model = ""
         self._embedding_model = ""
         self._vector_chat_enabled = False
+        self._document_context_allowed = False
         self.guard = None  # Attached by the local SoulServer; never persisted.
         self._preferences_file = Path(preferences_file) if preferences_file else None
         if self._preferences_file and self._preferences_file.exists():
@@ -139,7 +140,8 @@ class CloudSession:
             return {"provider": "cloud.ru", "configured": bool(self._key),
                     "verified": self._verified, "model": self._model,
                     "embedding_model": self._embedding_model,
-                    "vector_chat_enabled": self._vector_chat_enabled}
+                    "vector_chat_enabled": self._vector_chat_enabled,
+                    "document_context_allowed": self._document_context_allowed}
 
     def set_key(self, key: str) -> dict:
         if not isinstance(key, str) or len(key) > 4096 or any(c in key for c in "\r\n"):
@@ -149,6 +151,7 @@ class CloudSession:
             self._verified = False
             self._models = []
             self._vector_chat_enabled = False
+            self._document_context_allowed = False
             return self.status()
 
     def models(self) -> list[str]:
@@ -207,6 +210,18 @@ class CloudSession:
                     "model": self._model, "embedding_model": model,
                 }), encoding="utf-8")
                 tmp.replace(self._preferences_file)
+            return self.status()
+
+    def enable_document_context(self, allowed: bool) -> dict:
+        """Explicit, session-only permission for sending selected text fragments
+        of imported documents as chat context to the configured cloud LLM.
+        """
+        if type(allowed) is not bool:
+            raise ValueError("Требуется явное согласие true/false.")
+        with self._lock:
+            if allowed and not (self._key and self._verified and self._model):
+                raise ValueError("Сначала подключи Cloud.ru и выбери модель.")
+            self._document_context_allowed = allowed
             return self.status()
 
     def enable_vector_chat(self, allowed: bool) -> dict:

@@ -20,6 +20,7 @@ from experience_engine import ExperienceEngine
 from layered_memory import LayeredMemory
 from reliability import Reliability
 from maintenance import Maintenance
+from reasoning import ReasoningAudit
 
 
 class CognitiveCore:
@@ -33,6 +34,7 @@ class CognitiveCore:
         self.layers = LayeredMemory(path)
         self.reliability = Reliability(path)
         self.scheduler = Maintenance(path)
+        self.audit = ReasoningAudit(path)
         self.chat_priority = None
 
     def connect(self):
@@ -65,6 +67,7 @@ class CognitiveCore:
         self.layers.initialize()
         self.reliability.initialize()
         self.scheduler.initialize()
+        self.audit.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:

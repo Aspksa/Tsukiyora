@@ -375,6 +375,9 @@ class SoulHandler(BaseHTTPRequestHandler):
                 if path == "/api/memory/history/recap":
                     return self.send_json(self.server.cognition.dialogues.summary(
                         arg("conversation_id")))
+                if path == "/api/memory/history/context":
+                    return self.send_json(self.server.cognition.dialogues.context(
+                        int(arg("message_id","0"))))
                 if path == "/api/memory/history/health":
                     return self.send_json(self.server.cognition.dialogues.health())
                 if path == "/api/memory/messages":

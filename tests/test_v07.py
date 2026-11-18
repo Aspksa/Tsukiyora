@@ -42,7 +42,8 @@ class V07StorageTests(unittest.TestCase):
         layers = LayeredMemory(self.db)
         first = layers.repair()
         self.assertGreaterEqual(first["examined"], 3)
-        self.assertEqual(first["updated"], 0)  # already repaired by read? 
+        self.assertGreaterEqual(first["updated"], 3)
+        self.assertEqual(layers.repair()["updated"], 0) 
         self.assertEqual([x["id"] for x in layers.inspect("episodic")["items"]], [a["id"]])
         self.assertEqual([x["id"] for x in layers.inspect("semantic")["items"]], [c["id"]])
         self.assertEqual([x["id"] for x in layers.inspect("autobiographical")["items"]], [b["id"]])

@@ -138,6 +138,8 @@ class CloudSession:
             if not self._key:
                 raise CloudError("Сначала введи API-ключ Cloud.ru.", 400)
             key = self._key
+            self._verified = False
+            self._models = []
         result = _request("GET", "models", key)
         models = result.get("data")
         if not isinstance(models, list):
@@ -152,6 +154,8 @@ class CloudSession:
                 raise CloudError("Ключ изменился, обнови модели.", 409)
             self._verified = True
             self._models = names
+            if self._model and self._model not in names:
+                self._model = ""
             return names
 
     def select(self, model: str) -> dict:

@@ -33,6 +33,9 @@ from migration_guard import MigrationGuard
 from evidence_review import EvidenceReview
 from academy_curriculum import AcademyCurriculum
 from persona_arc import PersonaArc
+from atlas_materializer import AtlasMaterializer
+from contract_insights import ContractInsights
+from academy_rollback import AcademyRollback
 
 
 class CognitiveCore:
@@ -59,6 +62,9 @@ class CognitiveCore:
         self.evidence = EvidenceReview(path)
         self.curriculum = AcademyCurriculum(path)
         self.persona_arc = PersonaArc(path)
+        self.materializer = AtlasMaterializer(path)
+        self.contracts = ContractInsights(path)
+        self.rollback = AcademyRollback(path)
         self.chat_priority = None
 
     def connect(self):
@@ -100,6 +106,8 @@ class CognitiveCore:
         self.evidence.initialize()
         self.curriculum.initialize()
         self.persona_arc.initialize()
+        self.rollback.initialize()
+        self.materializer.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -121,7 +129,9 @@ class CognitiveCore:
         self.metrics.evaluate()
         experiment = self.experiments.record(message_id, helpful)
         curriculum = self.curriculum.advance()
+        rollback = self.rollback.evaluate()
         return {"message_id": message_id, "helpful": helpful, "category": category,
+                "suspended_styles":rollback.get("suspended",[]),
                 "curriculum_review_required": len(curriculum.get("regressions",[])),
                 "experiment":experiment,
                 "recorded": True}
@@ -235,6 +245,8 @@ class CognitiveCore:
                 "academy_progress": self.metrics.status(),
                 "academy_experiments": self.experiments.report(),
                 "academy_curriculum": self.curriculum.status(),
+                "academy_rollback": self.rollback.status(),
+                "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {
                     "continuity": "source_grounded",
@@ -271,6 +283,7 @@ class CognitiveCore:
             continuity = self.continuity.consolidate()
             arc = self.persona_arc.consolidate()
             curriculum = self.curriculum.advance()
+            rollback = self.rollback.evaluate()
             quality = self.quality.review(limit=180)
             stats = self.status()
             digest = self.experience.snapshot(
@@ -291,6 +304,7 @@ class CognitiveCore:
                 "stable_habits": continuity["stable_habits"],
                 "persona_arc_updated": arc["changed"],
                 "learning_regressions": len(curriculum.get("regressions", [])),
+                "styles_suspended": len(rollback.get("suspended",[])),
                 "learning_goals": digest["practice_goals"],
             }, ensure_ascii=False)
             with closing(self.connect()) as db:

@@ -161,6 +161,17 @@ class MemoryStore:
                 )
             return results
 
+    def message_by_client_id(self, conversation_id: str, client_message_id: str) -> dict | None:
+        """Idempotent chat retries must not purchase a second model response."""
+        conversation_id = _text(conversation_id, "conversation_id", 64)
+        client_message_id = _text(client_message_id, "client_message_id", 128)
+        with closing(self.connect()) as db:
+            row = db.execute(
+                "SELECT * FROM messages WHERE conversation_id=? AND client_message_id=?",
+                (conversation_id, client_message_id),
+            ).fetchone()
+            return dict(row) if row else None
+
     def list_messages(self, conversation_id: str, before_id: int | None = None, limit: int = 100) -> list[dict]:
         conversation_id = _text(conversation_id, "conversation_id", 64)
         limit = _limit(limit, 200)

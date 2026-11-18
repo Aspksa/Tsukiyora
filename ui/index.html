@@ -32,7 +32,14 @@
       </section>
 
       <section class="chat-panel" aria-label="Чат Цукиёры">
-        <div class="chat-heading"><span>ДИАЛОГ</span><span class="muted">Первое пробуждение</span></div>
+        <div class="chat-heading">
+          <span>ДИАЛОГ</span>
+          <div class="chat-controls">
+            <label class="sr-only" for="chat-sessions">История диалогов</label>
+            <select id="chat-sessions" title="История диалогов" aria-label="История диалогов"><option value="">Новый диалог</option></select>
+            <button type="button" id="chat-new" class="quiet-button" title="Новый диалог" aria-label="Новый диалог">+</button>
+          </div>
+        </div>
         <div class="conversation" id="conversation" role="log" aria-live="polite">
           <div class="greeting">
             <span class="greeting-mark" aria-hidden="true">✧</span>
@@ -42,10 +49,10 @@
         </div>
         <div class="composer">
           <label class="sr-only" for="message">Сообщение</label>
-          <textarea id="message" rows="1" disabled placeholder="Чат появится после подключения облачной модели"></textarea>
-          <button class="send" type="button" disabled aria-label="Отправка недоступна">↗</button>
+          <textarea id="message" rows="1" maxlength="8000" disabled placeholder="Подключи Cloud.ru в настройках" aria-label="Текст сообщения"></textarea>
+          <button class="send" id="send-message" type="button" disabled aria-label="Отправить сообщение">↗</button>
         </div>
-        <p class="composer-note">Сейчас работает только локальное ядро и просмотр личности. Облачная модель не подключена.</p>
+        <p class="composer-note" id="chat-notice">Подключи Cloud.ru через значок настроек. История останется в локальной SQLite.</p>
       </section>
     </main>
   </div>
@@ -60,6 +67,18 @@
       <div><dt>Память SQLite</dt><dd id="memory-info">Проверка…</dd></div>
       <div><dt>Нейросеть</dt><dd id="model-info">Не подключена</dd></div>
     </dl>
+    <details class="cloud-details" id="cloud-details" open>
+      <summary>Cloud.ru <span class="muted">нейросеть</span></summary>
+      <div class="cloud-form">
+        <label class="sr-only" for="cloud-key">API-ключ Cloud.ru</label>
+        <input id="cloud-key" type="password" autocomplete="off" spellcheck="false" placeholder="Вставь ключ Cloud.ru">
+        <button type="button" id="cloud-connect" class="accent-button">Подключить и загрузить модели</button>
+        <label class="sr-only" for="cloud-model">Модель Cloud.ru</label>
+        <select id="cloud-model" disabled><option value="">Сначала подключи Cloud.ru</option></select>
+        <button type="button" id="cloud-select" class="quiet-button" disabled>Использовать модель</button>
+        <p id="cloud-feedback" class="memory-empty" role="status">Ключ используется только в запущенном Python-сервере и не записывается на диск.</p>
+      </div>
+    </details>
     <details class="memory-details" id="memory-details">
       <summary>Воспоминания <span class="muted">добавить · найти · исправить</span></summary>
       <div class="memory-form">
@@ -85,7 +104,7 @@
         </div>
       </div>
     </details>
-    <p class="dialog-note">Память сохраняется только на этом компьютере. Пока записи добавляются вручную: автоматическое запоминание диалогов появится с рабочим чатом.</p>
+    <p class="dialog-note">История сообщений сохраняется автоматически в локальной SQLite. Воспоминания по-прежнему добавляются вручную — Цукиёра не приписывает тебе вымышленные факты.</p>
   </dialog>
 </body>
 </html>

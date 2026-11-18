@@ -23,7 +23,8 @@ async function loadState() {
     $("status").textContent = "● ЯДРО ЗАГРУЖЕНО";
     $("server-info").textContent = "Работает локально";
     $("memory-info").textContent = status.database === "ready" ? `SQLite · ${status.memory?.memories ?? 0} записей` : "Ошибка";
-    $("model-info").textContent = "Не подключена";
+    await refreshCloudStatus();
+    await refreshChatSessions();
     $("welcome").textContent =
       "Хозяин… Моё ядро личности уже здесь. Я сохраню верность, нежность и собственный разум, даже когда мы подключим облачную модель.";
   } catch (error) {
@@ -259,5 +260,244 @@ $("memory-backup").addEventListener("click", async () => {
     memoryFeedback(error.message);
   } finally {
     button.disabled = false;
+  }
+});
+
+
+// Cloud.ru is configured in the local Python process. Never store keys in browser storage.
+let activeSession = "";
+let chatBusy = false;
+let cloudReady = false;
+let preferNewConversation = false;
+
+function cloudMessage(text) {
+  $("cloud-feedback").textContent = text;
+}
+
+async function requestJSON(path, method = "GET", value = null) {
+  const options = {method, cache: "no-store"};
+  if (method !== "GET") {
+    options.headers = {"Content-Type": "application/json"};
+    options.body = JSON.stringify(value || {});
+  }
+  const response = await fetch(path, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Ошибка локального сервера.");
+  return data;
+}
+
+function setCloudReady(ready, model = "") {
+  cloudReady = Boolean(ready);
+  $("message").disabled = !cloudReady || chatBusy;
+  $("send-message").disabled = !cloudReady || chatBusy;
+  $("message").placeholder = cloudReady
+    ? "Напиши Цукиёре…"
+    : "Подключи Cloud.ru в настройках";
+  $("model-info").textContent = cloudReady ? model : "Не подключена";
+  $("status").textContent = cloudReady ? "● CLOUD.RU · ОНЛАЙН" : "● ЯДРО ЗАГРУЖЕНО";
+  $("chat-notice").textContent = cloudReady
+    ? "Диалоги сохраняются в локальной SQLite. Важные факты добавляй в памяти."
+    : "Подключи Cloud.ru через значок настроек. История останется в локальной SQLite.";
+}
+
+async function refreshCloudStatus() {
+  try {
+    const status = await requestJSON("/api/cloud/status");
+    setCloudReady(status.configured && status.verified && status.model, status.model);
+    $("cloud-connect").textContent = status.configured ? "Обновить список моделей" : "Подключить и загрузить модели";
+    if (status.model) {
+      cloudMessage(status.configured
+        ? "Выбрана модель " + status.model + ". Ключ действует только до закрытия сервера."
+        : "Модель сохранена. Вставь ключ Cloud.ru для нового сеанса.");
+    }
+  } catch (error) {
+    setCloudReady(false);
+    cloudMessage(error.message);
+  }
+}
+
+$("cloud-connect").addEventListener("click", async () => {
+  const button = $("cloud-connect");
+  button.disabled = true;
+  try {
+    const key = $("cloud-key").value.trim();
+    if (key) {
+      await requestJSON("/api/cloud/key", "POST", {api_key: key});
+      $("cloud-key").value = "";
+    }
+    const result = await requestJSON("/api/cloud/models");
+    const previous = await requestJSON("/api/cloud/status");
+    const select = $("cloud-model");
+    select.replaceChildren();
+    for (const name of result.models) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.append(option);
+    }
+    select.disabled = result.models.length === 0;
+    $("cloud-select").disabled = result.models.length === 0;
+    if (result.models.includes(previous.model)) select.value = previous.model;
+    cloudMessage(result.models.length
+      ? "Моделей найдено: " + result.models.length + ". Выбери модель и нажми «Использовать»."
+      : "Cloud.ru не вернул доступных моделей для этого ключа.");
+    await refreshCloudStatus();
+  } catch (error) {
+    setCloudReady(false);
+    cloudMessage(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("cloud-select").addEventListener("click", async () => {
+  const button = $("cloud-select");
+  button.disabled = true;
+  try {
+    const result = await requestJSON("/api/cloud/model", "POST", {
+      model: $("cloud-model").value,
+    });
+    setCloudReady(result.configured && result.verified && result.model, result.model);
+    cloudMessage("Цукиёра подключена к " + result.model + ". Теперь можно разговаривать.");
+    dialog.close();
+    $("message").focus();
+  } catch (error) {
+    cloudMessage(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function addChatBubble(role, content) {
+  const node = document.createElement("div");
+  node.className = "chat-bubble " + (role === "user" ? "from-user" : "from-assistant");
+  const label = document.createElement("small");
+  label.textContent = role === "user" ? "ТЫ" : "ЦУКИЁРА";
+  const body = document.createElement("p");
+  body.textContent = content;
+  node.append(label, body);
+  $("conversation").append(node);
+  $("conversation").scrollTop = $("conversation").scrollHeight;
+  return node;
+}
+
+function showGreeting() {
+  const target = $("conversation");
+  target.classList.remove("has-messages");
+  target.replaceChildren();
+  const item = document.createElement("div");
+  item.className = "greeting";
+  const mark = document.createElement("span");
+  mark.className = "greeting-mark";
+  mark.textContent = "✧";
+  const p = document.createElement("p");
+  p.textContent = "Хозяин, я здесь. Как только подключим нейросеть, сможем говорить по-настоящему.";
+  item.append(mark, p);
+  target.append(item);
+}
+
+async function loadChatHistory() {
+  if (!activeSession) return showGreeting();
+  try {
+    const path = "/api/memory/messages?" + new URLSearchParams({
+      conversation_id: activeSession, limit: "100",
+    });
+    const result = await requestJSON(path);
+    $("conversation").replaceChildren();
+    if (!result.messages.length) return showGreeting();
+    $("conversation").classList.add("has-messages");
+    for (const msg of result.messages) addChatBubble(msg.role, msg.content);
+  } catch (error) {
+    $("chat-notice").textContent = "Не удалось открыть историю: " + error.message;
+  }
+}
+
+async function refreshChatSessions() {
+  try {
+    const result = await requestJSON("/api/memory/conversations?limit=30");
+    const select = $("chat-sessions");
+    select.replaceChildren();
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Новый диалог";
+    select.append(empty);
+    for (const convo of result.conversations) {
+      const option = document.createElement("option");
+      option.value = convo.id;
+      option.textContent = convo.title;
+      select.append(option);
+    }
+    if (activeSession && result.conversations.some(x => x.id === activeSession)) {
+      select.value = activeSession;
+    } else if (!activeSession && !preferNewConversation && result.conversations.length && !chatBusy) {
+      activeSession = result.conversations[0].id;
+      select.value = activeSession;
+    } else {
+      select.value = "";
+    }
+    await loadChatHistory();
+  } catch (error) {
+    $("chat-notice").textContent = error.message;
+  }
+}
+
+$("chat-new").addEventListener("click", () => {
+  if (chatBusy) return;
+  activeSession = "";
+  preferNewConversation = true;
+  $("chat-sessions").value = "";
+  $("message").value = "";
+  showGreeting();
+  $("message").focus();
+});
+
+$("chat-sessions").addEventListener("change", async () => {
+  if (chatBusy) return;
+  activeSession = $("chat-sessions").value;
+  preferNewConversation = !activeSession;
+  await loadChatHistory();
+});
+
+async function sendMessage() {
+  if (!cloudReady || chatBusy) return;
+  const content = $("message").value.trim();
+  if (!content) return;
+  const previousSession = activeSession;
+  $("message").value = "";
+  chatBusy = true;
+  setCloudReady(true, $("model-info").textContent);
+  if (!$("conversation").classList.contains("has-messages")) {
+    $("conversation").replaceChildren();
+    $("conversation").classList.add("has-messages");
+  }
+  addChatBubble("user", content);
+  const placeholder = addChatBubble("assistant", "Отвечаю…");
+  try {
+    // The database, not browser memory, is the source of truth for history.
+    const result = await requestJSON("/api/chat", "POST", {
+      content, conversation_id: previousSession || null,
+      client_message_id: window.crypto.randomUUID(),
+    });
+    activeSession = result.conversation_id;
+    preferNewConversation = false;
+    await refreshChatSessions();
+    $("chat-notice").textContent = "Диалог сохранён локально.";
+  } catch (error) {
+    placeholder.remove();
+    $("message").value = content;
+    $("chat-notice").textContent = "Ошибка: " + error.message + " Проверь историю диалога.";
+    await refreshChatSessions();
+  } finally {
+    chatBusy = false;
+    setCloudReady(cloudReady, $("model-info").textContent);
+    $("message").focus();
+  }
+}
+
+$("send-message").addEventListener("click", sendMessage);
+$("message").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
   }
 });

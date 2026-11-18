@@ -9,11 +9,14 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import re
 
 from memory_store import MemoryStore
+from cloudru import CloudSession, CloudError
 from urllib.request import build_opener, ProxyHandler
 import webbrowser
 
@@ -121,6 +124,8 @@ class SoulServer(ThreadingHTTPServer):
     def __init__(self, address, persona: dict, memory_path: Path = DATABASE):
         self.persona = persona
         self.memory_path = memory_path
+        self.cloud = CloudSession(Path(memory_path).parent / "cloudru_preferences.json")
+        self.chat_lock = threading.Lock()
         super().__init__(address, SoulHandler)
 
 
@@ -128,7 +133,9 @@ class SoulHandler(BaseHTTPRequestHandler):
     server_version = "Tsukiyora/0.1"
 
     def log_message(self, fmt, *args):
-        LOG.info("%s %s", self.client_address[0], fmt % args)
+        # Never log user search terms, chat text or API keys in URL query strings.
+        LOG.info("%s %s %s", self.client_address[0], self.command,
+                 urlsplit(self.path).path)
 
     def send_bytes(self, status: int, value: bytes, mime: str):
         self.send_response(status)
@@ -192,6 +199,15 @@ class SoulHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path = parsed.path
         args = parse_qs(parsed.query, keep_blank_values=True)
+        if path.startswith("/api/cloud/"):
+            try:
+                if path == "/api/cloud/status":
+                    return self.send_json(self.server.cloud.status())
+                if path == "/api/cloud/models":
+                    return self.send_json({"models": self.server.cloud.models()})
+                return self.send_json({"error": "Unknown cloud endpoint."}, 404)
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
         if path.startswith("/api/memory"):
             try:
                 store = self._memory()
@@ -225,9 +241,11 @@ class SoulHandler(BaseHTTPRequestHandler):
                 database = "ready"
             except (sqlite3.Error, OSError):
                 memory, database = None, "not_initialized"
+            cloud = self.server.cloud.status()
             return self.send_json({
                 "runtime": "local", "database": database, "memory": memory,
-                "cloud_model": "not_configured", "chat": "not_connected",
+                "cloud_model": cloud["model"] if cloud["configured"] and cloud["verified"] else "not_configured",
+                "chat": "available" if cloud["configured"] and cloud["verified"] and cloud["model"] else "not_connected",
             })
         allowed = {
             "/": (UI / "index.html", "text/html; charset=utf-8"),
@@ -251,6 +269,13 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path in ("/api/cloud/key", "/api/cloud/model", "/api/chat"):
+            try:
+                return self._cloud_write(path, self._read_body())
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+            except (ValueError, sqlite3.Error, OSError) as error:
+                return self._handle_error(error)
         if not path.startswith("/api/memory"):
             return self.send_json({"error": "Not found."}, 404)
         try:
@@ -280,6 +305,56 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json({"error": "Unknown memory endpoint."}, 404)
         except (ValueError, sqlite3.Error, OSError) as error:
             return self._handle_error(error)
+
+    def _cloud_write(self, path: str, obj: dict):
+        cloud = self.server.cloud
+        if path == "/api/cloud/key":
+            return self.send_json(cloud.set_key(obj.get("api_key")))
+        if path == "/api/cloud/model":
+            return self.send_json(cloud.select(obj.get("model")))
+        if path != "/api/chat":
+            return self.send_json({"error": "Unknown chat endpoint."}, 404)
+
+        content = obj.get("content")
+        if not isinstance(content, str) or not (1 <= len(content.strip()) <= 8000):
+            raise ValueError("Сообщение должно содержать от 1 до 8000 символов.")
+        content = content.strip()
+        client_id = obj.get("client_message_id")
+        if client_id is None:
+            client_id = uuid.uuid4().hex
+        if not isinstance(client_id, str) or not (1 <= len(client_id) <= 100):
+            raise ValueError("Некорректный идентификатор сообщения.")
+        conversation_id = obj.get("conversation_id")
+        if conversation_id is not None and (not isinstance(conversation_id, str) or len(conversation_id) > 64):
+            raise ValueError("Некорректный идентификатор диалога.")
+
+        with self.server.chat_lock:
+            state = cloud.status()
+            if not (state["configured"] and state["verified"] and state["model"]):
+                raise CloudError("Сначала укажи ключ, обнови модели и выбери модель Cloud.ru.", 400)
+            store = self._memory()
+            if not conversation_id:
+                conversation_id = store.create_conversation(content[:72])["id"]
+            key = "assistant:" + client_id
+            # Validate the idempotency key against the stored user text
+            # before returning any cached assistant answer.
+            user = store.append_messages(conversation_id, [{
+                "role": "user", "content": content, "client_message_id": client_id
+            }])[0]
+            existing = store.message_by_client_id(conversation_id, key)
+            if existing:
+                return self.send_json({"conversation_id": conversation_id,
+                                       "answer": existing["content"], "cached": True})
+            history = store.list_messages(conversation_id, limit=24)
+            if not history or history[-1]["id"] != user["id"]:
+                raise ValueError("Нельзя повторить старое сообщение после новых. Начни новый диалог.")
+            memories = store.find_memories(limit=20)
+            answer = cloud.complete(self.server.persona, history, memories)
+            store.append_messages(conversation_id, [{
+                "role": "assistant", "content": answer, "client_message_id": key
+            }])
+            return self.send_json({"conversation_id": conversation_id,
+                                   "answer": answer, "cached": False})
 
     def do_POST(self):
         self._write("POST")

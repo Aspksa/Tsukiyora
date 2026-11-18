@@ -125,6 +125,12 @@ def handle_stream(handler, obj: dict):
         )
         if experiment_style:
             prompt += "\n\nНебольшой тест манеры ответа (не меняет характер): " + experiment_style
+        # A/B evolution is enabled only after an explicit trial start.
+        evolution_style = handler.server.cognition.evolution.guidance_for_conversation(
+            conversation_id)
+        if evolution_style:
+            prompt += ("\n\nПроверяемая стратегия ответа (не меняет характер "
+                       "и не отменяет правила безопасности): " + evolution_style)
         # The biography and habits are explicitly approved local data.
         prompt += "\n\n" + handler.server.cognition.continuity.context()
         if any(m.get("possible_conflict") or m.get("potentially_stale")

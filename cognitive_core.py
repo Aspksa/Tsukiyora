@@ -39,6 +39,9 @@ from atlas_materializer import AtlasMaterializer
 from contract_insights import ContractInsights
 from academy_rollback import AcademyRollback
 from academy_practice import AcademyPractice
+from reflective_recall import ReflectiveRecall
+from experience_skills import ExperienceSkills
+from reflective_optimization import ReflectiveOptimization
 
 
 class CognitiveCore:
@@ -71,6 +74,9 @@ class CognitiveCore:
         self.contracts = ContractInsights(path)
         self.rollback = AcademyRollback(path)
         self.practice = AcademyPractice(path)
+        self.reflection = ReflectiveRecall(path)
+        self.skills = ExperienceSkills(path)
+        self.evolution = ReflectiveOptimization(path)
         self.chat_priority = None
 
     def connect(self):
@@ -117,6 +123,8 @@ class CognitiveCore:
         self.materializer.initialize()
         self.dialogues.initialize()
         self.semantic_groups.initialize()
+        self.skills.initialize()
+        self.evolution.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -139,7 +147,10 @@ class CognitiveCore:
         experiment = self.experiments.record(message_id, helpful)
         curriculum = self.curriculum.advance()
         rollback = self.rollback.evaluate()
+        skill = self.skills.capture(message_id)
+        evolution = self.evolution.record(message_id, helpful)
         return {"message_id": message_id, "helpful": helpful, "category": category,
+                "skill_candidate": skill, "strategy_trial": evolution,
                 "suspended_styles":rollback.get("suspended",[]),
                 "curriculum_review_required": len(curriculum.get("regressions",[])),
                 "experiment":experiment,
@@ -177,7 +188,8 @@ class CognitiveCore:
             ).fetchone()
         baseline = row["guidance"] if row else ""
         tagged = self.experience.guidance()
-        return (baseline + " " + tagged + " " + self.academy.guidance()).strip()[:1250]
+        return (baseline + " " + tagged + " " + self.academy.guidance()
+                + " " + self.skills.guidance()).strip()[:1250]
 
     def biography(self) -> dict:
         """Explicit approved biography, stable persona and dated experience."""
@@ -256,6 +268,8 @@ class CognitiveCore:
                 "academy_curriculum": self.curriculum.status(),
                 "academy_rollback": self.rollback.status(),
                 "academy_practice": self.practice.status(),
+                "experience_skills": self.skills.list(limit=10),
+                "prompt_evolution": self.evolution.report(),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

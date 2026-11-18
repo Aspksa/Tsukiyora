@@ -303,6 +303,14 @@ class SoulHandler(BaseHTTPRequestHandler):
                 **self.server.cognition.practice.questions(),
                 **self.server.cognition.practice.status()
             })
+        if path == "/api/soul/skills":
+            try:
+                return self.send_json(self.server.cognition.skills.list(
+                    limit=int(args.get("limit",["30"])[0])))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/evolution":
+            return self.send_json(self.server.cognition.evolution.report())
         if path == "/api/soul/academy":
             return self.send_json(self.server.cognition.academy.status())
         if path == "/api/soul/academy/metrics":
@@ -443,6 +451,43 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cloud.enable_document_context(
                     obj.get("allowed")))
             except (ValueError,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/reflect":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.reflection.inspect(
+                    obj.get("query"),limit=obj.get("limit",8)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/skills/decide":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.skills.decide(
+                    obj.get("candidate_id"),approve=obj.get("approve"),
+                    confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/evolution/propose":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.evolution.propose(
+                    obj.get("strategy")))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/evolution/start":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.evolution.start(
+                    obj.get("trial_id"),confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/evolution/decide":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.evolution.decide(
+                    obj.get("trial_id"),activate=obj.get("activate"),
+                    confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/academy/practice/evaluate":
             try:
@@ -733,7 +778,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             if not history or history[-1]["id"] != user["id"]:
                 raise ValueError("Нельзя повторить старое сообщение после новых. Начни новый диалог.")
             memories = store.find_memories(limit=20)
-            answer = cloud.complete(self.server.persona, history, memories)
+            guidance = self.server.cognition.guidance()
+            evolving = self.server.cognition.evolution.guidance_for_conversation(conversation_id)
+            extra = (guidance + " " + evolving).strip()[:1800]
+            answer = cloud.complete(self.server.persona, history, memories,
+                                    extra_guidance=extra)
             store.append_messages(conversation_id, [{
                 "role": "assistant", "content": answer, "client_message_id": key
             }])

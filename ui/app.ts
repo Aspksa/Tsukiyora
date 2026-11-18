@@ -7,6 +7,14 @@ const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let brainGraph = {nodes: [], edges: [], pending: 0};
 let graphPositions = new Map();
+let graphScale = 1;
+let graphPanX = 0;
+let graphPanY = 0;
+let graphLoaded = false;
+let graphFreshIds = new Set();
+let graphPulseAt = 0;
+let graphDrag = null;
+let graphMoved = false;
 let vectorAvailableForSearch = false;
 let width = 0, height = 0, time = 0, last = 0;
 
@@ -97,20 +105,12 @@ function paint() {
     ctx.fill();
   }
 
-  for (let i = 0; i < 38; i++) {
-    const theta = (i * Math.PI * 2 / 38) - time * .00009;
-    const distance = r * (.60 + (i % 6) * .09);
-    ctx.fillStyle = "rgba(239,204,147,.5)";
-    ctx.beginPath();
-    ctx.arc(x + Math.cos(theta)*distance, y + Math.sin(theta)*distance,
-      i % 7 === 0 ? 1.5 : .8, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // No decorative fake nodes. Every hexagon below is a real SQLite memory.
   // Real SQLite graph, capped at 180 nodes/400 edges. No demo activity.
   graphPositions = new Map();
   const sectorCounts = Array(8).fill(0);
   const section = {fact: 0, preference: 2, event: 4, biography: 6};
-  const cellSize = Math.max(3.2, Math.min(6.5, r / 34));
+  const cellSize = Math.max(3.0, Math.min(7.2, r / 32)) * Math.sqrt(graphScale);
   for (const node of brainGraph.nodes) {
     const sector = (section[node.kind] ?? 0) + (node.id % 2);
     const slot = sectorCounts[sector]++;
@@ -120,9 +120,9 @@ function paint() {
                   (slotInRing - 6) * 0.043 + Math.sin(slot * 2.4) * .005;
     const distance = r * (.60 + layer * .075);
     graphPositions.set(node.id, {
-      x: x + Math.cos(angle) * distance,
-      y: y + Math.sin(angle) * distance,
-      preview: node.preview, kind: node.kind,
+      x: x + graphPanX + Math.cos(angle) * distance * graphScale,
+      y: y + graphPanY + Math.sin(angle) * distance * graphScale,
+      id: node.id, preview: node.preview, kind: node.kind,
     });
   }
   ctx.strokeStyle = "rgba(211,173,114,.18)";
@@ -135,10 +135,22 @@ function paint() {
     ctx.strokeStyle = link.relation === "possible_conflict"
       ? "rgba(225,135,101,.42)" : "rgba(220,173,113,.21)";
     ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(x, y, b.x, b.y);
+    ctx.quadraticCurveTo(x + graphPanX, y + graphPanY, b.x, b.y);
     ctx.stroke();
   }
   for (const node of graphPositions.values()) {
+    // Pulse only after a real new memory arrived; reduced motion stays static.
+    if (!reducedMotion && graphFreshIds.has(node.id)) {
+      const age = performance.now() - graphPulseAt;
+      if (age < 1800 && age >= 0) {
+        const alpha = (1 - age / 1800) * .40;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, cellSize * (2.0 + age / 1600), 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(246,183,96," + alpha.toFixed(3) + ")";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
     ctx.beginPath();
     ctx.strokeStyle = "rgba(241,198,132,.75)";
     ctx.fillStyle = "rgba(190,135,65,.10)";
@@ -173,6 +185,12 @@ async function refreshBrain() {
     const response = await fetch("/api/soul/graph", {cache: "no-store"});
     if (!response.ok) throw new Error("graph unavailable");
     const data = await response.json();
+    if (graphLoaded) {
+      const previous = new Set(brainGraph.nodes.map(node => node.id));
+      graphFreshIds = new Set(data.nodes.filter(node => !previous.has(node.id)).map(node => node.id));
+      if (graphFreshIds.size) graphPulseAt = performance.now();
+    }
+    graphLoaded = true;
     brainGraph = data;
     $("soul-live-state").textContent = data.nodes.length
       ? data.nodes.length + " воспоминаний · " + data.edges.length + " связей"
@@ -183,21 +201,78 @@ async function refreshBrain() {
   }
 }
 
-// Nodes show the real preview only on hover. No artificial neural activity.
-canvas.addEventListener("pointermove", (event) => {
-  const rect = canvas.getBoundingClientRect();
-  const px = event.clientX - rect.left;
-  const py = event.clientY - rect.top;
-  let hovered = null;
-  for (const position of graphPositions.values()) {
-    if ((position.x - px) ** 2 + (position.y - py) ** 2 < 80) {
-      hovered = position;
-      break;
+// Zoom, pan and click work on actual SQLite nodes. Dragging never creates records.
+function nearestBrainNode(px, py) {
+  let found = null;
+  let distance = Math.max(64, 55 * graphScale);
+  for (const node of graphPositions.values()) {
+    const delta = (node.x - px) ** 2 + (node.y - py) ** 2;
+    if (delta < distance) {
+      distance = delta;
+      found = node;
     }
   }
-  canvas.title = hovered ? hovered.kind + ": " + hovered.preview : "";
+  return found;
+}
+
+canvas.addEventListener("wheel", (event) => {
+  if (!brainGraph.nodes.length) return;
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const centerX = rect.width * .5, centerY = rect.height * .48;
+  const px = event.clientX - rect.left, py = event.clientY - rect.top;
+  const old = graphScale;
+  graphScale = Math.max(.65, Math.min(2.6, graphScale * (event.deltaY < 0 ? 1.12 : .89)));
+  const ratio = graphScale / old;
+  graphPanX = Math.max(-width * .5, Math.min(width * .5,
+    (px - centerX) - ratio * (px - centerX - graphPanX)));
+  graphPanY = Math.max(-height * .5, Math.min(height * .5,
+    (py - centerY) - ratio * (py - centerY - graphPanY)));
+  if (reducedMotion) paint();
+}, {passive: false});
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || !brainGraph.nodes.length) return;
+  graphDrag = {x: event.clientX, y: event.clientY};
+  graphMoved = false;
+  canvas.setPointerCapture(event.pointerId);
 });
+canvas.addEventListener("pointermove", (event) => {
+  if (graphDrag) {
+    const dx = event.clientX - graphDrag.x;
+    const dy = event.clientY - graphDrag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 2) graphMoved = true;
+    graphPanX = Math.max(-width * .5, Math.min(width * .5, graphPanX + dx));
+    graphPanY = Math.max(-height * .5, Math.min(height * .5, graphPanY + dy));
+    graphDrag = {x: event.clientX, y: event.clientY};
+    if (reducedMotion) paint();
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
+  canvas.title = node ? node.kind + ": " + node.preview : "Колёсико — масштаб; перетаскивание — перемещение";
+  canvas.style.cursor = node ? "pointer" : "grab";
+});
+canvas.addEventListener("pointerup", (event) => {
+  graphDrag = null;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+});
+canvas.addEventListener("pointercancel", () => { graphDrag = null; });
 canvas.addEventListener("pointerleave", () => { canvas.title = ""; });
+canvas.addEventListener("dblclick", () => {
+  graphScale = 1; graphPanX = 0; graphPanY = 0;
+  if (reducedMotion) paint();
+});
+canvas.addEventListener("click", async (event) => {
+  if (graphMoved) { graphMoved = false; return; }
+  const rect = canvas.getBoundingClientRect();
+  const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
+  if (!node) return;
+  $("memory-search").value = node.preview.slice(0, 60);
+  $("memory-details").open = true;
+  if (!dialog.open) dialog.showModal();
+  await refreshMemory();
+});
 
 window.addEventListener("resize", () => {
   resize();
@@ -392,6 +467,8 @@ async function refreshCloudStatus() {
   try {
     const status = await requestJSON("/api/cloud/status");
     setCloudReady(status.configured && status.verified && status.model, status.model);
+    $("embedding-auto").checked = Boolean(status.vector_chat_enabled);
+    $("embedding-auto").disabled = !(status.configured && status.verified && status.embedding_model);
     $("cloud-connect").textContent = status.configured ? "Обновить список моделей" : "Подключить и загрузить модели";
     if (status.model) {
       cloudMessage(status.configured
@@ -496,8 +573,10 @@ function attachFeedback(node, messageId) {
     button.setAttribute("aria-label", label);
     button.addEventListener("click", async () => {
       try {
+        const note = helpful ? "" :
+          (window.prompt("Что улучшить? Например: точность, краткость, понятность, источники. Можно оставить пустым.", "") || "").slice(0, 400);
         await requestJSON("/api/soul/feedback", "POST", {
-          message_id: messageId, helpful,
+          message_id: messageId, helpful, note,
         });
         controls.querySelectorAll("button").forEach(item => item.disabled = true);
         $("chat-notice").textContent = "Оценку сохранила. Учту её в будущих ответах.";
@@ -728,14 +807,26 @@ $("message").addEventListener("keydown", (event) => {
 });
 
 $("cloud-diagnose").addEventListener("click", async () => {
+  if (!window.confirm("Сделать реальные запросы Cloud.ru для моделей, чата, потока и эмбеддингов (если модель выбрана)? Это может расходовать токены.")) return;
   const button = $("cloud-diagnose");
   button.disabled = true;
-  cloudMessage("Проверяю настоящий ответ Cloud.ru…");
+  cloudMessage("Проверяю настоящие ответы Cloud.ru…");
   try {
-    const result = await requestJSON("/api/cloud/diagnose", "POST", {});
-    cloudMessage("Связь работает: " + result.model + " · " + result.answer);
+    const result = await requestJSON("/api/cloud/checkup", "POST", {
+      include_stream: true, include_embeddings: true,
+    });
+    const labels = {models: "Каталог", chat: "Ответ модели", stream: "Поток",
+                    embeddings: "Эмбеддинги"};
+    const lines = Object.entries(result.checks).map(([name, check]) => {
+      const state = check.state === "passed" ? "OK" :
+        check.state === "skipped" ? "пропущено" : "ошибка";
+      const extra = check.message || check.sample || (check.dimension ? "размерность " + check.dimension : "");
+      return (labels[name] || name) + ": " + state + (extra ? " · " + extra : "");
+    });
+    cloudMessage((result.live ? "Проверка пройдена." : "Есть проблемы с подключением.") +
+                 "\n" + lines.join("\n"));
   } catch (error) {
-    cloudMessage("Проверка не пройдена: " + error.message);
+    cloudMessage("Живая проверка не выполнена: " + error.message);
   } finally {
     button.disabled = !cloudReady;
   }
@@ -809,6 +900,8 @@ $("rag-search").addEventListener("click", async () => {
   const button = $("rag-search");
   button.disabled = true;
   try {
+    if (vectorAvailableForSearch &&
+        !window.confirm("Отправить этот поисковый запрос embedding-модели Cloud.ru? Это может расходовать токены.")) return;
     const result = vectorAvailableForSearch
       ? await requestJSON("/api/soul/vectors/search", "POST", {
           query, confirm_send_to_cloud: true,
@@ -851,11 +944,39 @@ $("embedding-select").addEventListener("click", async () => {
   try {
     const status = await requestJSON("/api/cloud/embedding/model", "POST", {model});
     $("embedding-index").disabled = false;
+    $("embedding-auto").checked = false;
+    $("embedding-auto").disabled = false;
     $("vector-feedback").textContent = "Выбрана " + status.embedding_model
       + ". Индексацию выполняем только после отдельного согласия.";
     await refreshCognition();
   } catch (error) {
     $("vector-feedback").textContent = error.message;
+  }
+});
+
+$("embedding-auto").addEventListener("change", async () => {
+  const checkbox = $("embedding-auto");
+  const enabled = checkbox.checked;
+  if (enabled && !window.confirm("Разрешить отправку будущих вопросов чата в embedding API Cloud.ru на время этого запуска? Запросы могут расходовать токены. По умолчанию функция выключена.")) {
+    checkbox.checked = false;
+    return;
+  }
+  checkbox.disabled = true;
+  try {
+    const state = await requestJSON("/api/cloud/embedding/auto", "POST", {
+      allowed: enabled,
+    });
+    checkbox.checked = Boolean(state.vector_chat_enabled);
+    $("vector-feedback").textContent = state.vector_chat_enabled
+      ? "Смысловой поиск для диалогов включён на этот сеанс. Запросы отправляются в Cloud.ru."
+      : "Автоматическая отправка в embedding API выключена.";
+  } catch (error) {
+    checkbox.checked = !enabled;
+    $("vector-feedback").textContent = error.message;
+  } finally {
+    const cloud = await requestJSON("/api/cloud/status").catch(() => null);
+    checkbox.disabled = !cloud?.configured || !cloud?.verified || !cloud?.embedding_model;
+    if (cloud) checkbox.checked = Boolean(cloud.vector_chat_enabled);
   }
 });
 
@@ -879,6 +1000,49 @@ $("embedding-index").addEventListener("click", async () => {
   }
 });
 
+async function refreshQuality() {
+  const target = $("quality-results");
+  target.replaceChildren();
+  const loading = document.createElement("p");
+  loading.className = "memory-empty";
+  loading.textContent = "Проверяю утверждения и источники…";
+  target.append(loading);
+  try {
+    const result = await requestJSON("/api/soul/quality");
+    target.replaceChildren();
+    for (const [field, label] of [["duplicates", "Похожая запись"],
+                                   ["semantic_duplicates", "Возможно повторение по смыслу"],
+                                   ["conflicts", "Возможное противоречие"]]) {
+      for (const issue of result[field]) {
+        const block = document.createElement("div");
+        block.className = "memory-record";
+        const name = document.createElement("small");
+        name.textContent = label + " · сходство " + Math.round(issue.score * 100) + "%";
+        const first = document.createElement("p");
+        const second = document.createElement("p");
+        first.textContent = "#" + issue.left.id + " (" +
+          (issue.left.source_ref || issue.left.source_type) + "): " + issue.left.content;
+        second.textContent = "#" + issue.right.id + " (" +
+          (issue.right.source_ref || issue.right.source_type) + "): " + issue.right.content;
+        block.append(name, first, second);
+        target.append(block);
+      }
+    }
+    if (!result.duplicates.length && !result.semantic_duplicates.length && !result.conflicts.length) {
+      const empty = document.createElement("p");
+      empty.className = "memory-empty";
+      empty.textContent = "Подозрительных совпадений среди " +
+        result.scanned + " последних записей не найдено.";
+      target.append(empty);
+    }
+  } catch (error) {
+    target.textContent = "Ошибка анализа: " + error.message;
+  }
+}
+$("memory-quality").addEventListener("toggle", () => {
+  if ($("memory-quality").open) refreshQuality();
+});
+
 async function refreshCognition() {
   try {
     const [status, biography, cloud] = await Promise.all([
@@ -900,6 +1064,26 @@ async function refreshCognition() {
       + ", оценок ответов: " + status.feedback.total + ".";
     $("vector-count").textContent = status.vectors.indexed_memories
       ? "(" + status.vectors.indexed_memories + ")" : "опционально";
+    const state = status.experience;
+    $("tone-status").textContent = "Тон общения (программная модель, не чувства): " +
+      "теплота " + Math.round(state.warmth * 100) + "% · " +
+      "внимательность " + Math.round(state.focus * 100) + "% · " +
+      "любопытство " + Math.round(state.curiosity * 100) + "%. " +
+      "Оценок: " + state.feedback_samples + ".";
+    const goals = $("learning-goals");
+    goals.replaceChildren();
+    const names = {accuracy: "Точность", brevity: "Краткость",
+                   clarity: "Ясность", sources: "Источники"};
+    for (const goal of state.goals) {
+      if (!goal.attempts) continue;
+      const item = document.createElement("p");
+      item.className = "memory-empty";
+      item.textContent = (names[goal.category] || goal.category) +
+        ": " + (goal.status === "practice" ? "нужно улучшить" :
+        goal.status === "improving" ? "улучшается" : "наблюдение") +
+        " · обратная связь: " + goal.attempts;
+      goals.append(item);
+    }
     const list = $("biography-notes");
     list.replaceChildren();
     for (const entry of biography.approved_history.slice(0, 12)) {

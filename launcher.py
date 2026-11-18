@@ -18,6 +18,7 @@ import re
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from cognitive_core import CognitiveCore, CognitiveWorker
+from memory_quality import MemoryQuality
 from vector_memory import VectorMemory
 from stream_runtime import handle_stream, stop_stream
 from cloudru import CloudSession, CloudError
@@ -211,6 +212,16 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.graph())
         if path == "/api/soul/cognition":
             return self.send_json(self.server.cognition.status())
+        if path == "/api/soul/quality":
+            try:
+                return self.send_json(MemoryQuality(self.server.memory_path).review())
+            except (ValueError, sqlite3.Error, OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/experience":
+            return self.send_json({
+                "state": self.server.cognition.experience.state(),
+                "timeline": self.server.cognition.experience.timeline(),
+            })
         if path == "/api/soul/biography":
             return self.send_json(self.server.cognition.biography())
         if path == "/api/soul/suggestions":
@@ -307,6 +318,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                     self._read_body().get("model")))
             except (ValueError, OSError) as error:
                 return self._handle_error(error)
+        if method == "POST" and path == "/api/cloud/embedding/auto":
+            try:
+                return self.send_json(self.server.cloud.enable_vector_chat(
+                    self._read_body().get("allowed")))
+            except ValueError as error:
+                return self.send_json({"error": str(error)}, 400)
         if method == "POST" and path == "/api/soul/vectors/index":
             try:
                 obj = self._read_body()
@@ -336,6 +353,16 @@ class SoulHandler(BaseHTTPRequestHandler):
                     obj.get("message_id"), obj.get("helpful"), obj.get("note", "")))
             except (ValueError, OSError, sqlite3.Error) as error:
                 return self._handle_error(error)
+        if method == "POST" and path == "/api/cloud/checkup":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cloud.checkup(
+                    include_stream=obj.get("include_stream", True),
+                    include_embeddings=obj.get("include_embeddings", True)))
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+            except ValueError as error:
+                return self.send_json({"error": str(error)}, 400)
         if method == "POST" and path == "/api/cloud/diagnose":
             try:
                 return self.send_json(self.server.cloud.diagnostic())

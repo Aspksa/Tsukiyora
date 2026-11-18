@@ -110,6 +110,7 @@ class CloudSession:
         self._verified = False
         self._model = ""
         self._embedding_model = ""
+        self._vector_chat_enabled = False
         self._preferences_file = Path(preferences_file) if preferences_file else None
         if self._preferences_file and self._preferences_file.exists():
             try:
@@ -127,7 +128,8 @@ class CloudSession:
         with self._lock:
             return {"provider": "cloud.ru", "configured": bool(self._key),
                     "verified": self._verified, "model": self._model,
-                    "embedding_model": self._embedding_model}
+                    "embedding_model": self._embedding_model,
+                    "vector_chat_enabled": self._vector_chat_enabled}
 
     def set_key(self, key: str) -> dict:
         if not isinstance(key, str) or len(key) > 4096 or any(c in key for c in "\r\n"):
@@ -136,6 +138,7 @@ class CloudSession:
             self._key = key.strip()
             self._verified = False
             self._models = []
+            self._vector_chat_enabled = False
             return self.status()
 
     def models(self) -> list[str]:
@@ -163,6 +166,7 @@ class CloudSession:
                 self._model = ""
             if self._embedding_model and self._embedding_model not in names:
                 self._embedding_model = ""
+                self._vector_chat_enabled = False
             return names
 
     def select(self, model: str) -> dict:
@@ -185,6 +189,7 @@ class CloudSession:
             if not any(word in model.casefold() for word in ("embed", "bge-")):
                 raise ValueError("Выбранная модель не похожа на embedding-модель.")
             self._embedding_model = model
+            self._vector_chat_enabled = False
             if self._preferences_file:
                 self._preferences_file.parent.mkdir(parents=True, exist_ok=True)
                 tmp = self._preferences_file.with_suffix(".tmp")
@@ -192,6 +197,18 @@ class CloudSession:
                     "model": self._model, "embedding_model": model,
                 }), encoding="utf-8")
                 tmp.replace(self._preferences_file)
+            return self.status()
+
+    def enable_vector_chat(self, allowed: bool) -> dict:
+        """Session-only consent to send future chat prompts to the embedding API."""
+        if type(allowed) is not bool:
+            raise ValueError("Explicit boolean consent is required.")
+        with self._lock:
+            if allowed and (not self._key or not self._verified or
+                            not self._embedding_model or
+                            self._embedding_model not in self._models):
+                raise ValueError("Сначала подключи доступную embedding-модель.")
+            self._vector_chat_enabled = allowed
             return self.status()
 
     def embedding_model(self) -> str:
@@ -251,6 +268,60 @@ class CloudSession:
         if not isinstance(answer, str) or not answer.strip():
             raise CloudError("Модель не вернула текст на проверочный запрос.")
         return {"ok": True, "model": model, "answer": answer[:250]}
+
+    def checkup(self, include_stream: bool = True, include_embeddings: bool = True) -> dict:
+        """Manual, real-provider diagnostic. It spends tokens, saves no user content.
+
+        Results are not persisted; no fake 'live pass' is possible without the key.
+        """
+        if type(include_stream) is not bool or type(include_embeddings) is not bool:
+            raise ValueError("Invalid diagnostic switches.")
+        checks = {}
+        try:
+            available = self.models()
+            checks["models"] = {"state": "passed", "count": len(available)}
+        except (CloudError, ValueError) as error:
+            checks["models"] = {"state": "failed", "message": str(error)}
+            return {"live": False, "checks": checks, "requires_local_key": True}
+        try:
+            result = self.diagnostic()
+            checks["chat"] = {"state": "passed", "model": result["model"],
+                              "sample": result["answer"][:120]}
+        except (CloudError, ValueError) as error:
+            checks["chat"] = {"state": "failed", "message": str(error)}
+        if include_stream:
+            try:
+                pieces = list(self.stream(
+                    "Ответь одним словом на русском, без личных данных.",
+                    [{"role": "user", "content": "Проверка потокового ответа."}],
+                    threading.Event()
+                ))
+                if not "".join(pieces).strip():
+                    raise CloudError("Поток завершился без текста.")
+                checks["stream"] = {"state": "passed", "fragments": len(pieces)}
+            except (CloudError, ValueError, OSError) as error:
+                checks["stream"] = {"state": "failed", "message": str(error)}
+        else:
+            checks["stream"] = {"state": "skipped"}
+        if include_embeddings:
+            if not self.status()["embedding_model"]:
+                checks["embeddings"] = {
+                    "state": "skipped", "message": "Embedding-модель ещё не выбрана."
+                }
+            else:
+                try:
+                    vectors = self.embed(["Проверка векторного API Цукиёры"])
+                    checks["embeddings"] = {"state": "passed",
+                                            "dimension": len(vectors[0])}
+                except (CloudError, ValueError, OSError) as error:
+                    checks["embeddings"] = {"state": "failed", "message": str(error)}
+        else:
+            checks["embeddings"] = {"state": "skipped"}
+        live = bool(checks.get("chat", {}).get("state") == "passed" and
+                    checks.get("stream", {}).get("state") in ("passed", "skipped") and
+                    checks.get("embeddings", {}).get("state") in ("passed", "skipped"))
+        return {"live": live, "checks": checks, "requires_local_key": True,
+                "warning": "Это проверка доступности API, не гарантия качества будущих ответов."}
 
     def rerank(self, query: str, candidates: list[dict]) -> list[int]:
         """An actual semantic LLM judge for bounded local retrieval candidates."""

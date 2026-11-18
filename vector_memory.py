@@ -204,11 +204,50 @@ class VectorMemory:
             ).fetchone()[0]
             return {"cached_vectors": size, "indexed_memories": indexed, "active_memories": total}
 
-    def prune(self):
-        """Remove stale bindings, never delete approved memory or history."""
+    def repair(self, limit: int = 5000) -> dict:
+        """Restore vector links solely from cached text hashes; never call Cloud.ru."""
+        if type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError("Invalid repair limit.")
         with closing(self.connect()) as db, db:
-            db.execute(
+            removed = db.execute(
                 "DELETE FROM memory_embeddings WHERE memory_id NOT IN "
                 "(SELECT id FROM memory_items WHERE status='active')"
-            )
-            # Stale content mappings are filtered at query time and reindexed on demand.
+            ).rowcount
+            records = db.execute(
+                "SELECT id,content FROM memory_items WHERE status='active' "
+                "ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+            repaired = 0
+            stale = 0
+            for record in records:
+                correct = digest(record["content"])
+                bindings = db.execute(
+                    "SELECT model,text_sha256 FROM memory_embeddings WHERE memory_id=?",
+                    (record["id"],)
+                ).fetchall()
+                for binding in bindings:
+                    if binding["text_sha256"] != correct:
+                        db.execute(
+                            "DELETE FROM memory_embeddings WHERE memory_id=? AND model=?",
+                            (record["id"], binding["model"])
+                        )
+                        stale += 1
+                # Only restore models explicitly used for this memory before.
+                # Old mappings are enough to identify the model after a correction.
+                for binding in bindings:
+                    cached = db.execute(
+                        "SELECT 1 FROM embedding_cache WHERE model=? AND text_sha256=?",
+                        (binding["model"], correct)
+                    ).fetchone()
+                    if cached and binding["text_sha256"] != correct:
+                        db.execute(
+                            "INSERT OR REPLACE INTO memory_embeddings(memory_id,model,text_sha256)"
+                            " VALUES(?,?,?)", (record["id"], binding["model"], correct)
+                        )
+                        repaired += 1
+            return {"stale_removed": stale + removed, "cache_restored": repaired,
+                    "scanned": len(records), "cloud_requests": 0}
+
+    def prune(self):
+        """Maintain compatibility with earlier local maintenance."""
+        return self.repair()

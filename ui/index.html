@@ -77,7 +77,7 @@
         <label class="sr-only" for="cloud-model">Модель Cloud.ru</label>
         <select id="cloud-model" disabled><option value="">Сначала подключи Cloud.ru</option></select>
         <button type="button" id="cloud-select" class="quiet-button" disabled>Использовать модель</button>
-        <button type="button" id="cloud-diagnose" class="quiet-button" disabled title="Проверочный запрос может расходовать токены">Проверить живой ответ</button>
+        <button type="button" id="cloud-diagnose" class="quiet-button" disabled title="Настоящие запросы моделей, потока и эмбеддингов могут расходовать токены">Проверить Cloud.ru</button>
         <p id="cloud-feedback" class="memory-empty" role="status">Ключ используется только в запущенном Python-сервере и не записывается на диск.</p>
       </div>
     </details>
@@ -106,6 +106,11 @@
           <p class="memory-empty">Из разговоров сюда поступают важные факты. Ты сам решаешь, что сохранить.</p>
           <div id="memory-pending" class="memory-results" aria-live="polite"></div>
         </details>
+        <details class="memory-queue" id="memory-quality">
+          <summary>Качество памяти <span class="muted">дубли · противоречия</span></summary>
+          <p class="memory-empty">Похожие и противоречивые записи отмечаются для проверки, но автоматически не удаляются.</p>
+          <div id="quality-results" class="memory-results" aria-live="polite"></div>
+        </details>
         <details class="memory-queue" id="vector-details">
           <summary>Векторная память <span id="vector-count" class="muted">опционально</span></summary>
           <p class="memory-empty">Индексация отправляет выбранные подтверждённые воспоминания в embedding-модель Cloud.ru, расходует токены. Кэш остаётся в SQLite.</p>
@@ -115,11 +120,14 @@
             <button id="embedding-select" type="button" class="quiet-button" disabled>Выбрать модель</button>
             <button id="embedding-index" type="button" class="quiet-button" disabled>Индексировать память</button>
           </div>
+          <label class="vector-opt-in"><input type="checkbox" id="embedding-auto" disabled> Использовать embeddings при общении в чате (отправка текста запроса в Cloud.ru)</label>
           <p class="memory-empty" id="vector-feedback" role="status">Обработка только после твоего подтверждения.</p>
         </details>
         <details class="memory-queue" id="cognitive-details">
           <summary>Опыт и биография <span class="muted">локально</span></summary>
           <div id="cognitive-status" class="memory-empty">Локальная проверка…</div>
+          <div id="tone-status" class="memory-empty"></div>
+          <div id="learning-goals" class="memory-results"></div>
           <div id="biography-notes" class="memory-results"></div>
         </details>
         <details class="memory-queue" id="soul-journal">

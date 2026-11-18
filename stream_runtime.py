@@ -98,7 +98,8 @@ def handle_stream(handler, obj: dict):
         used_vectors = False
         # An embedding model must be explicitly selected and records indexed.
         # Failed or unsupported embedding API never blocks the local fallback.
-        configured = cloud.status().get("embedding_model")
+        cloud_state = cloud.status()
+        configured = cloud_state.get("embedding_model") if cloud_state.get("vector_chat_enabled") else None
         if configured:
             try:
                 if handler.server.cognition.vectors.stats(configured)["indexed_memories"]:

@@ -256,3 +256,19 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
   overflow-wrap:anywhere}
 #skill-candidates button,#evolution-trials button{margin:4px 7px 4px 0}
 #reflection-result{max-height:280px;overflow:auto;overflow-wrap:anywhere}
+
+/* Cognitive Soul 2.0: contained within existing black/gold settings dialog. */
+#cognitive-next input,#cognitive-next textarea,#cognitive-next select{
+  display:block;width:100%;min-width:0;box-sizing:border-box;
+  background:#0e0e10;color:#ebd4ac;border:1px solid #6b5031;
+  border-radius:7px;padding:9px;margin:8px 0;
+}
+#cognitive-next label{display:block;margin-top:12px;font-size:12px;color:#c7a77b}
+#cognitive-next .memory-actions{display:flex;gap:7px;flex-wrap:wrap;margin:7px 0}
+#cognitive-next .quiet-button{margin:4px 7px 4px 0}
+#next-result{max-height:350px;overflow:auto}
+.next-output{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;
+  font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;
+  padding:12px;border:1px solid #a77b402f;border-radius:8px;color:#edd9b2}
+#next-goals .memory-record,#next-research .memory-record{
+  overflow-wrap:anywhere;padding:7px 0;border-bottom:1px solid #ffffff12}

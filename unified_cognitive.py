@@ -166,6 +166,19 @@ class UnifiedCognitiveCore:
                         "(SELECT id FROM cognitive_v5_events ORDER BY id DESC LIMIT 350)"
                     )
             return result
+        except Exception as error:
+            # Unexpected bugs must not kill the only background worker or
+            # leave a claimed SQLite task forever stuck in 'running'.
+            # No exception message or user data is persisted or exposed.
+            with closing(self.store.connect()) as db, db:
+                db.execute(
+                    "UPDATE maintenance_queue SET state='waiting',due_at=?,"
+                    "failures=failures+1,last_status='warning' "
+                    "WHERE state='running'",
+                    (int(time.time())+300,)
+                )
+            return {"status":"warning","reason":"local_job_failed",
+                    "error_type":type(error).__name__,"cloud_calls":0}
         finally:
             self._tick_lock.release()
 

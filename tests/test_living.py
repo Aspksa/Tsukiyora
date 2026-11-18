@@ -221,6 +221,23 @@ class StreamingApiTests(unittest.TestCase):
         self.assertNotIn("ДАЛЬШЕ", output)
         self.assertEqual(MemoryStore(self.db).stats()["messages"], 1)
 
+    def test_stop_during_rerank_skips_paid_stream(self):
+        MemoryStore(self.db).add_memory("fact", "Гараж ремонтирует автомобили")
+        MemoryStore(self.db).add_memory("fact", "Гараж хранит автомобили")
+        def cancel_while_searching(query, matches):
+            self.assertGreater(len(matches), 1)
+            next(iter(self.server.active_streams.values())).set()
+            return []
+        with patch.object(cloudru.CloudSession, "rerank", side_effect=cancel_while_searching):
+            with patch.object(cloudru.CloudSession, "stream",
+                              side_effect=AssertionError("Paid generation must not start")):
+                with self.request("/api/chat/stream", {
+                    "content": "Гараж", "client_message_id": "stop-before-generation"
+                }) as response:
+                    output = response.read().decode("utf-8")
+        self.assertIn("event: stopped", output)
+        self.assertEqual(MemoryStore(self.db).stats()["messages"], 1)
+
     def test_live_diagnostic_errors_are_explicit(self):
         with patch.object(cloudru.CloudSession, "diagnostic", side_effect=cloudru.CloudError("Cloud.ru недоступен", 502)):
             with self.assertRaises(HTTPError) as caught:

@@ -298,3 +298,13 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 #evol4-candidates{max-height:440px;overflow:auto}
 #evol4-diagnostics{white-space:pre-wrap;overflow-wrap:anywhere;
   font-size:12px;max-height:270px;overflow:auto}
+
+/* Cognitive Soul 5.0 — one coherent black/gold operations view. */
+#cognitive-unified .memory-actions{display:flex;gap:7px;flex-wrap:wrap;margin:9px 0}
+#cognitive-unified .quiet-button{margin:4px 6px 4px 0}
+#cognitive-unified .memory-record{padding:7px 0;
+  border-bottom:1px solid #ffffff12;overflow-wrap:anywhere}
+#cognitive-unified #unified-state{line-height:1.6}
+#unified-review-list,#unified-activity{max-height:250px;overflow:auto}
+#cognitive-advanced{margin-top:6px}
+#cognitive-advanced>details{margin:6px 0}

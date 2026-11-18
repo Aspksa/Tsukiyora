@@ -30,6 +30,8 @@ JOBS = {
     "atlas_verify": 1500,
     "academy_rollback": 600,
     "wal_check": 7200,
+    "dialogue_recaps": 1800,
+    "semantic_group_audit": 3600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -162,6 +164,10 @@ class Maintenance:
                 report = core.reliability.verify_snapshots(limit=3)
                 result = {"checked":report["checked"],"healthy":report["healthy"],
                           "invalid":report["invalid"]}
+            elif kind == "dialogue_recaps":
+                result = core.dialogues.refresh_recent(limit=4)
+            elif kind == "semantic_group_audit":
+                result = core.semantic_groups.health()
             elif kind == "academy_metrics":
                 report = core.metrics.evaluate()
                 result = {"updated":report.get("updated",False),

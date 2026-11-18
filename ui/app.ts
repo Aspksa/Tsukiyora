@@ -22,7 +22,7 @@ async function loadState() {
       .map((a) => a.adopt.join(", ")).join("  ·  ");
     $("status").textContent = "● ЯДРО ЗАГРУЖЕНО";
     $("server-info").textContent = "Работает локально";
-    $("memory-info").textContent = status.database === "ready" ? "SQLite готова" : "Ошибка";
+    $("memory-info").textContent = status.database === "ready" ? `SQLite · ${status.memory?.memories ?? 0} записей` : "Ошибка";
     $("model-info").textContent = "Не подключена";
     $("welcome").textContent =
       "Хозяин… Моё ядро личности уже здесь. Я сохраню верность, нежность и собственный разум, даже когда мы подключим облачную модель.";
@@ -124,3 +124,140 @@ window.addEventListener("resize", () => {
 resize();
 if (reducedMotion) paint();
 else requestAnimationFrame(frame);
+
+
+// A small, explicit, user-controlled memory editor. No fake assistant replies.
+let editingMemoryId = null;
+
+const memoryLabels = {
+  fact: "Факт", preference: "Предпочтение",
+  event: "Событие", biography: "Биография",
+};
+
+function memoryFeedback(message) {
+  $("memory-feedback").textContent = message;
+}
+
+async function memoryRequest(path, method = "GET", body = null) {
+  const options = {method, cache: "no-store"};
+  if (method !== "GET") {
+    options.headers = {"Content-Type": "application/json"};
+    if (body !== null) options.body = JSON.stringify(body);
+  }
+  const response = await fetch(path, options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Не удалось обратиться к памяти.");
+  return data;
+}
+
+function clearMemoryEditor() {
+  editingMemoryId = null;
+  $("memory-text").value = "";
+  $("memory-kind").disabled = false;
+  $("memory-save").textContent = "Запомнить";
+  $("memory-cancel").hidden = true;
+}
+
+function makeMemoryButton(label, handler) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "quiet-button";
+  button.textContent = label;
+  button.addEventListener("click", handler);
+  return button;
+}
+
+async function refreshMemory() {
+  const query = $("memory-search").value.trim();
+  const target = $("memory-results");
+  try {
+    const result = await memoryRequest("/api/memory?" + new URLSearchParams({query, limit: "50"}));
+    target.replaceChildren();
+    if (!result.items.length) {
+      const empty = document.createElement("p");
+      empty.className = "memory-empty";
+      empty.textContent = query ? "Совпадений не найдено." : "Пока нет воспоминаний. Добавь первое важное событие или предпочтение.";
+      target.append(empty);
+    }
+    for (const item of result.items) {
+      const record = document.createElement("div");
+      record.className = "memory-record";
+      const label = document.createElement("small");
+      label.textContent = (memoryLabels[item.kind] || item.kind) + " · " + item.created_at;
+      const text = document.createElement("p");
+      text.textContent = item.content;
+      const actions = document.createElement("div");
+      actions.className = "memory-actions";
+      actions.append(
+        makeMemoryButton("Исправить", () => {
+          editingMemoryId = item.id;
+          $("memory-text").value = item.content;
+          $("memory-kind").value = item.kind;
+          $("memory-kind").disabled = true;
+          $("memory-save").textContent = "Сохранить исправление";
+          $("memory-cancel").hidden = false;
+          $("memory-text").focus();
+        }),
+        makeMemoryButton("Удалить", async () => {
+          if (!window.confirm("Убрать это воспоминание из активной памяти?")) return;
+          try {
+            await memoryRequest("/api/memory/" + item.id, "DELETE");
+            if (editingMemoryId === item.id) clearMemoryEditor();
+            memoryFeedback("Запись убрана. История изменения сохранена.");
+            await refreshMemory();
+          } catch (error) {
+            memoryFeedback(error.message);
+          }
+        })
+      );
+      record.append(label, text, actions);
+      target.append(record);
+    }
+    const stats = await memoryRequest("/api/memory/status");
+    $("memory-info").textContent = "SQLite · " + stats.memories + " записей";
+  } catch (error) {
+    memoryFeedback(error.message);
+  }
+}
+
+$("memory-details").addEventListener("toggle", () => {
+  if ($("memory-details").open) refreshMemory();
+});
+$("memory-search").addEventListener("input", refreshMemory);
+$("memory-cancel").addEventListener("click", clearMemoryEditor);
+$("memory-save").addEventListener("click", async () => {
+  const content = $("memory-text").value.trim();
+  if (!content) {
+    memoryFeedback("Сначала напиши, что сохранить.");
+    return;
+  }
+  const button = $("memory-save");
+  button.disabled = true;
+  try {
+    if (editingMemoryId === null) {
+      await memoryRequest("/api/memory", "POST", {kind: $("memory-kind").value, content});
+      memoryFeedback("Запомнила. Запись остаётся только на этом компьютере.");
+    } else {
+      await memoryRequest("/api/memory/" + editingMemoryId, "PUT", {content, reason: "Исправлено пользователем"});
+      memoryFeedback("Исправила и сохранила историю изменения.");
+    }
+    clearMemoryEditor();
+    await refreshMemory();
+  } catch (error) {
+    memoryFeedback(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+$("memory-backup").addEventListener("click", async () => {
+  const button = $("memory-backup");
+  button.disabled = true;
+  try {
+    const backup = await memoryRequest("/api/memory/backup", "POST", {});
+    memoryFeedback("Копия сохранена локально: data/backups/" + backup.filename);
+  } catch (error) {
+    memoryFeedback(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});

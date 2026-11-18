@@ -329,6 +329,8 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.evolution4.report())
         if path == "/api/soul/evolution4/cases":
             return self.send_json(self.server.cognition.evolution4.case_index())
+        if path == "/api/soul/evolution4/budget":
+            return self.send_json(self.server.cognition.evolution4.budget_plan())
         if path == "/api/soul/evolution4/signals":
             return self.send_json(self.server.cognition.evolution4.signals())
         if path == "/api/soul/evolution4/curriculum":
@@ -948,7 +950,9 @@ class SoulHandler(BaseHTTPRequestHandler):
             evolving = self.server.cognition.evolution.guidance_for_conversation(conversation_id)
             improvement_id, approved = self.server.cognition.improvement.guidance()
             evol4_id, evol4_style = self.server.cognition.evolution4.guidance(content)
-            extra = (guidance + " " + evolving + " " + approved + " " + evol4_style).strip()[:1800]
+            earlier = (guidance + " " + evolving + " " + approved).strip()
+            extra = (earlier[:max(0,1799-len(evol4_style))] +
+                     " " + evol4_style).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,
                                     extra_guidance=extra)
             assistant = store.append_messages(conversation_id, [{

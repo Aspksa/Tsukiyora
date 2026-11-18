@@ -11,7 +11,7 @@ import sqlite3
 
 from memory_store import MemoryStore
 
-SCHEMA_VERSION=9
+SCHEMA_VERSION=11
 
 
 class MigrationGuard:

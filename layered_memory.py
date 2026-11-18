@@ -96,7 +96,7 @@ class LayeredMemory:
                     {"id": x["id"], "layer": "short_term", "source_type": "message",
                      "role": x["role"], "content": x["content"],
                      "created_at": x["created_at"], "priority": 1}
-                    for x in messages], "count": len(messages)}
+                    for x in messages], "count": len(messages), "links": []}
             items = [dict(row) for row in db.execute(
                 "SELECT m.id,m.kind,m.content,m.source_type,m.source_ref,"
                 "m.verification_state,m.created_at,i.layer,i.priority,i.revision_id "
@@ -108,7 +108,19 @@ class LayeredMemory:
             revisions = db.execute(
                 "SELECT COUNT(*) FROM memory_revisions"
             ).fetchone()[0]
-        return {"layer": layer, "items": items,
+            links = [dict(x) for x in db.execute(
+                "SELECT l.source_id,l.target_id,l.relation,"
+                "a.layer AS source_layer,b.layer AS target_layer "
+                "FROM memory_links l "
+                "JOIN memory_layer_index a ON a.memory_id=l.source_id "
+                "JOIN memory_layer_index b ON b.memory_id=l.target_id "
+                "JOIN memory_items m ON m.id=l.source_id AND m.status='active' "
+                "JOIN memory_items n ON n.id=l.target_id AND n.status='active' "
+                "WHERE (?='all' OR a.layer=? OR b.layer=?)"
+                " ORDER BY l.created_at DESC LIMIT 120",
+                (layer,layer,layer),
+            )]
+        return {"layer": layer, "items": items, "links": links,
                 "count": len(items), "revision_events": revisions}
 
     def confidence(self, memory_id: int) -> dict:

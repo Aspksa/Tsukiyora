@@ -136,6 +136,11 @@ def handle_stream(handler, obj: dict):
         if improvement_style:
             prompt += ("\n\nПодтверждённая тестом дополнительная стратегия ответа "
                        "(не отменяет персонаж и правила): "+improvement_style)
+        evol4_id,evol4_style = handler.server.cognition.evolution4.guidance(content)
+        if evol4_style:
+            prompt += ("\n\nПодтверждённая отдельными контрольными задачами "
+                       "стратегия предметной области (не переопределяет безопасность): "
+                       +evol4_style)
         # The biography and habits are explicitly approved local data.
         prompt += "\n\n" + handler.server.cognition.continuity.context()
         if any(m.get("possible_conflict") or m.get("potentially_stale")
@@ -193,6 +198,12 @@ def handle_stream(handler, obj: dict):
             try:
                 handler.server.cognition.improvement.applied(
                     assistant["id"], improvement_id)
+            except (sqlite3.Error, ValueError):
+                pass
+        if evol4_id is not None:
+            try:
+                handler.server.cognition.evolution4.applied(
+                    assistant["id"],evol4_id)
             except (sqlite3.Error, ValueError):
                 pass
         # A provenance audit is local and never claims that a model answer is true.

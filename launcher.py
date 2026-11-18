@@ -590,6 +590,38 @@ class SoulHandler(BaseHTTPRequestHandler):
 
 
 def run() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        # Real portable launcher smoke test. Uses TEMP SQLite, no browser,
+        # secrets, system services, network or the user's persistent database.
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="tsukiyora-smoke-") as folder:
+            candidate=Path(folder)/"data"/"memory.sqlite3"
+            persona=load_personality()
+            init_database(candidate)
+            probe=SoulServer(("127.0.0.1",0),persona,candidate)
+            try:
+                report=probe.cognition.reliability.local_checks()
+                fts=probe.cognition.migrations.audit()
+                html=(UI/"index.html").read_text(encoding="utf-8")
+                script=(UI/"app.ts").read_text(encoding="utf-8")
+                buttons=("cloud-diagnose","send-message","stop-message",
+                         "run-system-check","precision-search","academy-enabled")
+                interface=all('id="'+name+'"' in html for name in buttons)
+                ok=bool(report["all_local_passed"] and
+                        fts["sqlite_integrity"] and interface and
+                        "/api/chat/stream" in script)
+                print(json.dumps({
+                    "portable_launch_smoke":"passed" if ok else "failed",
+                    "sqlite":fts["sqlite_integrity"],
+                    "ui_markup":interface,"cloud_live_tested":False,
+                    "browser_buttons_clicked":False,
+                }))
+                return 0 if ok else 1
+            finally:
+                probe.server_close()
+    if len(sys.argv)>1:
+        print("Usage: launcher.py [--self-test]", file=sys.stderr)
+        return 2
     if sys.version_info < (3, 10):
         print("Python 3.10+ required.", file=sys.stderr)
         return 1

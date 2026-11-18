@@ -141,6 +141,10 @@ class SoulGrowth:
                 self.build_links(item["id"])
                 self.journal("memory_approved", f"Подтверждена запись памяти №{item['id']}",
                              "memory", str(item["id"]))
+                if row["kind"] == "preference" and re.search(
+                        r"\b(?:общайся|говори|пиши|отвечай)\b", row["content"], re.I):
+                    self.journal("style_preference", "Обновлены подтверждённые предпочтения стиля",
+                                 "memory", str(item["id"]))
             with db:
                 db.execute("UPDATE memory_suggestions SET state=? WHERE id=? AND state='pending'",
                            ("approved" if accept else "rejected", suggestion_id))
@@ -173,6 +177,9 @@ class SoulGrowth:
                 if len(links) >= 20:
                     break
             with db:
+                # Corrections invalidate previous links; rebuild from current text.
+                db.execute("DELETE FROM memory_links WHERE source_id=? OR target_id=?",
+                           (memory_id, memory_id))
                 for target_id, relation, overlap in links:
                     x, y = sorted((memory_id, target_id))
                     db.execute(

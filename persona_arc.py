@@ -60,6 +60,27 @@ class PersonaArc:
                 "approved_biography":len(approved)-habits,
                 "protected_persona_unchanged":True,"real_emotions":False}
 
+    def links(self,limit=60):
+        """Only explicit relations between approved autobiographical events."""
+        if type(limit) is not int or not 1<=limit<=100:
+            raise ValueError("Invalid personality link limit")
+        with closing(self.store.connect()) as db:
+            edges=[dict(x) for x in db.execute(
+                "SELECT l.source_id,l.target_id,l.relation,"
+                "a.kind AS source_kind,b.kind AS target_kind,"
+                "a.source_type AS source_origin,b.source_type AS target_origin "
+                "FROM memory_links l "
+                "JOIN memory_items a ON a.id=l.source_id AND a.status='active' "
+                "JOIN memory_items b ON b.id=l.target_id AND b.status='active' "
+                "WHERE (a.kind IN ('biography','event','preference') "
+                "OR b.kind IN ('biography','event','preference')) "
+                "ORDER BY l.rowid DESC LIMIT ?",(limit,)
+            )]
+        return {"links":edges,"relation_count":len(edges),
+                "source":"approved_local_memory_links",
+                "infer_new_relationships":False,
+                "relationship_truth_verified":False}
+
     def history(self,limit=24)->dict:
         if type(limit) is not int or not 1<=limit<=100:
             raise ValueError("Invalid arc limit")

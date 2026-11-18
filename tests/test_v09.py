@@ -215,7 +215,7 @@ class V09HTTPTests(unittest.TestCase):
             return json.load(response)
 
     def test_new_local_routes_and_api_security(self):
-        self.assertEqual(self.get("/api/system/migrations")["version"],9)
+        self.assertEqual(self.get("/api/system/migrations")["version"],11)
         self.assertFalse(self.get("/api/soul/academy/metrics")["automated_model_training"])
         self.assertFalse(self.get("/api/soul/character/timeline")["real_feelings_claimed"])
         self.assertEqual(self.get("/api/soul/atlas?level=overview")["total"],0)
@@ -242,7 +242,7 @@ class V09HTTPTests(unittest.TestCase):
                       "precision-search","academy-enabled","soul-canvas",
                       "send-message","stop-message","cloud-diagnose"):
             self.assertIn('id="'+field+'"',html)
-        for route in ("/api/soul/rag","/api/system/migrations",
+        for route in ("/api/soul/evidence","/api/system/migrations",
                       "/api/system/recovery-check","/api/soul/academy/metrics",
                       "/api/soul/character/timeline","/api/soul/atlas"):
             self.assertIn(route,script)

@@ -86,8 +86,7 @@ class AcademyExperiments:
                 "FROM academy_outcomes GROUP BY strategy"
             )]
             assigned=db.execute("SELECT COUNT(*) FROM academy_assignment").fetchone()[0]
-        outcome={x["strategy"]:{"samples":0,"successes":0,"helpful_rate":None}
-                 for x in []}
+        outcome={}
         # Always show both strategies, even if no one rated either.
         for name in STRATEGIES:
             row=next((r for r in rows if r["strategy"]==name),None)

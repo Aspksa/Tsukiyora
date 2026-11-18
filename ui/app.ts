@@ -766,6 +766,90 @@ $("chat-sessions").addEventListener("change", async () => {
   await loadChatHistory();
 });
 
+// Entirely local history search. Never interpolates conversation text as HTML.
+let lastDialogueQuery="";
+let dialogueCursor=null;
+async function searchDialogueHistory(nextPage=false) {
+  const query=$("dialogue-query").value.trim();
+  const output=$("dialogue-results");
+  if (query.length<2) {
+    output.textContent="Введите не меньше двух символов.";
+    return;
+  }
+  const button=$("dialogue-search");
+  button.disabled=true;
+  try {
+    if (!nextPage || query!==lastDialogueQuery) {
+      dialogueCursor=null;output.replaceChildren();
+    }
+    const params=new URLSearchParams({query,limit:"20"});
+    if (dialogueCursor!==null) params.set("before_id",String(dialogueCursor));
+    const result=await requestJSON("/api/memory/history/search?"+params);
+    lastDialogueQuery=query;dialogueCursor=result.next_before_id;
+    for (const record of result.items) {
+      const choice=document.createElement("button");
+      choice.type="button";choice.className="dialogue-result";
+      choice.textContent=record.title+" · "+record.role+" #"+record.id+
+        " · "+record.excerpt;
+      choice.addEventListener("click",async () => {
+        if (chatBusy) return;
+        activeSession=record.conversation_id;
+        preferNewConversation=false;
+        const sessions=$("chat-sessions");
+        if (![...sessions.options].some(o=>o.value===activeSession)) {
+          const opt=document.createElement("option");
+          opt.value=activeSession;opt.textContent=record.title;
+          sessions.append(opt);
+        }
+        sessions.value=activeSession;
+        await loadChatHistory();
+        $("dialogue-memory").open=false;
+      });
+      output.append(choice);
+    }
+    if (!result.items.length && !nextPage) {
+      output.textContent="Совпадений в сохранённой истории нет.";
+    }
+    const oldMore=$("dialogue-next-page");
+    if (oldMore) oldMore.remove();
+    if (result.has_more) {
+      const more=document.createElement("button");
+      more.type="button";more.id="dialogue-next-page";
+      more.className="quiet-button";more.textContent="Ещё результаты";
+      more.addEventListener("click",()=>searchDialogueHistory(true));
+      output.append(more);
+    }
+  } catch (error) {
+    output.textContent="Ошибка локального поиска: "+error.message;
+  } finally {button.disabled=false;}
+}
+$("dialogue-search").addEventListener("click",()=>searchDialogueHistory());
+$("dialogue-query").addEventListener("keydown",event => {
+  if (event.key==="Enter") {
+    event.preventDefault();searchDialogueHistory();
+  }
+});
+$("dialogue-recap").addEventListener("click",async () => {
+  const button=$("dialogue-recap");
+  const node=$("dialogue-summary");
+  if (!activeSession) {
+    node.textContent="Сначала выбери сохранённый диалог.";
+    return;
+  }
+  button.disabled=true;
+  node.textContent="Читаю сохранённые сообщения локально…";
+  try {
+    const result=await requestJSON("/api/memory/history/recap?"+
+      new URLSearchParams({conversation_id:activeSession}));
+    node.textContent=result.ready
+      ? result.summary
+      : "Для сводки необходимо минимум "+result.required+
+        " сообщений. Сейчас: "+result.message_count+".";
+  } catch (error) {
+    node.textContent="Ошибка сводки: "+error.message;
+  } finally {button.disabled=false;}
+});
+
 // Streaming API emits start/token/done/stopped/error events.
 let activeStreamId = "";
 let pendingClientId = "";

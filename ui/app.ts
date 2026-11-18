@@ -766,6 +766,109 @@ $("chat-sessions").addEventListener("change", async () => {
   await loadChatHistory();
 });
 
+// Entirely local history search. Never interpolates conversation text as HTML.
+let lastDialogueQuery="";
+let dialogueCursor=null;
+async function searchDialogueHistory(nextPage=false) {
+  const query=$("dialogue-query").value.trim();
+  const output=$("dialogue-results");
+  if (query.length<2) {
+    output.textContent="Введите не меньше двух символов.";
+    return;
+  }
+  const button=$("dialogue-search");
+  button.disabled=true;
+  try {
+    if (!nextPage || query!==lastDialogueQuery) {
+      dialogueCursor=null;output.replaceChildren();
+    }
+    const params=new URLSearchParams({query,limit:"20"});
+    if (dialogueCursor!==null) params.set("before_id",String(dialogueCursor));
+    const result=await requestJSON("/api/memory/history/search?"+params);
+    lastDialogueQuery=query;dialogueCursor=result.next_before_id;
+    for (const record of result.items) {
+      const choice=document.createElement("button");
+      choice.type="button";choice.className="dialogue-result";
+      choice.textContent=record.title+" · "+record.role+" #"+record.id+
+        " · "+record.excerpt;
+      choice.addEventListener("click",async () => {
+        if (chatBusy) return;
+        activeSession=record.conversation_id;
+        preferNewConversation=false;
+        const sessions=$("chat-sessions");
+        if (![...sessions.options].some(o=>o.value===activeSession)) {
+          const opt=document.createElement("option");
+          opt.value=activeSession;opt.textContent=record.title;
+          sessions.append(opt);
+        }
+        sessions.value=activeSession;
+        try {
+          const nearby=await requestJSON("/api/memory/history/context?"+
+            new URLSearchParams({message_id:String(record.id)}));
+          const log=$("conversation");
+          log.replaceChildren();log.classList.add("has-messages");
+          let selected=null;
+          for (const msg of nearby.messages) {
+            const bubble=addChatBubble(msg.role,msg.content);
+            if (msg.role==="assistant") attachFeedback(bubble,msg.id);
+            if (msg.id===nearby.selected_message_id) {
+              bubble.classList.add("dialogue-highlight");
+              selected=bubble;
+            }
+          }
+          if (selected) selected.scrollIntoView({block:"center"});
+          $("chat-notice").textContent="Фрагмент истории около сообщения #"+
+            record.id+". Для последних сообщений снова выбери диалог в списке.";
+          $("dialogue-memory").open=false;
+        } catch (error) {
+          $("chat-notice").textContent="Ошибка открытия сообщения: "+error.message;
+        }
+      });
+      output.append(choice);
+    }
+    if (!result.items.length && !nextPage) {
+      output.textContent="Совпадений в сохранённой истории нет.";
+    }
+    const oldMore=$("dialogue-next-page");
+    if (oldMore) oldMore.remove();
+    if (result.has_more) {
+      const more=document.createElement("button");
+      more.type="button";more.id="dialogue-next-page";
+      more.className="quiet-button";more.textContent="Ещё результаты";
+      more.addEventListener("click",()=>searchDialogueHistory(true));
+      output.append(more);
+    }
+  } catch (error) {
+    output.textContent="Ошибка локального поиска: "+error.message;
+  } finally {button.disabled=false;}
+}
+$("dialogue-search").addEventListener("click",()=>searchDialogueHistory());
+$("dialogue-query").addEventListener("keydown",event => {
+  if (event.key==="Enter") {
+    event.preventDefault();searchDialogueHistory();
+  }
+});
+$("dialogue-recap").addEventListener("click",async () => {
+  const button=$("dialogue-recap");
+  const node=$("dialogue-summary");
+  if (!activeSession) {
+    node.textContent="Сначала выбери сохранённый диалог.";
+    return;
+  }
+  button.disabled=true;
+  node.textContent="Читаю сохранённые сообщения локально…";
+  try {
+    const result=await requestJSON("/api/memory/history/recap?"+
+      new URLSearchParams({conversation_id:activeSession}));
+    node.textContent=result.ready
+      ? result.summary
+      : "Для сводки необходимо минимум "+result.required+
+        " сообщений. Сейчас: "+result.message_count+".";
+  } catch (error) {
+    node.textContent="Ошибка сводки: "+error.message;
+  } finally {button.disabled=false;}
+});
+
 // Streaming API emits start/token/done/stopped/error events.
 let activeStreamId = "";
 let pendingClientId = "";
@@ -1162,7 +1265,10 @@ async function refreshQuality() {
   loading.textContent = "Проверяю утверждения и источники…";
   target.append(loading);
   try {
-    const result = await requestJSON("/api/soul/quality");
+    const [result,groups]=await Promise.all([
+      requestJSON("/api/soul/quality"),
+      requestJSON("/api/soul/semantic/groups")
+    ]);
     target.replaceChildren();
     for (const [field, label] of [["duplicates", "Похожая запись"],
                                    ["semantic_duplicates", "Возможно повторение по смыслу"],
@@ -1179,7 +1285,60 @@ async function refreshQuality() {
         second.textContent = "#" + issue.right.id + " (" +
           (issue.right.source_ref || issue.right.source_type) + "): " + issue.right.content;
         block.append(name, first, second);
+        if (field!=="conflicts") {
+          const grouping=document.createElement("button");
+          grouping.type="button";grouping.className="quiet-button";
+          grouping.textContent="Связать похожие · сохранить оригиналы";
+          grouping.addEventListener("click",async () => {
+            if (!window.confirm("Обозначить эти записи похожими? "+
+              "Обе исходные записи и все версии будут сохранены.")) return;
+            grouping.disabled=true;
+            try {
+              await requestJSON("/api/soul/semantic/link","POST",{
+                left_id:issue.left.id,right_id:issue.right.id,confirmed:true
+              });
+              memoryFeedback("Записи связаны без удаления исходных фактов.");
+              await refreshQuality();
+            } catch (error) {
+              memoryFeedback("Связь не создана: "+error.message);
+              grouping.disabled=false;
+            }
+          });
+          block.append(grouping);
+        }
         target.append(block);
+      }
+    }
+    if (groups.items.length) {
+      const heading=document.createElement("p");
+      heading.className="memory-empty";
+      heading.textContent="Подтверждённые вручную связи · "+groups.items.length+
+        " (оригиналы сохранены):";
+      target.append(heading);
+      for (const group of groups.items.slice(0,20)) {
+        const row=document.createElement("div");
+        row.className="memory-record";
+        const label=document.createElement("p");
+        label.textContent="#"+group.left_id+" ↔ #"+group.right_id+
+          (group.current ? " · действующая связь" :
+           " · изменена запись — подтверди заново");
+        const revoke=document.createElement("button");
+        revoke.type="button";revoke.className="quiet-button";
+        revoke.textContent="Отменить связь";
+        revoke.addEventListener("click",async () => {
+          if (!window.confirm("Убрать связь между воспоминаниями? "+
+                              "Сами факты не удалятся.")) return;
+          revoke.disabled=true;
+          try {
+            await requestJSON("/api/soul/semantic/unlink","POST",{
+              left_id:group.left_id,right_id:group.right_id,confirmed:true
+            });
+            await refreshQuality();
+          } catch (error) {
+            memoryFeedback(error.message);revoke.disabled=false;
+          }
+        });
+        row.append(label,revoke);target.append(row);
       }
     }
     if (!result.duplicates.length && !result.semantic_duplicates.length && !result.conflicts.length) {

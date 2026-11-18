@@ -40,6 +40,20 @@
             <button type="button" id="chat-new" class="quiet-button" title="Новый диалог" aria-label="Новый диалог">+</button>
           </div>
         </div>
+        <details id="dialogue-memory" class="chat-memory">
+          <summary>История · поиск и сводка <span class="muted">локально</span></summary>
+          <div class="memory-actions">
+            <label class="sr-only" for="dialogue-query">Поиск по прошлым сообщениям</label>
+            <input id="dialogue-query" type="search" maxlength="250" placeholder="Найти в старых диалогах">
+            <button id="dialogue-search" type="button" class="quiet-button">Найти</button>
+          </div>
+          <div id="dialogue-results" class="memory-results" role="status"></div>
+          <div class="memory-actions">
+            <button id="dialogue-recap" type="button" class="quiet-button">Сводка текущего диалога</button>
+          </div>
+          <pre id="dialogue-summary" class="chat-excerpts" aria-live="polite"></pre>
+          <p class="memory-empty">Сводка — только выдержки из реальных сообщений со ссылками, без облачной модели.</p>
+        </details>
         <div class="conversation" id="conversation" role="log" aria-live="polite">
           <div class="greeting">
             <span class="greeting-mark" aria-hidden="true">✧</span>

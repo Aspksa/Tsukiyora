@@ -133,7 +133,9 @@ class SoulHandler(BaseHTTPRequestHandler):
     server_version = "Tsukiyora/0.1"
 
     def log_message(self, fmt, *args):
-        LOG.info("%s %s", self.client_address[0], fmt % args)
+        # Never log user search terms, chat text or API keys in URL query strings.
+        LOG.info("%s %s %s", self.client_address[0], self.command,
+                 urlsplit(self.path).path)
 
     def send_bytes(self, status: int, value: bytes, mime: str):
         self.send_response(status)

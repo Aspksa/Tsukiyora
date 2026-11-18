@@ -48,7 +48,7 @@ class ReflectiveOptimization:
             """)
 
     def propose(self, strategy: str) -> dict:
-        if strategy not in STRATEGIES or not isinstance(strategy, str):
+        if not isinstance(strategy, str) or strategy not in STRATEGIES:
             raise ValueError("Unknown safe strategy.")
         with closing(self.store.connect()) as db, db:
             db.execute("INSERT OR IGNORE INTO evolution_trials(strategy) VALUES(?)",
@@ -122,11 +122,12 @@ class ReflectiveOptimization:
         with closing(self.store.connect()) as db, db:
             row = db.execute(
                 "SELECT a.trial_id,a.arm,t.state FROM messages m "
+                "JOIN cognitive_feedback f ON f.message_id=m.id "
                 "JOIN evolution_assignments a ON a.conversation_id=m.conversation_id "
                 "JOIN evolution_trials t ON t.id=a.trial_id "
                 "WHERE m.id=? AND m.role='assistant'", (message_id,)
             ).fetchone()
-            if row is None:
+            if row is None or row["state"] != "testing":
                 return {"measured": False}
             # Retired experiments keep historical ratings but are never applied.
             db.execute(

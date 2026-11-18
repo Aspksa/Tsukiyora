@@ -199,6 +199,7 @@ function paint() {
 let renderCostMs = 0;
 let frameIntervalMs = 33;
 let fpsReportedAt = 0;
+let observedFps = 0;
 function frame(timestamp) {
   if (document.hidden) {
     last = timestamp;
@@ -208,6 +209,11 @@ function frame(timestamp) {
   const crowded = brainGraph.nodes.length > 900 ||
     (atlasView.active && atlasView.level === "nodes");
   if (timestamp - last >= frameIntervalMs) {
+    const elapsed = timestamp-last;
+    if (last && elapsed>0) {
+      const reading = Math.min(120,1000/elapsed);
+      observedFps=observedFps ? observedFps*.85+reading*.15 : reading;
+    }
     time = reducedMotion ? 0 : timestamp;
     const before = performance.now();
     paint();
@@ -218,8 +224,9 @@ function frame(timestamp) {
     frameIntervalMs = renderCostMs > 26 ? 85 :
       renderCostMs > 12 || crowded ? 50 : 33;
     if (timestamp - fpsReportedAt > 4500) {
-      $("brain-fps").textContent = " · цель " +
-        Math.round(1000 / frameIntervalMs) + " FPS";
+      $("brain-fps").textContent = " · " + Math.round(observedFps) +
+        " FPS (реально) · цель " +
+        Math.round(1000 / frameIntervalMs);
       fpsReportedAt = timestamp;
     }
     last = timestamp;
@@ -988,12 +995,12 @@ $("precision-search").addEventListener("click", async () => {
   const button=$("precision-search");
   button.disabled=true;
   try {
-    const result=await requestJSON("/api/soul/rag4","POST", {
-      query,limit:20,max_age_days:365,
+    const result=await requestJSON("/api/soul/evidence","POST", {
+      query,limit:20,
     });
     const target=$("memory-results");
     target.replaceChildren();
-    for (const item of result.items) {
+    for (const item of result.memories) {
       const row=document.createElement("div");
       row.className="memory-record";
       const label=document.createElement("small");
@@ -1010,15 +1017,27 @@ $("precision-search").addEventListener("click", async () => {
       row.append(label,body);
       target.append(row);
     }
-    if (!result.items.length) {
+    for (const doc of result.documents) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const label=document.createElement("small");
+      label.textContent=doc.citation+" · "+doc.name+
+        " · ревизия "+doc.revision+" · сохранён локально";
+      const body=document.createElement("p");
+      body.textContent=doc.content;
+      row.append(label,body);
+      target.append(row);
+    }
+    if (!result.memories.length && !result.documents.length) {
       const empty=document.createElement("p");
       empty.className="memory-empty";
       empty.textContent="По этому запросу записей не найдено.";
       target.append(empty);
     }
-    memoryFeedback("Локальный RAG: "+result.passes.length+
-      " шага поиска, связи и источники проверены на наличие. "+
-      "Истинность записей не доказана. Cloud.ru не вызывается.");
+    memoryFeedback("RAG 5.0 · память "+result.memories.length+
+      ", фрагментов документов "+result.documents.length+
+      ", потенциальных противоречий "+result.flags.length+
+      ". Источники не являются проверкой истинности; Cloud.ru не вызывается.");
   } catch (error) {
     memoryFeedback("Ошибка точного поиска: "+error.message);
   } finally {
@@ -1180,7 +1199,8 @@ $("memory-quality").addEventListener("toggle", () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography, cloud, character, academyMetrics, timeline, experiments] = await Promise.all([
+    const [status, biography, cloud, character, academyMetrics, timeline, experiments,
+      curriculum, personaArc] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
@@ -1188,6 +1208,8 @@ async function refreshCognition() {
       requestJSON("/api/soul/academy/metrics"),
       requestJSON("/api/soul/character/timeline"),
       requestJSON("/api/soul/academy/experiments"),
+      requestJSON("/api/soul/academy/curriculum"),
+      requestJSON("/api/soul/persona/arc"),
     ]);
     const academy=status.academy;
     $("academy-enabled").checked=Boolean(academy.enabled);
@@ -1229,6 +1251,30 @@ async function refreshCognition() {
         " · наблюдаемая разница "+Math.round(experiments.observed_difference*100)+" п.п." :
         " · пока недостаточно оценок");
     experimentsPane.append(one);
+    const curriculumPane=$("academy-curriculum");
+    curriculumPane.replaceChildren();
+    for (const goal of curriculum.goals) {
+      const line=document.createElement("p");
+      line.className="memory-empty";
+      line.textContent=goal.skill+" · "+goal.state+
+        " · оценок "+goal.samples+
+        (goal.review_required ? " · проверь регрессию!" : "");
+      curriculumPane.append(line);
+    }
+    if (!curriculum.goals.length) curriculumPane.textContent=
+      "Цели появятся после первого локального учебного цикла.";
+    const arcPane=$("persona-arc");
+    arcPane.replaceChildren();
+    const lastArc=personaArc.snapshots[0];
+    const arcInfo=document.createElement("p");
+    arcInfo.className="memory-empty";
+    arcInfo.textContent=lastArc
+      ? "История: биография "+lastArc.approved_facts+
+        " · привычки "+lastArc.approved_habits+
+        " · исправленные записи "+lastArc.corrected_items+
+        ". Защищённый характер не меняется."
+      : "История характера пока не сформирована.";
+    arcPane.append(arcInfo);
     const charPane=$("character-progress");
     charPane.replaceChildren();
     const summary=document.createElement("p");
@@ -1348,14 +1394,24 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups, selftest, migration, budget] = await Promise.all([
+    const [report, workload, backups, selftest, migration, budget, evidence] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
       requestJSON("/api/system/selftest"),
       requestJSON("/api/system/migrations"),
       requestJSON("/api/system/cloud-budget"),
+      requestJSON("/api/soul/evidence/audits"),
     ]);
+    const evidencePane=$("evidence-audit-summary");
+    evidencePane.replaceChildren();
+    const entry=document.createElement("p");
+    entry.className="memory-empty";
+    const flagged=evidence.items.filter(x=>x.label==="review_required").length;
+    entry.textContent="Аудит ответов: "+evidence.items.length+
+      " проверено · требуют внимания: "+flagged+
+      " · проверяется наличие цитат, не фактическая истинность.";
+    evidencePane.append(entry);
     $("budget-chat").value=budget.limits.chat_per_day;
     $("budget-embeddings").value=budget.limits.embeddings_per_day;
     $("budget-minute").value=budget.limits.per_minute;
@@ -1586,4 +1642,95 @@ $("brain-find-btn").addEventListener("click",async () => {
   } catch (error) {
     memoryFeedback("Не удалось показать соту: "+error.message);
   } finally {button.disabled=false;}
+});
+
+
+// Documents remain local; importing requires a file picker, an explicit
+// confirmation and a same-origin JSON POST. Never read arbitrary disk paths.
+async function refreshDocuments() {
+  const pane=$("document-list");
+  pane.replaceChildren();
+  try {
+    const [data,cloud]=await Promise.all([
+      requestJSON("/api/soul/documents"),
+      requestJSON("/api/cloud/status"),
+    ]);
+    $("document-cloud-consent").checked=Boolean(cloud.document_context_allowed);
+    for (const doc of data.items) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const label=document.createElement("small");
+      label.textContent="Документ #"+doc.id+" · "+doc.name+
+        " · редакция "+doc.revision+" · "+doc.bytes+" байт";
+      const button=document.createElement("button");
+      button.type="button";button.className="quiet-button";
+      button.textContent="Удалить";
+      button.addEventListener("click",async () => {
+        if (!window.confirm("Удалить документ и все его индексированные фрагменты?")) return;
+        button.disabled=true;
+        try {
+          await requestJSON("/api/soul/documents/delete","POST",
+                            {id:doc.id,confirmed:true});
+          $("document-status").textContent="Удалён локальный документ: "+doc.name;
+          await refreshDocuments();
+        } catch(error) {
+          $("document-status").textContent="Ошибка удаления: "+error.message;
+          button.disabled=false;
+        }
+      });
+      row.append(label,button);
+      pane.append(row);
+    }
+    if (!data.items.length) pane.textContent="Пока нет импортированных документов.";
+  } catch(error) {
+    $("document-status").textContent="Ошибка списка документов: "+error.message;
+  }
+}
+$("document-refresh").addEventListener("click",refreshDocuments);
+$("document-details").addEventListener("toggle",() => {
+  if ($("document-details").open) refreshDocuments();
+});
+$("document-import").addEventListener("click",async () => {
+  const chosen=$("document-file").files?.[0];
+  if (!chosen) {
+    $("document-status").textContent="Сначала выбери TXT или Markdown.";
+    return;
+  }
+  if (!/\.(txt|md)$/i.test(chosen.name) || chosen.size>50000) {
+    $("document-status").textContent="Разрешены только TXT/Markdown размером до 50 КБ.";
+    return;
+  }
+  if (!window.confirm("Добавить выбранный файл в локальный индекс SQLite? "+
+                      "В облако он автоматически не отправляется.")) return;
+  const button=$("document-import");
+  button.disabled=true;
+  try {
+    const body=await chosen.text();
+    if (body.length>44000) throw new Error("Текст превышает 44 000 символов.");
+    const result=await requestJSON("/api/soul/documents/import","POST",
+                                  {name:chosen.name,text:body,confirmed:true});
+    $("document-status").textContent="Индексировано локально: "+
+      result.name+" · фрагментов "+result.chunks+
+      " · редакция "+result.revision+".";
+    await refreshDocuments();
+  } catch(error) {
+    $("document-status").textContent="Ошибка импорта: "+error.message;
+  } finally {button.disabled=false;}
+});
+
+$("document-cloud-consent").addEventListener("change",async () => {
+  const input=$("document-cloud-consent");
+  const allowed=input.checked;
+  input.disabled=true;
+  try {
+    const state=await requestJSON("/api/cloud/documents/consent","POST",{allowed});
+    input.checked=Boolean(state.document_context_allowed);
+    $("document-status").textContent=input.checked
+      ? "Согласие действует только до остановки Python-сервера. "+
+        "Выбранные поиском фрагменты могут попадать в Cloud.ru при ответах."
+      : "Документы остаются только локально. Cloud.ru не получает их содержимое.";
+  } catch(error) {
+    input.checked=!allowed;
+    $("document-status").textContent="Ошибка разрешения: "+error.message;
+  } finally {input.disabled=false;}
 });

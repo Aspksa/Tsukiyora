@@ -271,6 +271,14 @@ class SoulHandler(BaseHTTPRequestHandler):
                 raise ValueError("Unknown atlas level.")
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/documents":
+            return self.send_json({"items":self.server.cognition.evidence.documents.list()})
+        if path == "/api/soul/evidence/audits":
+            return self.send_json(self.server.cognition.evidence.status())
+        if path == "/api/soul/academy/curriculum":
+            return self.send_json(self.server.cognition.curriculum.status())
+        if path == "/api/soul/persona/arc":
+            return self.send_json(self.server.cognition.persona_arc.history())
         if path == "/api/soul/academy":
             return self.send_json(self.server.cognition.academy.status())
         if path == "/api/soul/academy/metrics":
@@ -385,6 +393,38 @@ class SoulHandler(BaseHTTPRequestHandler):
                     embeddings_per_day=obj.get("embeddings_per_day"),
                     per_minute=obj.get("per_minute")))
             except (ValueError,sqlite3.Error) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/cloud/documents/consent":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cloud.enable_document_context(
+                    obj.get("allowed")))
+            except (ValueError,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/documents/import":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.evidence.documents.import_text(
+                    obj.get("name"),obj.get("text"),confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/documents/delete":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.evidence.documents.remove(
+                    obj.get("id"),confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/evidence":
+            try:
+                obj=self._read_body()
+                cloud_state=self.server.cloud.status()
+                model=(cloud_state.get("embedding_model")
+                       if cloud_state.get("vector_chat_enabled") else None)
+                return self.send_json(self.server.cognition.evidence.search(
+                    obj.get("query"),limit=obj.get("limit",12),
+                    model=model,use_cached_vectors=bool(model)))
+            except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/rag4":
             try:

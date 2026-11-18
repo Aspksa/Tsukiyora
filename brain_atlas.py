@@ -41,18 +41,25 @@ class BrainAtlas:
             total = db.execute(
                 "SELECT COUNT(*) FROM memory_items WHERE status='active'"
             ).fetchone()[0]
-            edge_count = db.execute(
-                "SELECT COUNT(*) FROM memory_links l "
+            edgeRows=db.execute(
+                "SELECT a.kind AS a_kind,(a.id%2) AS a_parity,"
+                "b.kind AS b_kind,(b.id%2) AS b_parity,COUNT(*) AS n "
+                "FROM memory_links l "
                 "JOIN memory_items a ON a.id=l.source_id AND a.status='active' "
-                "JOIN memory_items b ON b.id=l.target_id AND b.status='active'"
-            ).fetchone()[0]
+                "JOIN memory_items b ON b.id=l.target_id AND b.status='active' "
+                "GROUP BY a.kind,(a.id%2),b.kind,(b.id%2) LIMIT 64"
+            ).fetchall()
+            edge_count=sum(row["n"] for row in edgeRows)
         sectors = sorted([
             {"id":KIND_BASE[x["kind"]]+x["parity"],"kind":x["kind"],
              "count":x["n"],"newest_id":x["last_id"]}
             for x in data
         ],key=lambda x:x["id"])
+        sector_links=[{"source":KIND_BASE[x["a_kind"]]+x["a_parity"],
+                       "target":KIND_BASE[x["b_kind"]]+x["b_parity"],
+                       "count":x["n"]} for x in edgeRows]
         return {"level":"overview","total":total,"sectors":sectors,
-                "connections":edge_count,
+                "connections":edge_count,"sector_links":sector_links,
                 "page_size":BUCKET_SIZE,"region_span":REGION_SPAN,"hierarchical":True,
                 "maximum_records_in_response":MAX_BUCKETS}
 

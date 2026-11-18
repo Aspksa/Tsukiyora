@@ -86,6 +86,7 @@
       <div class="cloud-form">
         <button type="button" id="run-system-check" class="quiet-button">Проверить систему</button>
         <div id="diagnostics-results" class="memory-results" aria-live="polite"></div>
+        <div id="evidence-audit-summary" class="memory-results" aria-live="polite"></div>
         <p id="browser-selftest" class="memory-empty" role="status">Проверка интерфейса ещё не выполнялась.</p>
         <div id="workload-status" class="memory-empty"></div>
         <details class="memory-queue" id="cloud-budget-details">
@@ -156,6 +157,21 @@
           </div>
           <div id="layer-results" class="memory-results" aria-live="polite"></div>
         </details>
+        <details class="memory-queue" id="document-details">
+          <summary>Документы <span class="muted">TXT / Markdown · локально</span></summary>
+          <p class="memory-empty">Импорт только по твоему нажатию. Файлы хранятся в SQLite; никакой автоматической отправки в Cloud.ru.</p>
+          <label for="document-file" class="memory-empty">Выбрать TXT или Markdown (до 44 000 символов)</label>
+          <input id="document-file" type="file" accept=".txt,.md,text/plain,text/markdown">
+          <div class="memory-actions">
+            <button type="button" id="document-import" class="quiet-button">Индексировать документ</button>
+            <button type="button" id="document-refresh" class="quiet-button">Обновить список</button>
+          </div>
+          <label class="vector-opt-in"><input id="document-cloud-consent" type="checkbox">
+            Разрешить Cloud.ru получать найденные фрагменты документов в ответах (только текущий сеанс)
+          </label>
+          <p id="document-status" class="memory-empty" role="status">По умолчанию импорт и поиск локальные. Передача фрагментов в Cloud.ru выключена.</p>
+          <div id="document-list" class="memory-results" aria-live="polite"></div>
+        </details>
         <details class="memory-queue" id="memory-quality">
           <summary>Качество памяти <span class="muted">дубли · противоречия</span></summary>
           <p class="memory-empty">Похожие и противоречивые записи отмечаются для проверки, но автоматически не удаляются.</p>
@@ -184,11 +200,13 @@
             <div id="academy-progress" class="memory-results"></div>
             <div id="academy-metrics" class="memory-results" aria-live="polite"></div>
             <div id="academy-experiments" class="memory-results"></div>
+            <div id="academy-curriculum" class="memory-results" aria-live="polite"></div>
           </details>
           <details class="memory-queue" id="personality-history">
             <summary>История характера <span class="muted">без выдуманных эмоций</span></summary>
             <div id="character-progress" class="memory-results"></div>
             <div id="character-timeline" class="memory-results"></div>
+            <div id="persona-arc" class="memory-results"></div>
           </details>
           <div id="audit-status" class="memory-empty"></div>
           <div id="biography-notes" class="memory-results"></div>

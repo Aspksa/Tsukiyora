@@ -134,6 +134,7 @@ class SoulServer(ThreadingHTTPServer):
         self.cloud = CloudSession(Path(memory_path).parent / "cloudru_preferences.json")
         self.chat_lock = threading.Lock()
         self.cognition = CognitiveCore(memory_path)
+        self.cognition.chat_priority = self.chat_lock
         self.active_streams = {}
         super().__init__(address, SoulHandler)
 
@@ -208,6 +209,23 @@ class SoulHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path = parsed.path
         args = parse_qs(parsed.query, keep_blank_values=True)
+        if path == "/api/system/diagnostics":
+            return self.send_json(self.server.cognition.reliability.local_checks())
+        if path == "/api/system/backups":
+            return self.send_json({"items": self.server.cognition.reliability.backups()})
+        if path == "/api/system/workload":
+            return self.send_json(self.server.cognition.scheduler.pending())
+        if path == "/api/soul/layers":
+            try:
+                args_layer = args.get("layer", ["all"])[0]
+                args_limit = int(args.get("limit", ["50"])[0])
+                conv = args.get("conversation_id", [None])[0]
+                return self.send_json(self.server.cognition.layers.inspect(
+                    layer=args_layer,limit=args_limit,conversation_id=conv))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/audits":
+            return self.send_json({"items": self.server.cognition.audit.history()})
         if path == "/api/soul/graph":
             return self.send_json(self.server.cognition.graph())
         if path == "/api/soul/cognition":
@@ -300,6 +318,13 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/system/backup":
+            try:
+                self._read_body()
+                return self.send_json(self.server.cognition.reliability.ensure_snapshot(
+                    interval_hours=5,keep=12,force=True))
+            except (ValueError,OSError,sqlite3.Error) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/chat/stream":
             try:
                 return handle_stream(self, self._read_body())

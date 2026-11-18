@@ -1,6 +1,7 @@
 """Portable Tsukiyora local runtime. Python standard library only."""
 from __future__ import annotations
 
+from contextlib import closing
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -41,7 +42,7 @@ def load_personality(path: Path = PROFILE) -> dict:
 
 def init_database(db_path: Path = DATABASE) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute(
             "CREATE TABLE IF NOT EXISTS runtime_events ("

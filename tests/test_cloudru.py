@@ -55,6 +55,23 @@ class CloudAdapterTests(unittest.TestCase):
             self.assertEqual(other.status()["model"], "test/model-1")
             self.assertFalse(other.status()["configured"])
 
+    def test_large_history_is_bounded(self):
+        session = cloudru.CloudSession()
+        session.set_key("example")
+        with patch.object(cloudru, "_request", side_effect=fake_cloud):
+            session.models()
+        session.select("test/model-1")
+        history = [
+            {"role": "assistant" if i % 2 else "user", "content": "x" * 8000}
+            for i in range(50)
+        ]
+        history.append({"role": "user", "content": "Расскажи о себе"})
+        with patch.object(cloudru, "_request", side_effect=fake_cloud) as remote:
+            session.complete(launcher.load_personality(), history, [])
+        payload = remote.call_args.args[3]
+        self.assertLessEqual(sum(len(m["content"]) for m in payload["messages"][1:]), 24000)
+        self.assertEqual(payload["messages"][-1]["content"], "Расскажи о себе")
+
     def test_validate_models_and_keys(self):
         session = cloudru.CloudSession()
         with self.assertRaises(ValueError):
@@ -139,6 +156,12 @@ class CloudApiTests(unittest.TestCase):
                 "client_message_id": "u-1",
             })
             self.assertTrue(cached["cached"])
+            with self.assertRaises(HTTPError) as repeated_error:
+                self.request("/api/chat", "POST", {
+                    "conversation_id": convo, "content": "Злоумышленный другой текст",
+                    "client_message_id": "u-1",
+                })
+            self.assertEqual(repeated_error.exception.code, 400)
             self.assertEqual(remote.call_count, 2, "1 models call + 1 paid chat call")
             _, history = self.request("/api/memory/messages?conversation_id=" + convo)
             self.assertEqual([x["role"] for x in history["messages"]], ["user", "assistant"])

@@ -85,7 +85,11 @@ class Reliability:
                 previous = datetime.fromisoformat(row[0])
                 if now - previous < timedelta(hours=interval_hours):
                     if row[1] and (self.folder / row[1]).is_file():
-                        return {"created": False, "name": row[1], "last_success": row[0]}
+                        # A present but corrupt snapshot MUST NOT postpone a new copy.
+                        previous_check = self.verify_snapshots(limit=3)
+                        if any(x["name"] == row[1] and x["status"]=="healthy"
+                               for x in previous_check["snapshots"]):
+                            return {"created": False, "name": row[1], "last_success": row[0]}
             except (ValueError, TypeError):
                 pass
         target = MemoryStore(self.db_path).backup(self.folder)
@@ -100,6 +104,56 @@ class Reliability:
         for old in snapshots[keep:]:
             old.unlink(missing_ok=True)
         return {"created": True, "name": target.name, "last_success": saved_at}
+
+    def verify_snapshots(self, limit: int = 3) -> dict:
+        """Read-only SQLite check of a bounded set of local snapshots.
+
+        This reports their actual structural integrity, not whether the
+        original facts are correct. Never auto-deletes the only good backup.
+        """
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise ValueError("Invalid verification limit.")
+        snapshots = sorted(self.folder.glob("memory-*.sqlite3"), reverse=True)[:limit] \
+            if self.folder.is_dir() else []
+        checks = []
+        for snapshot in snapshots:
+            if snapshot.is_symlink() or not snapshot.is_file():
+                checks.append({"name": snapshot.name, "status": "invalid",
+                               "detail": "not_regular_file"})
+                continue
+            try:
+                with closing(sqlite3.connect(
+                    "file:" + snapshot.resolve().as_posix() + "?mode=ro",
+                    uri=True, timeout=5
+                )) as connection:
+                    result = connection.execute("PRAGMA quick_check").fetchone()
+                    tables = {row[0] for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )}
+                healthy = bool(result and result[0]=="ok"
+                               and {"memory_items","messages","conversations"} <= tables)
+                checks.append({"name":snapshot.name,"status":"healthy" if healthy else "invalid",
+                               "detail":"quick_check+schema" if healthy else "failed_integrity_or_schema"})
+            except (sqlite3.Error, OSError, ValueError):
+                checks.append({"name":snapshot.name,"status":"invalid",
+                               "detail":"unable_to_read"})
+        return {"checked":len(checks),
+                "healthy":sum(x["status"]=="healthy" for x in checks),
+                "invalid":sum(x["status"]=="invalid" for x in checks),
+                "snapshots":checks, "restoration_performed":False}
+
+    def local_selftest(self) -> dict:
+        """Pure local checks and bounded backup validation, no user secrets."""
+        baseline = self.local_checks()
+        verify = self.verify_snapshots(limit=3)
+        return {
+            "local":baseline,
+            "backups":verify,
+            "browser_interaction_verified":False,
+            "cloud_live_verified":False,
+            "can_claim_real_pc_test":False,
+            "note":"DOM и кнопки нужно проверить в локальном браузере; Cloud.ru — отдельно с ключом."
+        }
 
     def backups(self, limit: int = 20) -> list[dict]:
         if type(limit) is not int or not 1 <= limit <= 100:

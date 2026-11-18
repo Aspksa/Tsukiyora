@@ -139,7 +139,9 @@ class V07StorageTests(unittest.TestCase):
         result = work.tick(self.core, chat_lock=lock)
         self.assertEqual(result["status"], "ok")
         self.assertIn(result["kind"], ("backup","integrity","layer_index",
-                                      "quality","vector_repair","lessons"))
+                                      "quality","vector_repair","lessons",
+                                      "precision_index","academy_cycle",
+                                      "persona_continuity","backup_verify"))
         self.assertEqual(work.pending()["usage"]["answered_requests"], 0)
         session = self.store.create_conversation()
         reply = self.store.append_messages(session["id"], [

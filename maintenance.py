@@ -17,6 +17,10 @@ JOBS = {
     "quality": 3600,
     "lessons": 1800,
     "backup": 1800,
+    "precision_index": 90,
+    "academy_cycle": 300,
+    "persona_continuity": 1200,
+    "backup_verify": 3600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -139,6 +143,16 @@ class Maintenance:
                 result = core.experience.consolidate()
             elif kind == "backup":
                 result = core.reliability.ensure_snapshot(interval_hours=5, keep=12)
+            elif kind == "precision_index":
+                result = core.precision.repair(limit=450)
+            elif kind == "academy_cycle":
+                result = core.academy.run_cycle()
+            elif kind == "persona_continuity":
+                result = core.continuity.consolidate()
+            elif kind == "backup_verify":
+                report = core.reliability.verify_snapshots(limit=3)
+                result = {"checked":report["checked"],"healthy":report["healthy"],
+                          "invalid":report["invalid"]}
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

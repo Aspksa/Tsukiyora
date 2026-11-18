@@ -1,7 +1,9 @@
+import {BrainAtlasView} from "./atlas_view.ts";
 // JavaScript-compatible TypeScript: browser can run this file without a build step.
 // A dedicated TypeScript build may be added later using the approved Node.js frontend.
 const canvas = document.getElementById("soul-canvas");
 const ctx = canvas.getContext("2d", {alpha: true});
+const atlasView = new BrainAtlasView(ctx);
 const dialog = document.getElementById("settings-dialog");
 const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -64,6 +66,10 @@ function resize() {
 }
 
 function paint() {
+  if (atlasView.active) {
+    atlasView.draw(width,height,graphScale,graphPanX,graphPanY,reducedMotion);
+    return;
+  }
   ctx.clearRect(0, 0, width, height);
   const x = width * .5, y = height * .48;
   const r = Math.min(width * .39, height * .39, 254);
@@ -206,6 +212,20 @@ function frame(timestamp) {
 
 async function refreshBrain() {
   try {
+    const atlasResponse = await fetch("/api/soul/atlas?level=overview", {cache:"no-store"});
+    if (!atlasResponse.ok) throw new Error("atlas unavailable");
+    const overview = await atlasResponse.json();
+    if (overview.total > 2400) {
+      await atlasView.refresh(overview);
+      brainGraph={nodes:[],edges:[],pending:0};
+      $("soul-live-state").textContent = overview.total.toLocaleString("ru-RU") +
+        " воспоминаний · " + overview.connections + " связей · " +
+        (atlasView.level==="overview"?"8 секторов":
+         atlasView.level==="clusters"?"кластеры памяти":"отдельные соты");
+      if (reducedMotion) paint();
+      return;
+    }
+    atlasView.active = false;
     const response = await fetch("/api/soul/graph", {cache: "no-store"});
     if (!response.ok) throw new Error("graph unavailable");
     const data = await response.json();
@@ -228,6 +248,7 @@ async function refreshBrain() {
 
 // Zoom, pan and click work on actual SQLite nodes. Dragging never creates records.
 function nearestBrainNode(px, py) {
+  if (atlasView.active) return atlasView.hit(px,py);
   if (graphScale < .85 && brainGraph.nodes.length >= 300) return null;
   let found = null;
   let distance = Math.max(64, 55 * graphScale);
@@ -242,7 +263,7 @@ function nearestBrainNode(px, py) {
 }
 
 canvas.addEventListener("wheel", (event) => {
-  if (!brainGraph.nodes.length) return;
+  if (!brainGraph.nodes.length && !atlasView.active) return;
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const centerX = rect.width * .5, centerY = rect.height * .48;
@@ -258,7 +279,7 @@ canvas.addEventListener("wheel", (event) => {
 }, {passive: false});
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || !brainGraph.nodes.length) return;
+  if (event.button !== 0 || (!brainGraph.nodes.length && !atlasView.active)) return;
   graphDrag = {x: event.clientX, y: event.clientY};
   graphMoved = false;
   canvas.setPointerCapture(event.pointerId);
@@ -276,7 +297,8 @@ canvas.addEventListener("pointermove", (event) => {
   }
   const rect = canvas.getBoundingClientRect();
   const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
-  canvas.title = node ? node.kind + ": " + node.preview : "Колёсико — масштаб; перетаскивание — перемещение";
+  canvas.title = node ? (node.type ? node.preview : node.kind + ": " + node.preview)
+    : "Колёсико — масштаб; перетаскивание — перемещение";
   canvas.style.cursor = node ? "pointer" : "grab";
 });
 canvas.addEventListener("pointerup", (event) => {
@@ -285,8 +307,16 @@ canvas.addEventListener("pointerup", (event) => {
 });
 canvas.addEventListener("pointercancel", () => { graphDrag = null; });
 canvas.addEventListener("pointerleave", () => { canvas.title = ""; });
-canvas.addEventListener("dblclick", () => {
+canvas.addEventListener("dblclick", async () => {
   graphScale = 1; graphPanX = 0; graphPanY = 0;
+  if (atlasView.active) {
+    try {
+      const overview=await atlasView.fetch("overview");
+      atlasView.overview(overview);
+    } catch (error) {
+      $("soul-live-state").textContent = "Ошибка карты: "+error.message;
+    }
+  }
   if (reducedMotion) paint();
 });
 canvas.addEventListener("click", async (event) => {
@@ -294,6 +324,20 @@ canvas.addEventListener("click", async (event) => {
   const rect = canvas.getBoundingClientRect();
   const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
   if (!node) return;
+  if (atlasView.active && node.type && node.type !== "memory") {
+    try {
+      await atlasView.open(node);
+      graphScale=1;graphPanX=0;graphPanY=0;
+      $("soul-live-state").textContent =
+        atlasView.level==="clusters" ? "Кластеры памяти · выбери соту" :
+        atlasView.level==="nodes" ? "Воспоминания · выбери запись" :
+        "Обзор памяти";
+      if (reducedMotion) paint();
+    } catch (error) {
+      $("soul-live-state").textContent="Ошибка загрузки сот: "+error.message;
+    }
+    return;
+  }
   $("memory-search").value = node.preview.slice(0, 60);
   $("memory-details").open = true;
   if (!dialog.open) dialog.showModal();
@@ -919,6 +963,46 @@ async function loadSoulJournal() {
   }
 }
 
+$("precision-search").addEventListener("click", async () => {
+  const query = $("memory-search").value.trim();
+  if (!query) return memoryFeedback("Напиши запрос для локального поиска.");
+  const button=$("precision-search");
+  button.disabled=true;
+  try {
+    const result=await requestJSON("/api/soul/precision","POST", {
+      query,limit:20,include_links:true,
+    });
+    const target=$("memory-results");
+    target.replaceChildren();
+    for (const item of result.items) {
+      const row=document.createElement("div");
+      row.className="memory-record";
+      const label=document.createElement("small");
+      label.textContent="Память #"+item.id+" · источник: "+
+        (item.source_ref || item.source_type) +
+        " · релевантность: "+Math.round(item.score*100)+"%" +
+        (item.match==="related" ? " · связь с #"+item.related_to : "") +
+        (item.possible_conflict ? " · возможное противоречие" : "");
+      const body=document.createElement("p");
+      body.textContent=item.content;
+      row.append(label,body);
+      target.append(row);
+    }
+    if (!result.items.length) {
+      const empty=document.createElement("p");
+      empty.className="memory-empty";
+      empty.textContent="По этому запросу записей не найдено.";
+      target.append(empty);
+    }
+    memoryFeedback("Локальный поиск "+result.mode+
+      ". Источники — записи пользователя, а не независимая проверка фактов. Cloud.ru не вызывается.");
+  } catch (error) {
+    memoryFeedback("Ошибка точного поиска: "+error.message);
+  } finally {
+    button.disabled=false;
+  }
+});
+
 $("rag-search").addEventListener("click", async () => {
   const query = $("memory-search").value.trim();
   if (!query) {
@@ -1073,11 +1157,43 @@ $("memory-quality").addEventListener("toggle", () => {
 
 async function refreshCognition() {
   try {
-    const [status, biography, cloud] = await Promise.all([
+    const [status, biography, cloud, character] = await Promise.all([
       requestJSON("/api/soul/cognition"),
       requestJSON("/api/soul/biography"),
       requestJSON("/api/cloud/status"),
+      requestJSON("/api/soul/character"),
     ]);
+    const academy=status.academy;
+    $("academy-enabled").checked=Boolean(academy.enabled);
+    const academyPane=$("academy-progress");
+    academyPane.replaceChildren();
+    for (const goal of academy.goals) {
+      if (!goal.samples) continue;
+      const item=document.createElement("p");
+      item.className="memory-empty";
+      item.textContent=goal.category+" · "+goal.state+
+        " · полезных: "+goal.helpful+"/"+goal.samples+
+        " · изменение оценки: "+(goal.trend>=0?"+":"")+
+        Math.round(goal.trend*100)+" п.п.";
+      academyPane.append(item);
+    }
+    if (!academyPane.children.length) academyPane.textContent=
+      "Циклы начнутся после оценок реальных ответов. Программу можно отключить.";
+    const charPane=$("character-progress");
+    charPane.replaceChildren();
+    const summary=document.createElement("p");
+    summary.className="memory-empty";
+    summary.textContent="Диалогов: "+character.conversations+
+      " · подтверждённых привычек: "+character.stable_habits.length+
+      " · событий: "+character.accepted_events+
+      ". Состояние — программная модель, не эмоции.";
+    charPane.append(summary);
+    for (const habit of character.stable_habits.slice(0,8)) {
+      const line=document.createElement("p");
+      line.className="memory-empty";
+      line.textContent="Память #"+habit.id+": "+habit.content;
+      charPane.append(line);
+    }
     vectorAvailableForSearch = Boolean(
       cloud.configured && cloud.verified && cloud.embedding_model
       && status.vectors.indexed_memories > 0
@@ -1137,6 +1253,21 @@ async function refreshCognition() {
   }
 }
 
+$("academy-enabled").addEventListener("change",async () => {
+  const control=$("academy-enabled");
+  const value=control.checked;
+  control.disabled=true;
+  try {
+    await requestJSON("/api/soul/academy/enabled","POST",{enabled:value});
+    await refreshCognition();
+  } catch (error) {
+    control.checked=!value;
+    $("chat-notice").textContent="Настройка SOUL ACADEMY: "+error.message;
+  } finally {
+    control.disabled=false;
+  }
+});
+
 $("cognitive-details").addEventListener("toggle", () => {
   if ($("cognitive-details").open) refreshCognition();
 });
@@ -1157,11 +1288,28 @@ async function refreshDiagnostics() {
   const target = $("diagnostics-results");
   target.replaceChildren();
   try {
-    const [report, workload, backups] = await Promise.all([
+    const [report, workload, backups, selftest] = await Promise.all([
       requestJSON("/api/system/diagnostics"),
       requestJSON("/api/system/workload"),
       requestJSON("/api/system/backups"),
+      requestJSON("/api/system/selftest"),
     ]);
+    const required=["cloud-connect","cloud-model","cloud-select","cloud-diagnose",
+      "message","send-message","stop-message","memory-save","memory-search",
+      "precision-search","rag-search","memory-backup","run-system-check",
+      "academy-enabled","layer-selector","soul-canvas"];
+    const missing=required.filter(id=>!$(id));
+    const hasCanvas=Boolean(canvas.getContext("2d"));
+    $("browser-selftest").textContent=
+      (!missing.length && hasCanvas ? "✓" : "!")+
+      " Интерфейс: "+(required.length-missing.length)+"/"+required.length+
+      " элементов · Canvas: "+(hasCanvas?"OK":"ошибка")+
+      (missing.length ? " · отсутствуют: "+missing.join(", ") : "")+
+      " · это проверка DOM, а не нажатий всех кнопок."+
+      " Резервные копии: "+selftest.backups.healthy+
+      " исправных из "+selftest.backups.checked+
+      ", повреждённых: "+selftest.backups.invalid+
+      ". Реальный Cloud.ru — отдельной кнопкой.";
     for (const [name, info] of Object.entries(report.checks)) {
       const item = document.createElement("p");
       item.className = "memory-empty";
@@ -1267,6 +1415,13 @@ $("cognitive-details").addEventListener("toggle", () => {
 
 canvas.addEventListener("keydown", (event) => {
   const key = event.key;
+  if (key==="Escape" && atlasView.active) {
+    event.preventDefault();
+    atlasView.back().then(() => {if (reducedMotion) paint();}).catch(
+      (error) => { $("soul-live-state").textContent=error.message; }
+    );
+    return;
+  }
   if (key === "+" || key === "=") graphScale = Math.min(3.2, graphScale * 1.13);
   else if (key === "-") graphScale = Math.max(.45, graphScale / 1.13);
   else if (key === "ArrowLeft") graphPanX += 22;

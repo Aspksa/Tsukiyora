@@ -211,6 +211,8 @@ class SoulHandler(BaseHTTPRequestHandler):
         args = parse_qs(parsed.query, keep_blank_values=True)
         if path == "/api/system/diagnostics":
             return self.send_json(self.server.cognition.reliability.local_checks())
+        if path == "/api/system/selftest":
+            return self.send_json(self.server.cognition.reliability.local_selftest())
         if path == "/api/system/backups":
             return self.send_json({"items": self.server.cognition.reliability.backups()})
         if path == "/api/system/workload":
@@ -226,6 +228,30 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self._handle_error(error)
         if path == "/api/soul/audits":
             return self.send_json({"items": self.server.cognition.audit.history()})
+        if path == "/api/soul/atlas":
+            try:
+                level = args.get("level", ["overview"])[0]
+                atlas = self.server.cognition.atlas
+                if level == "overview":
+                    return self.send_json(atlas.overview())
+                sector = int(args.get("sector", ["-1"])[0])
+                if level == "clusters":
+                    cursor = args.get("cursor", [None])[0]
+                    return self.send_json(atlas.clusters(
+                        sector, cursor=int(cursor) if cursor is not None else None))
+                if level == "nodes":
+                    bucket = int(args.get("bucket", ["-1"])[0])
+                    return self.send_json(atlas.nodes(sector,bucket))
+                raise ValueError("Unknown atlas level.")
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/academy":
+            return self.send_json(self.server.cognition.academy.status())
+        if path == "/api/soul/character":
+            return self.send_json(self.server.cognition.continuity.state())
+        if path == "/api/soul/precision/status":
+            return self.send_json({"fts5":self.server.cognition.precision.has_fts,
+                                   "cloud_calls":0,"index":"SQLite local"})
         if path == "/api/soul/graph":
             return self.send_json(self.server.cognition.graph())
         if path == "/api/soul/cognition":
@@ -300,6 +326,7 @@ class SoulHandler(BaseHTTPRequestHandler):
             "/": (UI / "index.html", "text/html; charset=utf-8"),
             "/ui/style.css": (UI / "style.css", "text/css; charset=utf-8"),
             "/ui/app.ts": (UI / "app.ts", "text/javascript; charset=utf-8"),
+            "/ui/atlas_view.ts": (UI / "atlas_view.ts", "text/javascript; charset=utf-8"),
         }
         match = allowed.get(path)
         if not match:
@@ -318,6 +345,21 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/precision":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.precision.search(
+                    obj.get("query"),limit=obj.get("limit",12),
+                    include_links=obj.get("include_links",True)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/academy/enabled":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.academy.set_enabled(
+                    obj.get("enabled")))
+            except ValueError as error:
+                return self.send_json({"error":str(error)},400)
         if method == "POST" and path == "/api/system/backup":
             try:
                 self._read_body()

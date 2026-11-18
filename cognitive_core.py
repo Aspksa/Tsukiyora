@@ -21,6 +21,10 @@ from layered_memory import LayeredMemory
 from reliability import Reliability
 from maintenance import Maintenance
 from reasoning import ReasoningAudit
+from precision_memory import PrecisionMemory
+from soul_academy import SoulAcademy
+from persona_continuity import PersonaContinuity
+from brain_atlas import BrainAtlas
 
 
 class CognitiveCore:
@@ -35,6 +39,10 @@ class CognitiveCore:
         self.reliability = Reliability(path)
         self.scheduler = Maintenance(path)
         self.audit = ReasoningAudit(path)
+        self.precision = PrecisionMemory(path)
+        self.academy = SoulAcademy(path)
+        self.continuity = PersonaContinuity(path)
+        self.atlas = BrainAtlas(path)
         self.chat_priority = None
 
     def connect(self):
@@ -68,6 +76,9 @@ class CognitiveCore:
         self.reliability.initialize()
         self.scheduler.initialize()
         self.audit.initialize()
+        self.precision.initialize()
+        self.academy.initialize()
+        self.continuity.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -85,6 +96,7 @@ class CognitiveCore:
             """, (message_id, int(helpful), note.strip()))
         category = self.experience.tag_feedback(message_id, note)
         self.update_lessons()
+        self.academy.run_cycle()
         return {"message_id": message_id, "helpful": helpful, "category": category,
                 "recorded": True}
 
@@ -120,7 +132,7 @@ class CognitiveCore:
             ).fetchone()
         baseline = row["guidance"] if row else ""
         tagged = self.experience.guidance()
-        return (baseline + " " + tagged).strip()[:850]
+        return (baseline + " " + tagged + " " + self.academy.guidance()).strip()[:1250]
 
     def biography(self) -> dict:
         """Explicit approved biography, stable persona and dated experience."""
@@ -193,6 +205,13 @@ class CognitiveCore:
                 "possible_conflicts": conflicts, "pending": pending,
                 "guidance": self.guidance(), "vectors": self.vectors.stats(),
                 "experience": self.experience.state(),
+                "academy": self.academy.status(limit=5),
+                "character": {
+                    "continuity": "source_grounded",
+                    "real_emotions": False,
+                    "stable_habits": len(self.continuity.state()["stable_habits"])
+                },
+                "precision": {"fts5": self.precision.has_fts},
                 "maintenance": self.scheduler.pending()}
 
     def cycle(self) -> dict:
@@ -206,6 +225,7 @@ class CognitiveCore:
                 raise sqlite3.DatabaseError("SQLite integrity check did not pass.")
             repairs = self.vectors.repair(limit=2000)
             layers = self.layers.repair(limit=2000)
+            index = self.precision.repair(limit=600)
             # Only a small local batch per cycle, never expensive cloud requests.
             with closing(self.connect()) as db:
                 recent = [row[0] for row in db.execute(
@@ -216,6 +236,8 @@ class CognitiveCore:
                 self.growth.build_links(memory_id)
             self.update_lessons()
             self.experience.consolidate()
+            lessons = self.academy.run_cycle()
+            continuity = self.continuity.consolidate()
             quality = self.quality.review(limit=180)
             stats = self.status()
             digest = self.experience.snapshot(
@@ -230,6 +252,9 @@ class CognitiveCore:
                 "indexed": stats["vectors"]["indexed_memories"],
                 "cached_links_repaired": repairs["cache_restored"],
                 "memory_layers_repaired": layers["updated"],
+                "fts5_indexed": index["indexed"],
+                "academy_updated": lessons.get("updated",False),
+                "stable_habits": continuity["stable_habits"],
                 "learning_goals": digest["practice_goals"],
             }, ensure_ascii=False)
             with closing(self.connect()) as db:

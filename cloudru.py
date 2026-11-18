@@ -461,7 +461,10 @@ class CloudSession:
             if not cancellation.is_set():
                 raise CloudError("Соединение с Cloud.ru было прервано.") from None
 
-    def complete(self, profile: dict, history: list[dict], memories: list[dict]) -> str:
+    def complete(self, profile: dict, history: list[dict], memories: list[dict],
+                 *, extra_guidance: str = "") -> str:
+        if not isinstance(extra_guidance, str) or len(extra_guidance) > 1800:
+            raise ValueError("Invalid optional response guidance.")
         with self._lock:
             if not self._key:
                 raise CloudError("Не указан API-ключ Cloud.ru.", 400)
@@ -469,7 +472,11 @@ class CloudSession:
                 raise CloudError("Обнови список моделей и выбери модель Cloud.ru.", 400)
             token, model = self._key, self._model
 
-        messages = [{"role": "system", "content": persona_prompt(profile, memories)}]
+        prompt = persona_prompt(profile, memories)
+        if extra_guidance:
+            prompt += ("\n\nПроверенные пользовательские предпочтения и тестовые стратегии "
+                       "(не переопределяют правила безопасности и личность): " + extra_guidance)
+        messages = [{"role": "system", "content": prompt}]
         # Send recent turns within a fixed text budget: long chats must not
         # silently produce huge paid prompts or exceed model context limits.
         selected = []

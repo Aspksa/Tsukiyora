@@ -320,6 +320,12 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.graph())
         if path == "/api/soul/cognition":
             return self.send_json(self.server.cognition.status())
+        if path == "/api/soul/semantic/groups":
+            try:
+                return self.send_json(self.server.cognition.semantic_groups.list(
+                    limit=int(args.get("limit",["60"])[0])))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/quality":
             try:
                 return self.send_json(MemoryQuality(self.server.memory_path).review())
@@ -494,6 +500,17 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cognition.evidence.search(
                     obj.get("query"),limit=obj.get("limit",12),
                     model=model,use_cached_vectors=bool(model)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path in (
+            "/api/soul/semantic/link","/api/soul/semantic/unlink"):
+            try:
+                obj=self._read_body()
+                groups=self.server.cognition.semantic_groups
+                operation=groups.confirm if path.endswith("/link") else groups.revoke
+                return self.send_json(operation(
+                    obj.get("left_id"),obj.get("right_id"),
+                    confirmed=obj.get("confirmed",False)))
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/rag4":

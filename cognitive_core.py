@@ -42,6 +42,7 @@ from academy_practice import AcademyPractice
 from reflective_recall import ReflectiveRecall
 from experience_skills import ExperienceSkills
 from reflective_optimization import ReflectiveOptimization
+from cognitive_next import CognitiveNext
 
 
 class CognitiveCore:
@@ -77,6 +78,7 @@ class CognitiveCore:
         self.reflection = ReflectiveRecall(path)
         self.skills = ExperienceSkills(path)
         self.evolution = ReflectiveOptimization(path)
+        self.next = CognitiveNext(path, core=self)
         self.chat_priority = None
 
     def connect(self):
@@ -125,6 +127,7 @@ class CognitiveCore:
         self.semantic_groups.initialize()
         self.skills.initialize()
         self.evolution.initialize()
+        self.next.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -270,6 +273,7 @@ class CognitiveCore:
                 "academy_practice": self.practice.status(),
                 "experience_skills": self.skills.list(limit=10),
                 "prompt_evolution": self.evolution.report(),
+                "cognitive_next": self.next.working_state(),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

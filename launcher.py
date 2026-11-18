@@ -303,6 +303,22 @@ class SoulHandler(BaseHTTPRequestHandler):
                 **self.server.cognition.practice.questions(),
                 **self.server.cognition.practice.status()
             })
+        if path.startswith("/api/soul/next/"):
+            try:
+                next_core=self.server.cognition.next
+                readers={
+                    "/api/soul/next/state": next_core.working_state,
+                    "/api/soul/next/understanding": next_core.understanding,
+                    "/api/soul/next/skills": next_core.skill_synthesis,
+                    "/api/soul/next/personality": next_core.personality_growth,
+                    "/api/soul/next/questions": next_core.questions,
+                    "/api/soul/next/simulations": next_core.simulations,
+                }
+                if path in readers:
+                    return self.send_json(readers[path]())
+                return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/skills":
             try:
                 return self.send_json(self.server.cognition.skills.list(
@@ -451,6 +467,44 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json(self.server.cloud.enable_document_context(
                     obj.get("allowed")))
             except (ValueError,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path.startswith("/api/soul/next/"):
+            try:
+                obj=self._read_body()
+                next_core=self.server.cognition.next
+                if path=="/api/soul/next/causal":
+                    result=next_core.causal_map(obj.get("query"),limit=obj.get("limit",8))
+                elif path=="/api/soul/next/selfcheck":
+                    result=next_core.self_check(obj.get("message_id"))
+                elif path=="/api/soul/next/gap":
+                    result=next_core.knowledge_gap(obj.get("query"))
+                elif path=="/api/soul/next/question/save":
+                    result=next_core.save_question(
+                        obj.get("question"),confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/next/question/decide":
+                    result=next_core.question_decide(
+                        obj.get("id"),obj.get("state"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/next/goal/save":
+                    result=next_core.add_goal(
+                        obj.get("title"),confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/next/goal/state":
+                    result=next_core.goal_state(
+                        obj.get("id"),obj.get("state"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/next/scenario":
+                    result=next_core.scenario(
+                        obj.get("decision"),obj.get("option_a"),obj.get("option_b"))
+                elif path=="/api/soul/next/memory/review":
+                    result=next_core.memory_review(limit=obj.get("limit",100))
+                elif path=="/api/soul/next/simulate":
+                    result=next_core.simulate(
+                        obj.get("strategy"),obj.get("skill"),obj.get("answer"),
+                        confirmed=obj.get("confirmed",False))
+                else:
+                    return self.send_json({"error":"Unknown Cognitive Soul action."},404)
+                return self.send_json(result)
+            except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
         if method == "POST" and path == "/api/soul/reflect":
             try:

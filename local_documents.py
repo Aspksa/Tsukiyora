@@ -81,6 +81,32 @@ class LocalDocuments:
                     if "fts5" not in str(error).lower():
                         raise
 
+    def repair(self,limit=300):
+        """Idempotent, bounded local FTS repair with no cloud requests."""
+        if type(limit) is not int or not 1<=limit<=1000:
+            raise ValueError("Invalid indexing batch limit")
+        with closing(self.store.connect()) as db:
+            if db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='document_fts'"
+            ).fetchone() is None:
+                return {"fts":False,"indexed":0,"removed":0,"cloud_calls":0}
+            with db:
+                orphaned=db.execute(
+                    "DELETE FROM document_fts WHERE rowid IN "
+                    "(SELECT f.rowid FROM document_fts f LEFT JOIN document_chunks c "
+                    "ON c.id=f.rowid WHERE c.id IS NULL LIMIT ?)",(limit,)
+                ).rowcount
+                missing=db.execute(
+                    "SELECT c.id,c.content FROM document_chunks c "
+                    "WHERE NOT EXISTS(SELECT 1 FROM document_fts f WHERE f.rowid=c.id) "
+                    "ORDER BY c.id LIMIT ?",(limit,)
+                ).fetchall()
+                for row in missing:
+                    db.execute("INSERT INTO document_fts(rowid,content) VALUES(?,?)",
+                               (row["id"],row["content"]))
+        return {"fts":True,"indexed":len(missing),"removed":orphaned,
+                "cloud_calls":0}
+
     def import_text(self, name, text, *, confirmed=False):
         name = _name(name)
         if confirmed is not True:

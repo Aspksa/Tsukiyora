@@ -336,13 +336,15 @@ class SoulHandler(BaseHTTPRequestHandler):
             if not conversation_id:
                 conversation_id = store.create_conversation(content[:72])["id"]
             key = "assistant:" + client_id
+            # Validate the idempotency key against the stored user text
+            # before returning any cached assistant answer.
+            user = store.append_messages(conversation_id, [{
+                "role": "user", "content": content, "client_message_id": client_id
+            }])[0]
             existing = store.message_by_client_id(conversation_id, key)
             if existing:
                 return self.send_json({"conversation_id": conversation_id,
                                        "answer": existing["content"], "cached": True})
-            user = store.append_messages(conversation_id, [{
-                "role": "user", "content": content, "client_message_id": client_id
-            }])[0]
             history = store.list_messages(conversation_id, limit=24)
             if not history or history[-1]["id"] != user["id"]:
                 raise ValueError("Нельзя повторить старое сообщение после новых. Начни новый диалог.")

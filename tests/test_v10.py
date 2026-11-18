@@ -222,7 +222,7 @@ class V10HTTPTests(unittest.TestCase):
                         "cloud-diagnose","academy-enabled","run-system-check"):
             self.assertIn('id="'+control+'"',html)
         for endpoint in ("/api/system/cloud-budget","/api/soul/atlas?",
-                         "/api/soul/academy/experiments","/api/soul/rag4"):
+                         "/api/soul/academy/experiments","/api/soul/evidence"):
             self.assertIn(endpoint,app+atlas)
         self.assertIn("async goto(",atlas)
         self.assertNotIn("localStorage.setItem",app)

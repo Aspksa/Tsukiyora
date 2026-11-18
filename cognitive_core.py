@@ -44,6 +44,7 @@ from experience_skills import ExperienceSkills
 from reflective_optimization import ReflectiveOptimization
 from cognitive_next import CognitiveNext
 from self_improvement import SelfImprovement
+from cognitive_evolution import CognitiveEvolution
 
 
 class CognitiveCore:
@@ -81,6 +82,7 @@ class CognitiveCore:
         self.evolution = ReflectiveOptimization(path)
         self.next = CognitiveNext(path, core=self)
         self.improvement = SelfImprovement(path)
+        self.evolution4 = CognitiveEvolution(path)
         self.chat_priority = None
 
     def connect(self):
@@ -131,6 +133,7 @@ class CognitiveCore:
         self.evolution.initialize()
         self.next.initialize()
         self.improvement.initialize()
+        self.evolution4.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -156,10 +159,12 @@ class CognitiveCore:
         skill = self.skills.capture(message_id)
         evolution = self.evolution.record(message_id, helpful)
         improvement = self.improvement.feedback(message_id, helpful)
+        evolved = self.evolution4.feedback(message_id, helpful)
         hypothesis = self.improvement.observe()
         return {"message_id": message_id, "helpful": helpful, "category": category,
                 "skill_candidate": skill, "strategy_trial": evolution,
                 "self_improvement": improvement, "new_hypothesis": hypothesis,
+                "evolution4_feedback": evolved,
                 "suspended_styles":rollback.get("suspended",[]),
                 "curriculum_review_required": len(curriculum.get("regressions",[])),
                 "experiment":experiment,
@@ -281,6 +286,7 @@ class CognitiveCore:
                 "prompt_evolution": self.evolution.report(),
                 "cognitive_next": self.next.working_state(),
                 "self_improvement": self.improvement.report(),
+                "evolution4": self.evolution4.report(),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

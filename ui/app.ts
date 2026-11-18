@@ -1651,7 +1651,11 @@ async function refreshDocuments() {
   const pane=$("document-list");
   pane.replaceChildren();
   try {
-    const data=await requestJSON("/api/soul/documents");
+    const [data,cloud]=await Promise.all([
+      requestJSON("/api/soul/documents"),
+      requestJSON("/api/cloud/status"),
+    ]);
+    $("document-cloud-consent").checked=Boolean(cloud.document_context_allowed);
     for (const doc of data.items) {
       const row=document.createElement("div");
       row.className="memory-record";
@@ -1712,4 +1716,21 @@ $("document-import").addEventListener("click",async () => {
   } catch(error) {
     $("document-status").textContent="Ошибка импорта: "+error.message;
   } finally {button.disabled=false;}
+});
+
+$("document-cloud-consent").addEventListener("change",async () => {
+  const input=$("document-cloud-consent");
+  const allowed=input.checked;
+  input.disabled=true;
+  try {
+    const state=await requestJSON("/api/cloud/documents/consent","POST",{allowed});
+    input.checked=Boolean(state.document_context_allowed);
+    $("document-status").textContent=input.checked
+      ? "Согласие действует только до остановки Python-сервера. "+
+        "Выбранные поиском фрагменты могут попадать в Cloud.ru при ответах."
+      : "Документы остаются только локально. Cloud.ru не получает их содержимое.";
+  } catch(error) {
+    input.checked=!allowed;
+    $("document-status").textContent="Ошибка разрешения: "+error.message;
+  } finally {input.disabled=false;}
 });

@@ -1213,6 +1213,15 @@ async function refreshMemoryLayers() {
     }
     const response = await requestJSON("/api/soul/layers?" + params);
     target.replaceChildren();
+    if (response.links?.length) {
+      const summary = document.createElement("p");
+      summary.className = "memory-empty";
+      const cross = response.links.filter(link => link.source_layer !== link.target_layer).length;
+      summary.textContent = "Связей между воспоминаниями: " + response.links.length +
+        " · между разными уровнями: " + cross +
+        ". Связи — сигналы, а не доказанные причинно-следственные отношения.";
+      target.append(summary);
+    }
     if (!response.items.length) {
       const empty = document.createElement("p");
       empty.className = "memory-empty";

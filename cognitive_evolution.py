@@ -228,7 +228,9 @@ class CognitiveEvolution:
         if domain not in DOMAINS or split not in ("train","holdout"):
             raise ValueError("Некорректная область или тип задания.")
         question = checked(question,"Вопрос",500)
-        expected = checked(expected,"Эталон",200)
+        if not isinstance(expected,str) or not 1 <= len(expected.strip()) <= 200:
+            raise ValueError("Эталон: требуется короткий проверенный ответ (1–200 символов).")
+        expected = expected.strip()
         if confirmed is not True:
             raise ValueError("Нужно подтверждение создания проверенного эталона.")
         fp = hashlib.sha256((domain+"/"+question.casefold()).encode()).hexdigest()
@@ -430,7 +432,9 @@ class CognitiveEvolution:
             )]
         if len(tests)<batch_size:
             raise ValueError("Недостаточно новых независимых holdout-заданий.")
-        proposed=(baseline_guidance+" "+self._guidance(json.loads(candidate["recipe"]))).strip()
+        strategy=self._guidance(json.loads(candidate["recipe"]))
+        baseline_guidance=baseline_guidance[:max(0,1799-len(strategy))]
+        proposed=(baseline_guidance+" "+strategy).strip()
         if proposed==baseline_guidance:
             raise ValueError("Гипотеза совпадает с текущим способом ответа.")
         cloud_state=cloud.status()

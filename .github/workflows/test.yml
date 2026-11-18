@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [feat/soul-core-runtime, feat/long-term-memory, feat/cloudru-chat, main]
+    branches: [feat/soul-core-runtime, feat/long-term-memory, feat/cloudru-chat, feat/living-memory-v2, main]
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Compile Python sources
-        run: python -m compileall -q launcher.py memory_store.py cloudru.py tests
+        run: python -m compileall -q launcher.py memory_store.py cloudru.py soul_growth.py stream_runtime.py tests
       - name: Check browser JS syntax
         run: |
           python -c "from pathlib import Path; Path('ui/app.check.mjs').write_bytes(Path('ui/app.ts').read_bytes())"

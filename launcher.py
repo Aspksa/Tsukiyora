@@ -16,6 +16,8 @@ from urllib.parse import parse_qs, urlsplit
 import re
 
 from memory_store import MemoryStore
+from soul_growth import SoulGrowth
+from stream_runtime import handle_stream, stop_stream
 from cloudru import CloudSession, CloudError
 from urllib.request import build_opener, ProxyHandler
 import webbrowser
@@ -58,6 +60,7 @@ def init_database(db_path: Path = DATABASE) -> None:
         db.execute("INSERT INTO runtime_events (event) VALUES (?)", ("startup",))
         db.commit()
     MemoryStore(db_path).initialize()
+    SoulGrowth(db_path).initialize()
 
 
 def setup_logs() -> None:
@@ -126,6 +129,7 @@ class SoulServer(ThreadingHTTPServer):
         self.memory_path = memory_path
         self.cloud = CloudSession(Path(memory_path).parent / "cloudru_preferences.json")
         self.chat_lock = threading.Lock()
+        self.active_streams = {}
         super().__init__(address, SoulHandler)
 
 
@@ -199,6 +203,12 @@ class SoulHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path = parsed.path
         args = parse_qs(parsed.query, keep_blank_values=True)
+        if path == "/api/soul/suggestions":
+            return self.send_json({"items": SoulGrowth(self.server.memory_path).suggestions()})
+        if path == "/api/soul/journal":
+            return self.send_json({"items": SoulGrowth(self.server.memory_path).journal_entries()})
+        if path == "/api/soul/links":
+            return self.send_json({"items": SoulGrowth(self.server.memory_path).links()})
         if path.startswith("/api/cloud/"):
             try:
                 if path == "/api/cloud/status":
@@ -269,6 +279,48 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/chat/stream":
+            try:
+                return handle_stream(self, self._read_body())
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+            except (ValueError, sqlite3.Error, OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/chat/stop":
+            try:
+                return self.send_json({"stopping": stop_stream(self.server, self._read_body().get("stream_id"))})
+            except ValueError as error:
+                return self.send_json({"error": str(error)}, 400)
+        if method == "POST" and path == "/api/cloud/diagnose":
+            try:
+                return self.send_json(self.server.cloud.diagnostic())
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+        if method == "POST" and path == "/api/soul/search":
+            try:
+                obj = self._read_body()
+                query = obj.get("query")
+                if not isinstance(query, str) or not query.strip() or len(query) > 500:
+                    raise ValueError("Укажи поисковый запрос длиной до 500 символов.")
+                rows = SoulGrowth(self.server.memory_path).retrieve(query, limit=18)
+                semantic = False
+                if obj.get("semantic") is True and len(rows) > 1:
+                    ids = self.server.cloud.rerank(query, rows)
+                    ranked = {r["id"]: r for r in rows}
+                    rows = [ranked[i] for i in ids if i in ranked]
+                    semantic = True
+                return self.send_json({"items": rows[:10], "semantic": semantic})
+            except CloudError as error:
+                return self.send_json({"error": str(error)}, error.status)
+            except (ValueError, sqlite3.Error, OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/review":
+            try:
+                obj = self._read_body()
+                return self.send_json(SoulGrowth(self.server.memory_path).review(
+                    obj.get("id"), obj.get("approve")))
+            except (ValueError, sqlite3.Error, OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path in ("/api/cloud/key", "/api/cloud/model", "/api/chat"):
             try:
                 return self._cloud_write(path, self._read_body())
@@ -282,8 +334,9 @@ class SoulHandler(BaseHTTPRequestHandler):
             store = self._memory()
             obj = self._read_body() if method in ("POST", "PUT") else {}
             if method == "POST" and path == "/api/memory":
-                return self.send_json({"item": store.add_memory(
-                    kind=obj.get("kind"), content=obj.get("content"))}, 201)
+                item = store.add_memory(kind=obj.get("kind"), content=obj.get("content"))
+                SoulGrowth(self.server.memory_path).build_links(item["id"])
+                return self.send_json({"item": item}, 201)
             if method == "POST" and path == "/api/memory/conversations":
                 return self.send_json({"conversation": store.create_conversation(
                     title=obj.get("title", "Новый диалог"))}, 201)
@@ -296,9 +349,11 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"saved": True, "filename": target.name}, 201)
             match = re.fullmatch(r"/api/memory/([1-9][0-9]*)", path)
             if match and method == "PUT":
-                return self.send_json({"item": store.correct_memory(
+                item = store.correct_memory(
                     int(match.group(1)), obj.get("content"),
-                    reason=obj.get("reason", "user correction"))})
+                    reason=obj.get("reason", "user correction"))
+                SoulGrowth(self.server.memory_path).build_links(item["id"])
+                return self.send_json({"item": item})
             if match and method == "DELETE":
                 store.delete_memory(int(match.group(1)))
                 return self.send_json({"deleted": True})

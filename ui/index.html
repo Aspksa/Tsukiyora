@@ -50,6 +50,7 @@
         <div class="composer">
           <label class="sr-only" for="message">Сообщение</label>
           <textarea id="message" rows="1" maxlength="8000" disabled placeholder="Подключи Cloud.ru в настройках" aria-label="Текст сообщения"></textarea>
+          <button class="quiet-button" id="stop-message" type="button" hidden aria-label="Остановить ответ">■</button>
           <button class="send" id="send-message" type="button" disabled aria-label="Отправить сообщение">↗</button>
         </div>
         <p class="composer-note" id="chat-notice">Подключи Cloud.ru через значок настроек. История останется в локальной SQLite.</p>
@@ -76,6 +77,7 @@
         <label class="sr-only" for="cloud-model">Модель Cloud.ru</label>
         <select id="cloud-model" disabled><option value="">Сначала подключи Cloud.ru</option></select>
         <button type="button" id="cloud-select" class="quiet-button" disabled>Использовать модель</button>
+        <button type="button" id="cloud-diagnose" class="quiet-button" disabled title="Проверочный запрос может расходовать токены">Проверить живой ответ</button>
         <p id="cloud-feedback" class="memory-empty" role="status">Ключ используется только в запущенном Python-сервере и не записывается на диск.</p>
       </div>
     </details>
@@ -97,7 +99,17 @@
         </div>
         <label class="sr-only" for="memory-search">Найти воспоминания</label>
         <input id="memory-search" type="search" maxlength="300" placeholder="Поиск по памяти">
+        <button type="button" id="rag-search" class="quiet-button" title="Смысловой поиск использует Cloud.ru и может расходовать токены">Поиск по смыслу</button>
         <div id="memory-results" class="memory-results" aria-live="polite"></div>
+        <details class="memory-queue" id="memory-queue">
+          <summary>Предложения памяти <span id="pending-count" class="muted"></span></summary>
+          <p class="memory-empty">Из разговоров сюда поступают важные факты. Ты сам решаешь, что сохранить.</p>
+          <div id="memory-pending" class="memory-results" aria-live="polite"></div>
+        </details>
+        <details class="memory-queue" id="soul-journal">
+          <summary>История Цукиёры</summary>
+          <div id="soul-timeline" class="memory-results"></div>
+        </details>
         <div class="memory-footer">
           <button type="button" id="memory-backup" class="quiet-button">Создать резервную копию</button>
           <span id="memory-feedback" role="status"></span>

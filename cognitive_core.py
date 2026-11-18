@@ -14,6 +14,8 @@ import threading
 from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from vector_memory import VectorMemory
+from memory_quality import MemoryQuality
+from experience_engine import ExperienceEngine
 
 
 class CognitiveCore:
@@ -22,6 +24,8 @@ class CognitiveCore:
         self.store = MemoryStore(path)
         self.growth = SoulGrowth(path)
         self.vectors = VectorMemory(path)
+        self.quality = MemoryQuality(path)
+        self.experience = ExperienceEngine(path)
 
     def connect(self):
         return self.store.connect()
@@ -49,6 +53,7 @@ class CognitiveCore:
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+        self.experience.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -64,8 +69,10 @@ class CognitiveCore:
                 VALUES(?,?,?) ON CONFLICT(message_id) DO UPDATE SET
                 helpful=excluded.helpful, note=excluded.note, updated_at=CURRENT_TIMESTAMP
             """, (message_id, int(helpful), note.strip()))
+        category = self.experience.tag_feedback(message_id, note)
         self.update_lessons()
-        return {"message_id": message_id, "helpful": helpful, "recorded": True}
+        return {"message_id": message_id, "helpful": helpful, "category": category,
+                "recorded": True}
 
     def update_lessons(self):
         """Restrained, reversible response-format learning from explicit feedback."""
@@ -97,7 +104,9 @@ class CognitiveCore:
             row = db.execute(
                 "SELECT guidance FROM cognitive_lessons WHERE name='answer_style'"
             ).fetchone()
-        return row["guidance"] if row else ""
+        baseline = row["guidance"] if row else ""
+        tagged = self.experience.guidance()
+        return (baseline + " " + tagged).strip()[:850]
 
     def biography(self) -> dict:
         """Explicit approved biography, stable persona and dated experience."""
@@ -114,6 +123,11 @@ class CognitiveCore:
             )]
         return {"identity": "Tsukiyora", "persona_version": "0.1.0",
                 "approved_history": approved, "experience": events,
+                "relationship_history": [
+                    {"event": e["event"], "created_at": e["created_at"], "source_ref": e.get("source_ref")}
+                    for e in events if e["event"] in ("conversation_completed", "memory_approved")
+                ],
+                "tone_model": self.experience.state(),
                 "learned_guidance": self.guidance()}
 
     def graph(self, node_limit: int = 180) -> dict:
@@ -156,7 +170,8 @@ class CognitiveCore:
         return {"last_cycle": dict(row) if row else None,
                 "feedback": {"total": reviews["n"], "helpful": reviews["likes"]},
                 "possible_conflicts": conflicts, "pending": pending,
-                "guidance": self.guidance(), "vectors": self.vectors.stats()}
+                "guidance": self.guidance(), "vectors": self.vectors.stats(),
+                "experience": self.experience.state()}
 
     def cycle(self) -> dict:
         """Local maintenance only: bounded and repeatable, no cloud/key access."""
@@ -167,16 +182,32 @@ class CognitiveCore:
                 integrity = db.execute("PRAGMA quick_check").fetchone()[0]
             if integrity != "ok":
                 raise sqlite3.DatabaseError("SQLite integrity check did not pass.")
-            self.vectors.prune()
+            repairs = self.vectors.repair(limit=2000)
+            # Only a small local batch per cycle, never expensive cloud requests.
+            with closing(self.connect()) as db:
+                recent = [row[0] for row in db.execute(
+                    "SELECT id FROM memory_items WHERE status='active' "
+                    "ORDER BY id DESC LIMIT 8"
+                )]
+            for memory_id in recent:
+                self.growth.build_links(memory_id)
             self.update_lessons()
+            self.experience.consolidate()
+            quality = self.quality.review(limit=180)
             stats = self.status()
-            # Avoid logging private content: only aggregate counts and coarse status.
+            digest = self.experience.snapshot(
+                stats["pending"], stats["possible_conflicts"]
+            )
+            # Only aggregate counts go into the periodic diary, never raw chats.
             summary = json.dumps({
-                "conflicts": stats["possible_conflicts"],
+                "possible_conflicts": len(quality["conflicts"]),
+                "possible_duplicates": len(quality["duplicates"]),
                 "pending": stats["pending"],
                 "approved": stats["vectors"]["active_memories"],
                 "indexed": stats["vectors"]["indexed_memories"],
-            })
+                "cached_links_repaired": repairs["cache_restored"],
+                "learning_goals": digest["practice_goals"],
+            }, ensure_ascii=False)
             with closing(self.connect()) as db:
                 db.execute("PRAGMA optimize")
         except (sqlite3.Error, ValueError, OSError):

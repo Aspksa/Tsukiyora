@@ -47,6 +47,15 @@ class V07StorageTests(unittest.TestCase):
         self.assertEqual([x["id"] for x in layers.inspect("episodic")["items"]], [a["id"]])
         self.assertEqual([x["id"] for x in layers.inspect("semantic")["items"]], [c["id"]])
         self.assertEqual([x["id"] for x in layers.inspect("autobiographical")["items"]], [b["id"]])
+        with closing(self.store.connect()) as db, db:
+            lo, hi = sorted((a["id"], b["id"]))
+            db.execute(
+                "INSERT INTO memory_links(source_id,target_id,relation) VALUES(?,?,'related')",
+                (lo,hi),
+            )
+        self.assertEqual(len(layers.inspect("all")["links"]), 1)
+        link = layers.inspect("episodic")["links"][0]
+        self.assertNotEqual(link["source_layer"], link["target_layer"])
         self.assertFalse(layers.confidence(b["id"])["truth_verified"])
         previous = layers.inspect("semantic")["items"][0]["revision_id"]
         self.store.correct_memory(c["id"], "В проекте применяется SQLite", "Уточнено")

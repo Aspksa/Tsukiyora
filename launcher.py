@@ -19,6 +19,7 @@ from memory_store import MemoryStore
 from soul_growth import SoulGrowth
 from cognitive_core import CognitiveCore, CognitiveWorker
 from migration_guard import MigrationGuard
+from resource_guard import ResourceGuard
 from reliability import Reliability
 from memory_quality import MemoryQuality
 from vector_memory import VectorMemory
@@ -136,6 +137,9 @@ class SoulServer(ThreadingHTTPServer):
         self.persona = persona
         self.memory_path = memory_path
         self.cloud = CloudSession(Path(memory_path).parent / "cloudru_preferences.json")
+        self.guard = ResourceGuard(memory_path)
+        self.guard.initialize()
+        self.cloud.guard = self.guard
         self.chat_lock = threading.Lock()
         self.cognition = CognitiveCore(memory_path)
         self.cognition.chat_priority = self.chat_lock
@@ -213,6 +217,8 @@ class SoulHandler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         path = parsed.path
         args = parse_qs(parsed.query, keep_blank_values=True)
+        if path == "/api/system/cloud-budget":
+            return self.send_json(self.server.guard.status())
         if path == "/api/system/diagnostics":
             return self.send_json(self.server.cognition.reliability.local_checks())
         if path == "/api/system/selftest":
@@ -267,6 +273,8 @@ class SoulHandler(BaseHTTPRequestHandler):
             return self.send_json(self.server.cognition.academy.status())
         if path == "/api/soul/academy/metrics":
             return self.send_json(self.server.cognition.metrics.status())
+        if path == "/api/soul/academy/experiments":
+            return self.send_json(self.server.cognition.experiments.report())
         if path == "/api/soul/character/timeline":
             return self.send_json(self.server.cognition.continuity.timeline())
         if path == "/api/soul/character":
@@ -367,6 +375,26 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/system/cloud-budget":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.guard.configure(
+                    chat_per_day=obj.get("chat_per_day"),
+                    embeddings_per_day=obj.get("embeddings_per_day"),
+                    per_minute=obj.get("per_minute")))
+            except (ValueError,sqlite3.Error) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/rag4":
+            try:
+                obj=self._read_body()
+                cloud_state=self.server.cloud.status()
+                model=(cloud_state.get("embedding_model")
+                       if cloud_state.get("vector_chat_enabled") else None)
+                return self.send_json(self.server.cognition.fusion.search(
+                    obj.get("query"),limit=obj.get("limit",12),
+                    model=model,use_cached_vectors=bool(model)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/rag":
             try:
                 obj=self._read_body()

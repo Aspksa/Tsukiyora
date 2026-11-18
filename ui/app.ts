@@ -1246,7 +1246,10 @@ async function refreshQuality() {
   loading.textContent = "Проверяю утверждения и источники…";
   target.append(loading);
   try {
-    const result = await requestJSON("/api/soul/quality");
+    const [result,groups]=await Promise.all([
+      requestJSON("/api/soul/quality"),
+      requestJSON("/api/soul/semantic/groups")
+    ]);
     target.replaceChildren();
     for (const [field, label] of [["duplicates", "Похожая запись"],
                                    ["semantic_duplicates", "Возможно повторение по смыслу"],
@@ -1263,7 +1266,60 @@ async function refreshQuality() {
         second.textContent = "#" + issue.right.id + " (" +
           (issue.right.source_ref || issue.right.source_type) + "): " + issue.right.content;
         block.append(name, first, second);
+        if (field!=="conflicts") {
+          const grouping=document.createElement("button");
+          grouping.type="button";grouping.className="quiet-button";
+          grouping.textContent="Связать похожие · сохранить оригиналы";
+          grouping.addEventListener("click",async () => {
+            if (!window.confirm("Обозначить эти записи похожими? "+
+              "Обе исходные записи и все версии будут сохранены.")) return;
+            grouping.disabled=true;
+            try {
+              await requestJSON("/api/soul/semantic/link","POST",{
+                left_id:issue.left.id,right_id:issue.right.id,confirmed:true
+              });
+              memoryFeedback("Записи связаны без удаления исходных фактов.");
+              await refreshQuality();
+            } catch (error) {
+              memoryFeedback("Связь не создана: "+error.message);
+              grouping.disabled=false;
+            }
+          });
+          block.append(grouping);
+        }
         target.append(block);
+      }
+    }
+    if (groups.items.length) {
+      const heading=document.createElement("p");
+      heading.className="memory-empty";
+      heading.textContent="Подтверждённые вручную связи · "+groups.items.length+
+        " (оригиналы сохранены):";
+      target.append(heading);
+      for (const group of groups.items.slice(0,20)) {
+        const row=document.createElement("div");
+        row.className="memory-record";
+        const label=document.createElement("p");
+        label.textContent="#"+group.left_id+" ↔ #"+group.right_id+
+          (group.current ? " · действующая связь" :
+           " · изменена запись — подтверди заново");
+        const revoke=document.createElement("button");
+        revoke.type="button";revoke.className="quiet-button";
+        revoke.textContent="Отменить связь";
+        revoke.addEventListener("click",async () => {
+          if (!window.confirm("Убрать связь между воспоминаниями? "+
+                              "Сами факты не удалятся.")) return;
+          revoke.disabled=true;
+          try {
+            await requestJSON("/api/soul/semantic/unlink","POST",{
+              left_id:group.left_id,right_id:group.right_id,confirmed:true
+            });
+            await refreshQuality();
+          } catch (error) {
+            memoryFeedback(error.message);revoke.disabled=false;
+          }
+        });
+        row.append(label,revoke);target.append(row);
       }
     }
     if (!result.duplicates.length && !result.semantic_duplicates.length && !result.conflicts.length) {

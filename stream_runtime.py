@@ -102,6 +102,10 @@ def handle_stream(handler, obj: dict):
         search = handler.server.cognition.evidence.search(
             content[:500], limit=15, model=vector_model,
             use_cached_vectors=bool(vector_model))
+        if (not isinstance(search,dict) or
+            not isinstance(search.get("memories"),list) or
+            not isinstance(search.get("documents"),list)):
+            raise ValueError("Локальный поиск вернул неполный результат.")
         memories = search["memories"][:8]
         cited_documents = search["documents"][:3]
         prompt = persona_prompt(handler.server.persona, memories)

@@ -1712,6 +1712,130 @@ $("reflection-run").addEventListener("click",async()=>{
   }
 });
 
+// Cognitive Soul 2.0 uses opt-in, same-origin local endpoints only.
+function showNext(result) {
+  const target=$("next-result");
+  target.replaceChildren();
+  const text=document.createElement("pre");
+  text.className="next-output";
+  text.textContent=typeof result==="string"?result:
+    JSON.stringify(result,null,2).slice(0,7000);
+  target.append(text);
+}
+async function nextPost(endpoint,body,done) {
+  try {
+    const result=await requestJSON("/api/soul/next/"+endpoint,"POST",body);
+    showNext(result);
+    if(done) await refreshNext();
+  } catch(error) {
+    showNext("Ошибка: "+error.message);
+  }
+}
+async function refreshNext() {
+  if(!$("cognitive-next").open) return;
+  try {
+    const [state,understanding,skills,personality,questions,simulations]=
+      await Promise.all([
+        requestJSON("/api/soul/next/state"),
+        requestJSON("/api/soul/next/understanding"),
+        requestJSON("/api/soul/next/skills"),
+        requestJSON("/api/soul/next/personality"),
+        requestJSON("/api/soul/next/questions"),
+        requestJSON("/api/soul/next/simulations")
+      ]);
+    $("next-state").textContent="Активных целей: "+state.active_goals+
+      " · ожидают подтверждения воспоминания: "+state.pending_memory_reviews+
+      " · вопросы: "+state.pending_research_questions+
+      " · оценено ответов: "+state.rated_answers+
+      " · устойчивых привычек: "+personality.approved_habits.length+
+      " · повторяющихся успешных навыков: "+skills.repeatable_candidates.length+
+      " · испытаний: "+simulations.items.length+
+      ". Установленная модель состояния не означает реальных чувств.";
+    const goalPane=$("next-goals");
+    goalPane.replaceChildren();
+    for(const goal of understanding.user_defined_goals) {
+      const line=document.createElement("div");
+      line.className="memory-record";
+      addCognitiveLine(line,"Цель #"+goal.id+" · "+goal.state+" · "+goal.title);
+      const button=document.createElement("button");
+      button.type="button"; button.className="quiet-button";
+      button.textContent=goal.state==="active"?"Завершить":"Активировать";
+      const nextState=goal.state==="active"?"done":"active";
+      button.addEventListener("click",()=>{
+        if(window.confirm("Изменить состояние цели #"+goal.id+"?")) {
+          nextPost("goal/state",{id:goal.id,state:nextState,confirmed:true},true);
+        }
+      });
+      line.append(button);
+      goalPane.append(line);
+    }
+    const questionsPane=$("next-research");
+    questionsPane.replaceChildren();
+    for(const question of questions.items.filter(x=>x.state==="pending").slice(0,10)) {
+      const line=document.createElement("div");
+      line.className="memory-record";
+      addCognitiveLine(line,"Вопрос #"+question.id+" · "+question.question);
+      for(const state of ["approved","dismissed"]) {
+        const b=document.createElement("button");
+        b.className="quiet-button";b.type="button";
+        b.textContent=state==="approved"?"Сохранить для исследования":"Отклонить";
+        b.addEventListener("click",()=>{
+          if(window.confirm("Подтвердить решение по вопросу #"+question.id+"?")) {
+            nextPost("question/decide",{id:question.id,state,confirmed:true},true);
+          }
+        });
+        line.append(b);
+      }
+      questionsPane.append(line);
+    }
+  } catch(error) {
+    $("next-state").textContent="Когнитивная диагностика недоступна: "+error.message;
+  }
+}
+$("cognitive-next").addEventListener("toggle",refreshNext);
+$("next-causal").addEventListener("click",()=>nextPost("causal",
+  {query:$("next-query").value,limit:8},false));
+$("next-gap").addEventListener("click",()=>nextPost("gap",
+  {query:$("next-query").value},false));
+$("next-save-question").addEventListener("click",()=>{
+  const question=$("next-query").value.trim();
+  if(!window.confirm("Сохранить этот вопрос в локальную очередь исследований?")) return;
+  nextPost("question/save",{question,confirmed:true},true);
+});
+$("next-selfcheck").addEventListener("click",()=>nextPost("selfcheck",
+  {message_id:Number($("next-message-id").value)},false));
+$("next-review").addEventListener("click",()=>nextPost("memory/review",
+  {limit:100},false));
+$("next-summary").addEventListener("click",async()=>{
+  try {
+    const [understanding, personality, skills]=await Promise.all([
+      requestJSON("/api/soul/next/understanding"),
+      requestJSON("/api/soul/next/personality"),
+      requestJSON("/api/soul/next/skills")
+    ]);
+    showNext({understanding,personality,skills});
+  } catch(error) { showNext("Ошибка: "+error.message); }
+});
+$("next-add-goal").addEventListener("click",()=>{
+  const title=$("next-goal").value.trim();
+  if(!window.confirm("Сохранить эту цель в локальную SQLite?")) return;
+  nextPost("goal/save",{title,confirmed:true},true);
+});
+$("next-scenario").addEventListener("click",()=>nextPost("scenario",{
+  decision:$("next-query").value,
+  option_a:$("next-scenario-a").value,
+  option_b:$("next-scenario-b").value
+},false));
+$("next-simulate").addEventListener("click",()=>{
+  if(!window.confirm("Выполнить локальный контрольный тест и сохранить только оценку/хеш?")) return;
+  nextPost("simulate",{
+    strategy:$("next-sim-strategy").value,
+    skill:$("next-sim-skill").value,
+    answer:$("next-sim-answer").value,
+    confirmed:true
+  },true);
+});
+
 $("academy-enabled").addEventListener("change",async () => {
   const control=$("academy-enabled");
   const value=control.checked;

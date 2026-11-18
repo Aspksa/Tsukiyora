@@ -151,11 +151,26 @@ def handle_stream(handler, obj: dict):
         assistant = store.append_messages(conversation_id, [
             {"role": "assistant", "content": answer, "client_message_id": reply_id},
         ])[0]
+        # A provenance audit is local and never claims that a model answer is true.
+        audit = {"state": "unavailable", "truth_verified": False}
+        try:
+            audit = handler.server.cognition.audit.verify(assistant["id"], answer)
+        except (sqlite3.Error, ValueError):
+            pass
+        try:
+            handler.server.cognition.scheduler.record_answer(
+                assistant["id"], cloud.status().get("model", "unknown"),
+                len(prompt) + sum(len(x["content"]) for x in history),
+                len(answer)
+            )
+        except (sqlite3.Error, ValueError):
+            pass
         growth.journal("conversation_completed", "Завершён диалог с пользователем",
                        "message", str(user["id"]))
         suggestions = growth.propose(user["id"], content)
         send_event(handler, "done", {"conversation_id": conversation_id,
                                       "message_id": assistant["id"],
+                                      "audit": audit["state"],
                                       "pending": len([x for x in suggestions if x["state"] == "pending"])})
     except (BrokenPipeError, ConnectionResetError, OSError):
         # Client may disconnect. No partial answer is silently committed.

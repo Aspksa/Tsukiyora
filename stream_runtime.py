@@ -96,8 +96,8 @@ def handle_stream(handler, obj: dict):
 
         # Rank across the approved SQLite corpus (FTS5 when supported),
         # expanding grounded one-hop links without introducing invented facts.
-        matches = handler.server.cognition.precision.search(
-            content[:500], limit=18, include_links=True
+        matches = handler.server.cognition.rag.search(
+            content[:500], limit=18, max_age_days=365
         )["items"]
         used_vectors = False
         # An embedding model must be explicitly selected and records indexed.
@@ -131,6 +131,14 @@ def handle_stream(handler, obj: dict):
             prompt += "\n\nБезопасная стратегия ответа на основе явной обратной связи: " + learned
         # The biography and habits are explicitly approved local data.
         prompt += "\n\n" + handler.server.cognition.continuity.context()
+        if any(m.get("possible_conflict") or m.get("potentially_stale")
+               or not m.get("source_exists",True) for m in memories):
+            prompt += (
+                "\nНекоторые записи памяти могут противоречить друг другу, "
+                "устареть или потерять ссылку на источник. "
+                "Не представляй их как независимо доказанные факты; "
+                "обозначь сомнения и предложи сверить источник."
+            )
         if memories:
             prompt += ("\nКогда вспоминаешь факты, по возможности укажи источник "
                        "в формате [Память #ID]. ID и source_ref бери только из "

@@ -1724,6 +1724,81 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Tsukiyora 11.0: source-linked local memory retrieval, no extra provider calls.
+async function refreshMemory11(){
+  if(!$("memory11").open)return;
+  try {
+    const report=await requestJSON("/api/soul/memory11");
+    const c=report.counters;
+    $("memory11-state").textContent=
+      "Активных воспоминаний: "+c.active_memory+
+      " · версий: "+c.memory_revisions+
+      " · графовых связей: "+c.graph_links+
+      " · кэшированных embeddings: "+c.cached_embeddings+
+      " · ожидают проверки: "+(c.unresolved_memories+c.possible_conflicts)+
+      " · предупреждений очереди: "+c.queue_warning_jobs+
+      " · новых Cloud.ru-запросов: "+report.additional_cloud_calls+".";
+    const container=$("memory11-metrics");container.replaceChildren();
+    addCognitiveLine(container,"Индексы: "+(report.stages.retrieval.fts_tables.join(", ")||"только ограниченный текстовый поиск"));
+    addCognitiveLine(container,"Интеллект: лексические признаки и ссылки на источники, не независимая проверка истины.");
+    addCognitiveLine(container,"Управление: 1 очередь, 0 дополнительных процессов, одобрение навыков и прав доступа по старым правилам.");
+    const last=report.latest_local_audit;
+    addCognitiveLine(container,last
+      ?"Последний локальный аудит: "+last.day+
+       " · спорных записей: "+last.counts.possible_conflicts
+      :"Фоновый аудит 11.0 ещё не выполнялся на этой базе.");
+  }catch(error){
+    $("memory11-state").textContent="Не удалось проверить память: "+error.message;
+  }
+}
+$("memory11").addEventListener("toggle",refreshMemory11);
+$("memory11-refresh").addEventListener("click",refreshMemory11);
+$("memory11-search").addEventListener("click",async()=>{
+  const query=$("memory11-query").value.trim();
+  if(!query){$("memory11-search-state").textContent="Напиши поисковый запрос.";return;}
+  const items=$("memory11-results");items.replaceChildren();
+  $("memory11-search-state").textContent="Поиск по локальной базе...";
+  try{
+    const body={query,limit:12};
+    if($("memory11-date").value)body.as_of=$("memory11-date").value;
+    const found=await requestJSON("/api/soul/memory11/search","POST",body);
+    const ambiguous=found.plan.reference_ambiguous;
+    $("memory11-search-state").textContent=
+      "Режим: "+found.mode+" · найдено: "+found.items.length+
+      " · время: "+(found.duration_ms===undefined?"не измерено":found.duration_ms+" мс")+
+      (ambiguous?" · уточни, что именно нужно продолжить":"")+
+      (found.cached_vector_used?" · использован старый векторный кэш":"")+".";
+    for(const item of found.items){
+      addCognitiveLine(items,item.citation+" · "+item.kind+
+        " · "+item.excerpt+" · источник: "+item.source_type+
+        (item.source_ref?" #"+item.source_ref:"")+
+        " · изменений: "+item.revision_count+
+        (item.possible_conflict?" · проверить возможное противоречие":"")+
+        " · пользовательское утверждение, не доказанная истина");
+    }
+    if(!found.items.length)addCognitiveLine(items,
+      "Совпадений среди активных записей памяти нет. Из истории нельзя автоматически придумывать факты.");
+  }catch(error){
+    $("memory11-search-state").textContent="Поиск недоступен: "+error.message;
+  }
+});
+$("memory11-benchmark").addEventListener("click",async()=>{
+  if(!window.confirm("Проверить 5 существующих воспоминаний локальным поиском? "+
+     "Это тест самопоиска, не доказательство понимания. Cloud.ru не вызывается."))return;
+  try{
+    const b=await requestJSON("/api/soul/memory11/benchmark","POST",
+      {confirmed:true,count:5});
+    $("memory11-search-state").textContent=b.status==="deferred"
+      ?"Проверка отложена: Цукиёра сейчас отвечает."
+      :"Самопоиск: "+b.self_retrieval_hits+"/"+b.queries+
+       " · recall@5: "+(b.self_retrieval_recall_at_k===null?"нет примеров":b.self_retrieval_recall_at_k)+
+       " · p50: "+b.p50_ms+" мс · p95: "+b.p95_ms+
+       " мс. Это НЕ независимая оценка качества ответов.";
+  }catch(error){
+    $("memory11-search-state").textContent="Проверка скорости не удалась: "+error.message;
+  }
+});
+
 // Tsukiyora 10.0: ONE read-only status surface over existing modules and queue.
 async function refreshLife10(){
   if(!$("life10").open)return;

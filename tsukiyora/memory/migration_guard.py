@@ -11,7 +11,7 @@ import sqlite3
 
 from tsukiyora.memory.memory_store import MemoryStore
 
-SCHEMA_VERSION=15
+SCHEMA_VERSION=16
 
 
 class MigrationGuard:

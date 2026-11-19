@@ -333,7 +333,9 @@ class SoulHandler(BaseHTTPRequestHandler):
                     return self.send_json(dialogue.resume(
                         args.get("conversation_id",[None])[0]))
                 if path=="/api/soul/dialogue9/initiative":
-                    return self.send_json(dialogue.initiative(self.server.cognition))
+                    return self.send_json(dialogue.initiative(
+                        self.server.cognition,
+                        args.get("conversation_id",[None])[0]))
                 return self.send_json({"error":"Unknown dialogue9 resource."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)

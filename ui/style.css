@@ -322,3 +322,23 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 #forge-candidates{max-height:480px;overflow:auto}
 #forge-history{max-height:220px;overflow:auto}
 #forge-result,#forge-state,#forge-budget-status{overflow-wrap:anywhere;line-height:1.6}
+
+/* Optional Cloud learning switch and genuine SQLite-backed chat suggestions. */
+#forge-chat-toggle{font-size:11px;padding:6px 9px;white-space:nowrap;
+  border-color:#70502d}
+#forge-chat-toggle[aria-pressed="true"],#forge-auto-toggle[aria-pressed="true"]{
+  border-color:#cb9b55;color:#f2d4a6;background:rgba(175,128,65,.17)}
+.forge-chat-proposal{margin:0 18px 10px;padding:12px 14px;
+  border:1px solid rgba(209,160,86,.4);border-radius:12px;
+  background:rgba(34,27,20,.96);color:#ecdbba;overflow-wrap:anywhere}
+.forge-chat-proposal[hidden]{display:none!important}
+.forge-proposal-kicker{margin:0 0 7px;font-size:10px;
+  letter-spacing:.13em;color:#d4a86e}
+.forge-chat-proposal-text{margin:0 0 8px;font-size:12px;line-height:1.6}
+.forge-proposal-note{margin:0 0 9px;font-size:11px;color:#c8af88}
+.forge-chat-proposal .memory-actions{display:flex;gap:7px;flex-wrap:wrap}
+.forge-auto-controls{margin:10px 0;padding:12px;
+  border:1px solid #44341f;border-radius:10px;background:#0d0c0e}
+#forge-auto-toggle{width:100%;font-weight:600}
+@media(max-width:650px){#forge-chat-toggle{font-size:10px;padding:5px}
+  .forge-chat-proposal{margin:0 5px 8px}}

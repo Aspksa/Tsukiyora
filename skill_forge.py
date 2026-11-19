@@ -74,6 +74,16 @@ def _score(recipe, required):
 class SkillForge:
     def __init__(self,path):
         self.store=MemoryStore(path)
+        self._cloud=None
+        self._persona=None
+        self._chat_lock=None
+
+    def bind_cloud_runtime(self,cloud,persona,chat_lock):
+        """Only the running Python server supplies Cloud.ru; unit cores stay offline."""
+        self._cloud=cloud
+        self._persona=persona
+        self._chat_lock=chat_lock
+
 
     def initialize(self):
         with closing(self.store.connect()) as db, db:
@@ -130,6 +140,16 @@ class SkillForge:
                 CREATE TABLE IF NOT EXISTS forge_cloud_usage(
                     day TEXT PRIMARY KEY,
                     reserved_calls INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS forge_auto(
+                    id INTEGER PRIMARY KEY CHECK(id=1),
+                    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1))
+                );
+                INSERT OR IGNORE INTO forge_auto(id,enabled) VALUES(1,0);
+                CREATE TABLE IF NOT EXISTS forge_auto_attempts(
+                    skill_id INTEGER PRIMARY KEY REFERENCES forge_skills(id),
+                    status TEXT NOT NULL DEFAULT 'reserved',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS forge_skill_state
                     ON forge_skills(domain,state,id DESC);
@@ -202,7 +222,7 @@ class SkillForge:
             positive=[dict(x) for x in db.execute(
                 "SELECT f.message_id,m.content,f.note FROM cognitive_feedback f "
                 "JOIN messages m ON m.id=f.message_id "
-                "WHERE f.helpful=1 AND length(trim(f.note))>=8 "
+                "WHERE f.helpful=1 "
                 "ORDER BY f.message_id DESC LIMIT 160"
             )]
             negative=[dict(x) for x in db.execute(
@@ -210,15 +230,19 @@ class SkillForge:
                 "JOIN messages m ON m.id=f.message_id "
                 "WHERE f.helpful=0 ORDER BY f.message_id DESC LIMIT 120"
             )]
-        good=defaultdict(list); bad=defaultdict(list)
+        good=defaultdict(list); detailed=defaultdict(int); bad=defaultdict(list)
         for row in positive:
-            good[detect_domain((row["content"]+" "+row["note"])[:1400])].append(row["message_id"])
+            domain=detect_domain((row["content"]+" "+row["note"])[:1400])
+            good[domain].append(row["message_id"])
+            if len(row["note"].strip())>=8:
+                detailed[domain]+=1
         for row in negative:
             bad[detect_domain(row["content"][:1200])].append(row["message_id"])
         created=0; weak=[]
         for domain in DOMAINS:
             sources=good[domain]
-            if len(sources)>=2:
+            # Two explained successes OR three simple positive ratings.
+            if len(sources)>=3 or (len(sources)>=2 and detailed[domain]>=2):
                 outcome=self._insert(domain,BASE[domain],"positive_feedback",
                                      evidence=sources[:20])
                 created+=int(outcome["created"])

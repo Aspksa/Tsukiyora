@@ -332,6 +332,8 @@ class SoulHandler(BaseHTTPRequestHandler):
                     return self.send_json(soul.proposals())
                 if path=="/api/soul/living8/journal":
                     return self.send_json(soul.journal())
+                if path=="/api/soul/living8/research":
+                    return self.send_json(soul.research_sources())
                 if path=="/api/soul/living8/diary":
                     return self.send_json({"journal":soul.journal(limit=10),
                                            "continuity":core.continuity.state()["conversations"],

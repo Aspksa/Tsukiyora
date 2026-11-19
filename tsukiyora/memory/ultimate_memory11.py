@@ -250,6 +250,11 @@ class UltimateMemory11:
                 item["related_to_memory_id"] = row["related_to"]
             found.append(item)
         found.sort(key=lambda r: (-r["score"], -r["memory_id"]))
+        if as_of is not None:
+            # User-attested bitemporal metadata is separate from created_at.
+            # An annotation from an earlier corrected version is not applied.
+            with closing(self.store.connect()) as db:
+                found = core.memory13.validity(db, found, as_of)
         history = []
         if include_history and conversation_id is not None:
             topical = core.topic_recall.relevant(

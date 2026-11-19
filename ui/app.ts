@@ -698,8 +698,8 @@ function attachFeedback(node, messageId) {
     $("answers15-message").value=String(messageId);
     $("answers15").scrollIntoView({block:"nearest",behavior:"smooth"});
   });
-  controls.append(detailed);
   node.append(controls);
+  node.append(detailed);
 }
 
 function showGreeting() {

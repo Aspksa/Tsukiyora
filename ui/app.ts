@@ -1706,10 +1706,11 @@ async function refreshLiving8Chat(){
 async function refreshLiving8(){
   if(!$("living8").open)return;
   try{
-    const [state,agenda,diary]=await Promise.all([
+    const [state,agenda,diary,research]=await Promise.all([
       requestJSON("/api/soul/living8"),
       requestJSON("/api/soul/living8/agenda"),
-      requestJSON("/api/soul/living8/journal")
+      requestJSON("/api/soul/living8/journal"),
+      requestJSON("/api/soul/living8/research")
     ]);
     $("living8-level").value=String(state.autonomy_level);
     const rights=state.local_permissions;
@@ -1730,6 +1731,15 @@ async function refreshLiving8(){
     }
     if(!agenda.items.length)addCognitiveLine(goals,
       "Пока нет целей: фоновый планировщик изучит существующие оценки, вопросы и предупреждения.");
+    const refs=$("living8-research");refs.replaceChildren();
+    addCognitiveLine(refs,"Источники по разрешённым локальным вопросам");
+    for(const item of research.items.slice(0,10)){
+      addCognitiveLine(refs,"Вопрос #"+item.question_id+" · "+
+        item.name+" · "+item.citation+
+        (item.source_updated_since_review?" · источник обновлён, требуется повторная проверка":""));
+    }
+    if(!research.items.length)addCognitiveLine(refs,
+      "Пока нет ссылок. Нужны одобренные исследовательские вопросы и локальное разрешение на документы.");
     const log=$("living8-chronicle");log.replaceChildren();
     addCognitiveLine(log,"Дневник локального развития (без текста переписки)");
     for(const item of diary.items.slice(0,12)){

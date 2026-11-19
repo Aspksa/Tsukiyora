@@ -145,6 +145,7 @@ class SoulServer(ThreadingHTTPServer):
         self.chat_lock = threading.Lock()
         self.cognition = CognitiveCore(memory_path)
         self.cognition.chat_priority = self.chat_lock
+        self.cognition.forge.bind_cloud_runtime(self.cloud,self.persona,self.chat_lock)
         self.active_streams = {}
         super().__init__(address, SoulHandler)
 
@@ -326,6 +327,10 @@ class SoulHandler(BaseHTTPRequestHandler):
                     return self.send_json(engine.status())
                 if path=="/api/soul/forge/skills":
                     return self.send_json(engine.skills())
+                if path=="/api/soul/forge/ready":
+                    return self.send_json(engine.ready_proposals())
+                if path=="/api/soul/forge/auto":
+                    return self.send_json(engine.auto_status())
                 if path=="/api/soul/forge/history":
                     return self.send_json(engine.history())
                 if path=="/api/soul/forge/budget":
@@ -501,7 +506,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             try:
                 data=self._read_body()
                 engine=self.server.cognition.forge
-                if path=="/api/soul/forge/propose":
+                if path=="/api/soul/forge/auto":
+                    result=engine.set_auto(
+                        data.get("enabled"),confirmed=data.get("confirmed",False),
+                        acknowledge_paid=data.get("acknowledge_paid",False))
+                elif path=="/api/soul/forge/propose":
                     result=engine.propose(
                         data.get("domain"),confirmed=data.get("confirmed",False))
                 elif path=="/api/soul/forge/variant":

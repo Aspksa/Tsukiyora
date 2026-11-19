@@ -320,6 +320,31 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/coordinator13":
+            try:
+                return self.send_json(self.server.cognition.coordinator13.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/coordinator13/reviews":
+            try:
+                return self.send_json(
+                    self.server.cognition.coordinator13.review_board())
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/coordinator13/issues":
+            try:
+                return self.send_json(
+                    self.server.cognition.coordinator13.issue_signals())
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/temporal13/timeline":
+            try:
+                memory_id = int(args.get("memory_id",["0"])[0])
+                return self.send_json(
+                    self.server.cognition.memory13.timeline(memory_id))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/inner12":
             try:
                 return self.send_json(self.server.cognition.inner12.status(
@@ -584,6 +609,42 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/temporal13/annotate":
+            try:
+                obj = self._read_body()
+                return self.send_json(
+                    self.server.cognition.memory13.annotate(
+                        obj.get("memory_id"),
+                        effective_from=obj.get("effective_from"),
+                        effective_until=obj.get("effective_until"),
+                        entity_key=obj.get("entity_key"),
+                        rationale=obj.get("rationale", ""),
+                        confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/coordinator13/eval-case":
+            try:
+                obj = self._read_body()
+                return self.send_json(
+                    self.server.cognition.coordinator13.add_eval_case(
+                        obj.get("question"), obj.get("expected_memory_id"),
+                        note=obj.get("note",""),
+                        confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/coordinator13/benchmark":
+            try:
+                obj = self._read_body()
+                if obj.get("confirmed") is not True:
+                    raise ValueError("Нужна явная проверка тестовых примеров.")
+                if self.server.chat_lock.locked():
+                    return self.send_json(
+                        {"status":"deferred","reason":"chat_active"})
+                return self.send_json(
+                    self.server.cognition.coordinator13.benchmark(
+                        self.server.cognition, limit=obj.get("limit",15)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/inner12/inspect":
             try:
                 obj = self._read_body()

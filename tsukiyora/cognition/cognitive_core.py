@@ -55,6 +55,9 @@ from tsukiyora.cognition.growth_quality import GrowthQuality
 from tsukiyora.cognition.life_cycle10 import UnifiedLifeCycle10
 from tsukiyora.memory.ultimate_memory11 import UltimateMemory11
 from tsukiyora.cognition.inner_world12 import InnerWorld12
+from tsukiyora.memory.temporal13 import TemporalMemory13
+from tsukiyora.memory.cached_vector_index13 import CachedVectorIndex13
+from tsukiyora.cognition.coordinator13 import CognitiveCoordinator13
 
 
 class CognitiveCore:
@@ -103,6 +106,9 @@ class CognitiveCore:
         self.life10 = UnifiedLifeCycle10(path)
         self.memory11 = UltimateMemory11(path)
         self.inner12 = InnerWorld12(path)
+        self.memory13 = TemporalMemory13(path)
+        self.vector13 = CachedVectorIndex13(path)
+        self.coordinator13 = CognitiveCoordinator13(path)
         self.chat_priority = None
 
     def connect(self):
@@ -160,6 +166,9 @@ class CognitiveCore:
         self.living8.initialize()
         self.dialogue9.initialize()
         self.inner12.initialize()
+        self.memory13.initialize()
+        self.vector13.initialize()
+        self.coordinator13.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:

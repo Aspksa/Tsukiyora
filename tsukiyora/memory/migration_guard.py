@@ -11,7 +11,7 @@ import sqlite3
 
 from tsukiyora.memory.memory_store import MemoryStore
 
-SCHEMA_VERSION=13
+SCHEMA_VERSION=14
 
 
 class MigrationGuard:
@@ -36,7 +36,7 @@ class MigrationGuard:
         if version==SCHEMA_VERSION or not existing:
             return {"existing":existing,"version":version,"backup":None}
         # Reuse the online-consistent snapshot mechanism, retaining a local
-        # recovery point before any v0.9 DDL executes.
+        # recovery point before any compatibility DDL executes.
         snapshot=MemoryStore(self.path).backup(self.backups)
         return {"existing":True,"version":version,"backup":snapshot.name}
 

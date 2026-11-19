@@ -99,12 +99,13 @@ class UltimateMemory11:
             "automatic_fact_promotion": False,
         }
 
-    def _cached_vector_ranking(self, db, query: str, cap: int = 144) -> list[int]:
+    def _cached_vector_ranking(self, db, query: str, cap: int = 144, vector_index=None) -> list[int]:
         """Reuse ONLY pre-existing query embedding and exact-source vectors.
 
         No query vector => simply omit vector rank: there is no API call.
         Stale embeddings from corrected memories are excluded by SHA.
         """
+        indexed_ids = vector_index.lookup(db, query, limit=40) if vector_index else []
         query_sha = digest(query)
         cached = db.execute(
             "SELECT model,dimension,vector FROM embedding_cache "
@@ -138,8 +139,9 @@ class UltimateMemory11:
                 if value > .25:
                     scored[row["memory_id"]] = max(
                         value, scored.get(row["memory_id"], 0.0))
-        return [i for i, _ in sorted(
+        recent = [i for i, _ in sorted(
             scored.items(), key=lambda kv: (-kv[1], -kv[0]))[:40]]
+        return (indexed_ids + [i for i in recent if i not in indexed_ids])[:40]
 
     def search(self, core, query: str, conversation_id=None,
                recent_history=None, *, limit=8, as_of=None,
@@ -190,7 +192,8 @@ class UltimateMemory11:
             candidates[row["id"]] = row
             lexical_ids.append(row["id"])
         with closing(self.store.connect()) as db:
-            vector_ids = self._cached_vector_ranking(db, query)
+            vector_ids = self._cached_vector_ranking(
+                db, query, vector_index=core.vector13)
             # Fetch cached-vector-only candidates, never arbitrary records.
             additional = [i for i in vector_ids[:40] if i not in candidates]
             if additional:
@@ -250,6 +253,11 @@ class UltimateMemory11:
                 item["related_to_memory_id"] = row["related_to"]
             found.append(item)
         found.sort(key=lambda r: (-r["score"], -r["memory_id"]))
+        if as_of is not None:
+            # User-attested bitemporal metadata is separate from created_at.
+            # An annotation from an earlier corrected version is not applied.
+            with closing(self.store.connect()) as db:
+                found = core.memory13.validity(db, found, as_of)
         history = []
         if include_history and conversation_id is not None:
             topical = core.topic_recall.relevant(

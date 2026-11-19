@@ -84,6 +84,12 @@ class UnifiedLifeCycle10:
         if style:
             put("Ранее одобренная манера ответа (не изменение личности): " + style)
 
+        # Only the user's earlier message in this conversation is eligible
+        # as a referent; never convert an ambiguous "yes" to permission.
+        followup = core.coordinator13.followup_hint(text, recent_history)
+        if followup:
+            put("\n" + followup)
+
         # Real user-approved source excerpts come before unverified dialogue
         # snippets. This is a local read, never another model call.
         approved = core.memory11.prompt(

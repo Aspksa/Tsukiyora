@@ -1724,6 +1724,126 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Tsukiyora 13.0: one read-only view and explicit opt-in metadata actions.
+async function refreshCoordinator13(){
+  if(!$("coordinator13").open)return;
+  try{
+    const [state,signals,reviews]=await Promise.all([
+      requestJSON("/api/soul/coordinator13"),
+      requestJSON("/api/soul/coordinator13/issues"),
+      requestJSON("/api/soul/coordinator13/reviews")
+    ]);
+    $("coordinator13-status").textContent=
+      "Единая очередь: "+state.queue.registered_jobs+
+      " задач · с ошибками: "+state.queue.jobs_with_failures+
+      " · приблизительно проиндексированных векторов: "+state.cached_vector_index.existing_indexed_vectors+
+      " / "+state.cached_vector_index.memory_embedding_links+
+      " · аннотаций действительности: "+state.memory.validity_annotations+
+      " · проверочных эталонов: "+state.user_attested_holdout_cases+
+      " · новых платных фоновых обращений: "+state.new_background_model_calls+".";
+    const overview=$("coordinator13-overview");overview.replaceChildren();
+    addCognitiveLine(overview,"Выбрано 29 пунктов; №5 (адаптация нагрузки) не добавлен."+
+      " Рабочие механизмы переиспользованы, часть направлений остаётся под дальнейшие тесты.");
+    addCognitiveLine(overview,"Единая лента проверок: "+reviews.sampled_count+
+      " записей, все требуют ручного решения. Не автоподтверждение.");
+    addCognitiveLine(overview,"Отрицательных отзывов изучено: "+
+      signals.negative_feedback_scanned+
+      " · возможные причины: "+JSON.stringify(signals.possible_categories)+
+      ". Только текстовые признаки, не доказанная причина.");
+    addCognitiveLine(overview,"Очередь: фиксированные приоритеты и старение ожидающих задач."+
+      " Индивидуальных сетевых агентов нет.");
+    for(const item of reviews.items.slice(0,7))
+      addCognitiveLine(overview,"Проверка "+item.kind+
+        " · "+item.table+" #"+item.record_id+
+        " · источник #"+item.source_id);
+  }catch(error){
+    $("coordinator13-status").textContent="Центр 13.0 недоступен: "+error.message;
+  }
+}
+$("coordinator13").addEventListener("toggle",refreshCoordinator13);
+$("coordinator13-refresh").addEventListener("click",refreshCoordinator13);
+$("coordinator13-annotate").addEventListener("click",async()=>{
+  const memory=Number($("coordinator13-memory").value);
+  const start=$("coordinator13-from").value||null;
+  const until=$("coordinator13-until").value||null;
+  const rationale=$("coordinator13-reason").value.trim();
+  if(!Number.isSafeInteger(memory)||memory<=0||(!start&&!until)||
+     rationale.length<8){
+    $("coordinator13-result").textContent=
+      "Укажи ID, дату действия и объяснение не короче 8 символов.";
+    return;
+  }
+  if(!window.confirm("Сохранить указанную тобой действительность факта #"+
+       memory+"? Это не изменяет сам факт и не доказывает его истинность."))return;
+  try{
+    const result=await requestJSON("/api/soul/temporal13/annotate","POST",{
+      memory_id:memory,effective_from:start,effective_until:until,
+      entity_key:$("coordinator13-entity").value.trim()||null,
+      rationale,confirmed:true
+    });
+    $("coordinator13-result").textContent=
+      "Аннотация #"+result.annotation_id+
+      (result.already_recorded?" уже сохранена.":" сохранена.")+
+      " Текст и история источника не изменялись.";
+    await refreshCoordinator13();
+  }catch(error){
+    $("coordinator13-result").textContent="Ошибка временной записи: "+error.message;
+  }
+});
+$("coordinator13-timeline").addEventListener("click",async()=>{
+  const id=Number($("coordinator13-memory").value);
+  if(!Number.isSafeInteger(id)||id<=0)return;
+  try{
+    const history=await requestJSON(
+      "/api/soul/temporal13/timeline?memory_id="+id);
+    $("coordinator13-result").textContent=
+      "Память #"+id+" · редакций: "+history.revisions.length+
+      " · временных отметок: "+history.validity_annotations.length+
+      " · текущих отметок: "+history.validity_annotations.filter(
+        x=>x.applies_to_current_version).length+
+      ". Все даты — утверждения пользователя, не исторические снимки.";
+  }catch(error){
+    $("coordinator13-result").textContent="Ошибка истории: "+error.message;
+  }
+});
+$("coordinator13-add-case").addEventListener("click",async()=>{
+  const question=$("coordinator13-question").value.trim();
+  const id=Number($("coordinator13-expected").value);
+  if(question.length<3||!Number.isSafeInteger(id)||id<=0){
+    $("coordinator13-result").textContent=
+      "Укажи вопрос и существующий ID ожидаемого воспоминания.";
+    return;
+  }
+  if(!window.confirm("Подтвердить эталон поиска для памяти #"+id+
+    "? Он будет сохранён только локально."))return;
+  try{
+    const result=await requestJSON("/api/soul/coordinator13/eval-case","POST",
+      {question,expected_memory_id:id,confirmed:true});
+    $("coordinator13-result").textContent=
+      "Эталон #"+result.id+" сохранён. Это твой образец, а не ответ модели.";
+    await refreshCoordinator13();
+  }catch(error){
+    $("coordinator13-result").textContent="Ошибка эталона: "+error.message;
+  }
+});
+$("coordinator13-benchmark").addEventListener("click",async()=>{
+  if(!window.confirm("Проверить поиск по сохранённым тобой эталонам? "+
+    "Это локальные вычисления, не запрос к Cloud.ru."))return;
+  try{
+    const result=await requestJSON("/api/soul/coordinator13/benchmark","POST",
+      {confirmed:true,limit:15});
+    $("coordinator13-result").textContent=result.status==="deferred"
+      ?"Проверка отложена: сейчас идёт чат."
+      :"Эталонных вопросов: "+result.valid_cases+" · найдено: "+
+       result.hits_at_k+" · Recall@5: "+
+       (result.recall_at_k===null?"нет образцов":result.recall_at_k)+
+       " · p50: "+result.p50_ms+" мс · p95: "+result.p95_ms+
+       " мс. Это не проверка качества LLM.";
+  }catch(error){
+    $("coordinator13-result").textContent="Ошибка проверки: "+error.message;
+  }
+});
+
 // Tsukiyora 12.0: inspectable, deterministic inner notes, not private model reasoning.
 async function refreshInner12(){
   if(!$("inner12").open)return;

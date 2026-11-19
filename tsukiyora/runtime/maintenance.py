@@ -65,6 +65,30 @@ JOBS = {
     # V12: bounded, offline notebook based on existing evidence, not LLM thoughts.
     "cog12_reflect": 1800,
 }
+# V13: fixed local scheduling priorities, not CPU/RAM-adaptive load policy.
+# Overdue tasks age into the highest band and therefore cannot starve.
+# Chat precedence and original per-kind execution intervals are unchanged.
+URGENT_JOBS = frozenset({
+    "integrity", "wal_check", "precision_index", "backup_verify",
+    "migration_audit",
+})
+INTERACTIVE_JOBS = frozenset({
+    "layer_index", "vector_repair", "cog8_practice",
+    "cog12_reflect", "academy_rollback", "dialogue_recaps",
+})
+AGE_PROMOTION_SECONDS = 3600
+
+
+def priority_for(kind, due_at, now):
+    if due_at != 0 and due_at <= now - AGE_PROMOTION_SECONDS:
+        return 0  # Fairness: aged tasks outrank newly-due tasks.
+    if kind in URGENT_JOBS:
+        return 1
+    if kind in INTERACTIVE_JOBS:
+        return 2
+    return 3
+
+
 MAX_HISTORY_DAYS = 30
 
 
@@ -148,11 +172,15 @@ class Maintenance:
             return {"status": "deferred", "reason": "chat_active"}
         now = int(time.time())
         with closing(self.connect()) as db, db:
-            candidate = db.execute(
-                "SELECT kind FROM maintenance_queue WHERE due_at<=? "
-                "AND state IN ('pending','waiting') ORDER BY due_at,kind LIMIT 1",
+            due = db.execute(
+                "SELECT kind,due_at FROM maintenance_queue WHERE due_at<=? "
+                "AND state IN ('pending','waiting') ORDER BY due_at,kind",
                 (now,)
-            ).fetchone()
+            ).fetchall()
+            candidate = min(due, key=lambda row: (
+                priority_for(row["kind"], row["due_at"], now),
+                row["due_at"], row["kind"]
+            )) if due else None
             if candidate is None:
                 return {"status": "idle"}
             kind = candidate["kind"]

@@ -263,6 +263,23 @@ class UnifiedCognitiveCore:
             return {"cloud_calls":0,"calls_remaining":plan["today_calls_remaining"],
                     "suggested_experiments":len(plan["suggestions"])}
 
+        if kind=="cog6_discover":
+            return core.forge.discover()
+
+        if kind=="cog6_shadow":
+            return core.forge.shadow(limit=6)
+
+        if kind=="cog6_audit":
+            return core.forge.audit()
+
+        if kind=="cog6_curriculum":
+            # Read-only local exercises and budget telemetry, no test model.
+            results=[core.forge.curriculum(domain)
+                     for domain in ("logic","coding","legal","rag","documents")]
+            return {"domains_reviewed":len(results),
+                    "needs_foundation":sum(x["stage"]=="foundation" for x in results),
+                    "cloud_calls":0}
+
         if kind=="cog5_digest":
             return self.digest(core)
 
@@ -301,6 +318,12 @@ class UnifiedCognitiveCore:
                 ).fetchone()[0],
                 "v4_hypotheses":db.execute(
                     "SELECT COUNT(*) FROM evol4_candidates WHERE state='proposed'"
+                ).fetchone()[0],
+                "forge_drafts":db.execute(
+                    "SELECT COUNT(*) FROM forge_skills WHERE state IN ('draft','shadow')"
+                ).fetchone()[0],
+                "forge_approved":db.execute(
+                    "SELECT COUNT(*) FROM forge_skills WHERE state='approved'"
                 ).fetchone()[0],
             }
         serialized=json.dumps(summary,ensure_ascii=False,sort_keys=True)

@@ -84,6 +84,12 @@ class UnifiedLifeCycle10:
         if style:
             put("Ранее одобренная манера ответа (не изменение личности): " + style)
 
+        # Real user-approved source excerpts come before unverified dialogue
+        # snippets. This is a local read, never another model call.
+        approved = core.memory11.prompt(
+            core, text[:500], conversation_id, recent_history, max_chars=440)
+        if approved:
+            put("\n" + approved)
         recent_ids = {x["id"] for x in recent_history}
         older = core.dialogue9.continuity(conversation_id, recent_history)
         older_ids = {x["message_id"] for x in older["sources"]}

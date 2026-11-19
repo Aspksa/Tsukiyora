@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULES = {
     "academy": "academy_curriculum academy_experiments academy_metrics academy_practice academy_rollback soul_academy",
     "cognition": "cognitive_core cognitive_evolution cognitive_next cognitive_supervisor7 reasoning reflective_optimization reflective_recall self_improvement unified_cognitive skill_forge growth_quality life_cycle10",
-    "memory": "atlas_materializer brain_atlas layered_memory memory_quality memory_store migration_guard precision_memory semantic_groups vector_memory",
+    "memory": "atlas_materializer brain_atlas layered_memory memory_quality memory_store migration_guard precision_memory semantic_groups vector_memory ultimate_memory11",
     "cloud": "cloudru resource_guard stream_runtime",
     "runtime": "reliability maintenance",
     "personality": "persona_arc persona_continuity soul_growth living_personality8 living_dialogue9 experience_engine experience_skills conversation_memory topic_recall",

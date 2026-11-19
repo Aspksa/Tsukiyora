@@ -70,6 +70,8 @@ class SoulGrowth:
                         UNIQUE(source_id,target_id,relation),
                         CHECK(source_id <> target_id)
                     );
+                    CREATE INDEX IF NOT EXISTS idx_memory_links_target
+                        ON memory_links(target_id,source_id);
                     CREATE TABLE IF NOT EXISTS soul_journal (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         event TEXT NOT NULL,

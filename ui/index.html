@@ -260,6 +260,25 @@
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
           </details>
+          <details class="memory-queue" id="memory11">
+            <summary>Tsukiyora 11.0 <span class="muted">умная память · гибридный поиск · контроль качества</span></summary>
+            <p class="memory-empty">Единый локальный поиск по подтверждённым пользователем записям: FTS5 + граф связей + уже закэшированные векторы. Система не обучает LLM, не принимает факты за абсолютную истину и не делает платных фоновых запросов.</p>
+            <div class="memory-actions">
+              <button type="button" id="memory11-refresh" class="quiet-button">Состояние памяти 11.0</button>
+              <button type="button" id="memory11-benchmark" class="quiet-button">Проверить локальную скорость</button>
+            </div>
+            <p id="memory11-state" class="memory-empty" role="status">Показатели ещё не загружены.</p>
+            <div id="memory11-metrics" class="memory-results"></div>
+            <label for="memory11-query">Найти по смысловым подсказкам, словам и связям</label>
+            <input id="memory11-query" type="search" maxlength="500" placeholder="Например: решение по памяти SQLite"/>
+            <label for="memory11-date">Не позже даты создания (не снимок истории, необязательно)</label>
+            <input id="memory11-date" type="date"/>
+            <div class="memory-actions">
+              <button type="button" id="memory11-search" class="quiet-button">Искать в SQLite</button>
+            </div>
+            <p id="memory11-search-state" class="memory-empty" role="status" aria-live="polite"></p>
+            <div id="memory11-results" class="memory-results"></div>
+          </details>
           <details class="memory-queue" id="life10">
             <summary>Tsukiyora 10.0 <span class="muted">единый цикл общения, памяти и развития</span></summary>
             <p class="memory-empty">Пять систем используют прежнюю SQLite и один фоновый планировщик. Здесь только состояние, проверяемые сигналы и переходы к существующим разделам. Изменение характера, памяти и активация навыков требуют твоего одобрения. Настоящие эмоции или самостоятельное обучение модели не заявляются.</p>

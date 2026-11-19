@@ -53,6 +53,7 @@ from tsukiyora.personality.living_dialogue9 import LivingDialogue9
 from tsukiyora.personality.topic_recall import TopicRecall
 from tsukiyora.cognition.growth_quality import GrowthQuality
 from tsukiyora.cognition.life_cycle10 import UnifiedLifeCycle10
+from tsukiyora.memory.ultimate_memory11 import UltimateMemory11
 
 
 class CognitiveCore:
@@ -99,6 +100,7 @@ class CognitiveCore:
         self.topic_recall = TopicRecall(path)
         self.growth_quality = GrowthQuality(path)
         self.life10 = UnifiedLifeCycle10(path)
+        self.memory11 = UltimateMemory11(path)
         self.chat_priority = None
 
     def connect(self):
@@ -317,6 +319,7 @@ class CognitiveCore:
                 "skill_forge": self.forge.status(),
                 "cognitive_soul7": self.supervisor7.status(self),
                 "cognitive_soul8": self.living8.state(self),
+                "memory11":{"adaptive_local_retrieval":True,"single_sqlite":True,"extra_cloud_calls":0},
                 "life_cycle10":{"integrated":True,"one_queue":True,"extra_cloud_calls":0},
                 "living_dialogue9":{"local_resume":True,"long_chat_source_links":True,
                                     "bounded_initiative":True,"extra_cloud_calls":0},

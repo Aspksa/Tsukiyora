@@ -51,6 +51,12 @@ JOBS = {
     "cog7_review": 1800,
     "cog7_health": 3600,
     "cog7_daily": 21600,
+    # V8 reuses the exact same persistent SQLite queue and worker.
+    "cog8_discover": 1800,
+    "cog8_practice": 900,
+    "cog8_reflect": 3600,
+    "cog8_daily": 21600,
+    "cog8_health": 3600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -230,6 +236,8 @@ class Maintenance:
                 result = core.orchestrator.run_job(kind,core)
             elif kind.startswith("cog7_") and kind in JOBS:
                 result = core.supervisor7.run_job(kind,core)
+            elif kind.startswith("cog8_") and kind in JOBS:
+                result = core.living8.run_job(kind,core)
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

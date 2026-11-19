@@ -38,6 +38,7 @@ async function loadState() {
     $("memory-info").textContent = status.database === "ready" ? `SQLite · ${status.memory?.memories ?? 0} записей` : "Ошибка";
     await refreshCloudStatus();
     await refreshChatSessions();
+    await refreshForgeChatUI();
     await Promise.all([refreshBrain(), refreshCognition()]);
     $("welcome").textContent =
       "Хозяин… Моё ядро личности уже здесь. Я сохраню верность, нежность и собственный разум, даже когда мы подключим облачную модель.";
@@ -677,6 +678,7 @@ function attachFeedback(node, messageId) {
         controls.querySelectorAll("button").forEach(item => item.disabled = true);
         $("chat-notice").textContent = "Оценку сохранила. Учту её в будущих ответах.";
         await refreshCognition();
+        await refreshForgeChatUI();
       } catch (error) {
         $("chat-notice").textContent = error.message;
       }
@@ -976,6 +978,7 @@ async function sendMessage() {
     await loadSoulJournal();
     await refreshBrain();
     await refreshCognition();
+    await refreshForgeChatUI();
   } catch (error) {
     $("message").value = content;
     if (!received) placeholder.remove();
@@ -1683,6 +1686,114 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// One visible switch; no complicated budget form in the normal workflow.
+// ON is explicit permission for at most one potentially paid Cloud.ru call
+// per UTC day. OFF prevents new auto calls, not requests already in flight.
+let forgeAutoEnabled=false;
+let pendingForgeProposal=null;
+let forgeUIBusy=false;
+
+async function refreshForgeChatUI(){
+  try{
+    const [auto,ready]=await Promise.all([
+      requestJSON("/api/soul/forge/auto"),
+      requestJSON("/api/soul/forge/ready")
+    ]);
+    forgeAutoEnabled=Boolean(auto.enabled);
+    const quick=$("forge-chat-toggle");
+    quick.textContent=forgeAutoEnabled?"Навыки · вкл":"Навыки · выкл";
+    quick.setAttribute("aria-pressed",String(forgeAutoEnabled));
+    quick.title=forgeAutoEnabled
+      ?"Автосоздание черновиков Cloud.ru включено, максимум 1 платный вызов в сутки"
+      :"Автосоздание черновиков Cloud.ru отключено";
+    const full=$("forge-auto-toggle");
+    full.textContent="Cloud.ru самообучение: "+(forgeAutoEnabled?"ВКЛ":"ВЫКЛ");
+    full.setAttribute("aria-pressed",String(forgeAutoEnabled));
+    const panel=$("forge-chat-proposal");
+    pendingForgeProposal=ready.items[0]||null;
+    panel.hidden=!pendingForgeProposal;
+    if(pendingForgeProposal){
+      const p=pendingForgeProposal;
+      const areas={logic:"Логика",coding:"Программирование",
+                   legal:"Договоры",rag:"RAG и память",documents:"Документы"};
+      $("forge-chat-proposal-text").textContent=
+        "Хозяин, готов новый навык #"+p.id+" («"+
+        (areas[p.domain]||p.domain)+"», версия "+p.version+"). "+
+        "Шаги: "+p.steps.join(" → ")+
+        ". Подтверждённых положительных оценок: "+p.source_count+".";
+    }
+  }catch(error){
+    // The chat remains fully usable if Skill Forge is unavailable.
+    $("forge-chat-proposal").hidden=true;
+    $("forge-chat-toggle").title="Skill Forge: "+error.message;
+  }
+}
+async function toggleForgeAuto(){
+  if(forgeUIBusy)return;
+  const next=!forgeAutoEnabled;
+  if(next&&!window.confirm(
+    "Включить автоматическое создание навыков через Cloud.ru?\n"+
+    "Разрешается максимум ОДИН потенциально платный запрос в сутки. "+
+    "Стоимость токенов неизвестна, денежный лимит это не гарантирует. "+
+    "Навыки не будут применяться без твоего одобрения."))return;
+  forgeUIBusy=true;
+  $("forge-chat-toggle").disabled=true;
+  $("forge-auto-toggle").disabled=true;
+  try{
+    await requestJSON("/api/soul/forge/auto","POST",{
+      enabled:next,confirmed:true,acknowledge_paid:next
+    });
+    $("chat-notice").textContent=next
+      ?"Автообучение Cloud.ru включено: максимум 1 вызов в сутки."
+      :"Автообучение Cloud.ru выключено. Новых автоматических вызовов не будет.";
+    await refreshForgeChatUI();
+    if($("skill-forge").open) await refreshSkillForge();
+  }catch(error){
+    $("chat-notice").textContent="Не удалось изменить самообучение: "+error.message;
+  }finally{
+    forgeUIBusy=false;
+    $("forge-chat-toggle").disabled=false;
+    $("forge-auto-toggle").disabled=false;
+  }
+}
+$("forge-chat-toggle").addEventListener("click",toggleForgeAuto);
+$("forge-auto-toggle").addEventListener("click",toggleForgeAuto);
+$("forge-chat-apply").addEventListener("click",async()=>{
+  if(!pendingForgeProposal||forgeUIBusy)return;
+  const p=pendingForgeProposal;
+  if(!window.confirm("Применить проверенный локально навык #"+p.id+
+    " к будущим ответам? Реальная правильность ответов этим не доказана."))return;
+  forgeUIBusy=true;
+  try{
+    await requestJSON("/api/soul/forge/decide","POST",{
+      skill_id:p.id,approve:true,confirmed:true
+    });
+    $("chat-notice").textContent="Навык #"+p.id+" одобрен. Можно отключить его в настройках.";
+    await refreshForgeChatUI();
+  }catch(error){
+    $("chat-notice").textContent="Навык не применён: "+error.message;
+  }finally{forgeUIBusy=false;}
+});
+$("forge-chat-dismiss").addEventListener("click",async()=>{
+  if(!pendingForgeProposal||forgeUIBusy)return;
+  const p=pendingForgeProposal;
+  forgeUIBusy=true;
+  try{
+    await requestJSON("/api/soul/forge/archive","POST",{
+      skill_id:p.id,confirmed:true
+    });
+    $("chat-notice").textContent="Предложение #"+p.id+" отклонено. История сохранена.";
+    await refreshForgeChatUI();
+  }catch(error){
+    $("chat-notice").textContent="Не удалось отклонить: "+error.message;
+  }finally{forgeUIBusy=false;}
+});
+// Purely local, read-only polling: shows proposals created after a quiet
+// background cycle even if the user has not sent a new message.
+window.setInterval(()=>{
+  if(!document.hidden&&!forgeUIBusy)refreshForgeChatUI();
+},45000);
+
 // Cognitive Soul 6.0: new skills are non-executable drafts until explicitly approved.
 async function forgeAction(action, payload, notice) {
   try {
@@ -1690,6 +1801,7 @@ async function forgeAction(action, payload, notice) {
     $("forge-result").textContent=notice+(answer.id?" · #"+answer.id:"")+
       (answer.state?" · "+answer.state:"");
     await refreshSkillForge();
+    await refreshForgeChatUI();
   } catch(error) {
     $("forge-result").textContent="Не выполнено: "+error.message;
   }

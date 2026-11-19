@@ -221,6 +221,95 @@ class ForgeTests(unittest.TestCase):
         self.forge.decide_budget(False,confirmed=True)
         self.assertEqual(self.forge.budget_status()["state"],"revoked")
 
+    def test_toggle_is_off_by_default_and_needs_paid_consent(self):
+        self.assertFalse(self.forge.auto_status()["enabled"])
+        self.assertEqual(self.forge.auto_cloud_once()["reason"],"disabled")
+        with self.assertRaises(ValueError):
+            self.forge.set_auto(True,confirmed=True)
+        with self.assertRaises(ValueError):
+            self.forge.set_auto(True,acknowledge_paid=True)
+        enabled=self.forge.set_auto(
+            True,confirmed=True,acknowledge_paid=True)
+        self.assertTrue(enabled["enabled"])
+        self.assertEqual(enabled["max_paid_calls_per_day"],1)
+        self.assertTrue(enabled["budget_approved"])
+        with closing(self.store.connect()) as db:
+            self.assertEqual(db.execute(
+                "SELECT approved_calls FROM forge_budget WHERE id=1"
+            ).fetchone()[0],1)
+        disabled=self.forge.set_auto(False,confirmed=True)
+        self.assertFalse(disabled["enabled"])
+        self.assertFalse(disabled["budget_approved"])
+        launcher.init_database(self.path)
+        self.assertFalse(self.forge.auto_status()["enabled"])
+
+    def test_opt_in_one_cloud_call_per_day_and_chat_priority(self):
+        original=self.forge.propose("coding",confirmed=True)
+        self.forge.shadow()
+        cloud=FakeCloud(json.dumps({"steps":[
+            "scope","inspect_code","gather_evidence",
+            "test_boundaries","draft_answer","verify_answer"]}))
+        priority=threading.Lock()
+        self.forge.bind_cloud_runtime(cloud,{},priority)
+        # The V5 worker is not allowed to call Cloud while the flag is OFF.
+        with patch("cloudru._request",side_effect=AssertionError("No Cloud")):
+            self.assertEqual(self.core.orchestrator.run_job(
+                "cog6_cloud",self.core)["cloud_calls"],0)
+        self.assertEqual(cloud.calls,[])
+        self.forge.set_auto(True,confirmed=True,acknowledge_paid=True)
+        priority.acquire()
+        try:
+            self.assertEqual(self.forge.auto_cloud_once()["reason"],"chat_active")
+            self.assertEqual(cloud.calls,[])
+        finally:
+            priority.release()
+        result=self.forge.auto_cloud_once()
+        self.assertEqual(result["cloud_calls"],1)
+        self.assertTrue(result["needs_user_approval"])
+        self.assertEqual(len(cloud.calls),1)
+        self.assertEqual(cloud.calls[0]["memories"],[])
+        self.assertEqual(self.forge.auto_status()["used_today"],1)
+        again=self.forge.auto_cloud_once()
+        self.assertEqual(again["cloud_calls"],0)
+        self.assertEqual(len(cloud.calls),1)
+        with closing(self.store.connect()) as db:
+            attempt=db.execute(
+                "SELECT skill_id,status FROM forge_auto_attempts"
+            ).fetchone()
+        self.assertEqual(attempt["skill_id"],original["id"])
+        self.assertEqual(attempt["status"],"completed")
+        self.forge.set_auto(False,confirmed=True)
+        self.assertEqual(self.forge.auto_cloud_once()["reason"],"disabled")
+        self.forge.set_auto(True,confirmed=True,acknowledge_paid=True)
+        self.assertEqual(self.forge.auto_cloud_once()["cloud_calls"],0)
+        self.assertEqual(len(cloud.calls),1)
+
+    def test_chat_proposals_are_real_shadow_checked_records(self):
+        created=self.forge.propose("rag",confirmed=True)
+        self.assertEqual(self.forge.ready_proposals()["items"],[])
+        self.forge.shadow()
+        proposal=self.forge.ready_proposals()["items"][0]
+        self.assertEqual(proposal["id"],created["id"])
+        self.assertEqual(proposal["steps"],list(BASE["rag"]))
+        self.assertFalse(self.forge.ready_proposals()["real_quality_proven"])
+        self.forge.decide(created["id"],approve=True,confirmed=True)
+        self.assertEqual(self.forge.ready_proposals()["items"],[])
+        another=self.forge.variant(created["id"],confirmed=True)
+        self.forge.shadow()
+        self.assertEqual(self.forge.ready_proposals()["items"][0]["id"],another["id"])
+        self.forge.archive(another["id"],confirmed=True)
+        self.assertEqual(self.forge.ready_proposals()["items"],[])
+
+    def test_plain_positive_feedback_eventually_births_skill(self):
+        self.score_answers([True]*3,[""]*3,
+                           subject="Python код и ошибки API")
+        generated=self.forge.discover()
+        self.assertGreaterEqual(generated["new_drafts"],1)
+        self.assertTrue(any(
+            x["domain"]=="coding" and x["origin"]=="positive_feedback"
+            and x["metrics"]["positive_sources"]>=3
+            for x in self.forge.skills()["items"]))
+
     def test_untrusted_cloud_output_is_not_an_executable_skill(self):
         sid=self.forge.propose("coding",confirmed=True)["id"]
         self.forge.request_budget(2,confirmed=True)
@@ -292,6 +381,34 @@ class ForgeHttpTests(unittest.TestCase):
         self.assertEqual(self.get("/api/soul/forge/budget")["today_reserved"],0)
         self.assertFalse(self.get("/api/system/selftest")["cloud_live_verified"])
 
+    def test_on_off_and_reviewable_chat_proposals(self):
+        self.assertFalse(self.get("/api/soul/forge/auto")["enabled"])
+        self.assertEqual(self.get("/api/soul/forge/ready")["items"],[])
+        with self.assertRaises(HTTPError) as denial:
+            self.post("/api/soul/forge/auto",
+                      {"enabled":True,"confirmed":True})
+        self.assertEqual(denial.exception.code,400)
+        with self.assertRaises(HTTPError) as denial:
+            self.post("/api/soul/forge/auto",
+                      {"enabled":True,"confirmed":True,"acknowledge_paid":True},
+                      origin="https://attacker.invalid")
+        self.assertEqual(denial.exception.code,403)
+        created=self.post("/api/soul/forge/propose",
+                          {"domain":"legal","confirmed":True})
+        self.post("/api/soul/forge/shadow",{"confirmed":True,"limit":1})
+        proposals=self.get("/api/soul/forge/ready")
+        self.assertEqual(proposals["items"][0]["id"],created["id"])
+        enabled=self.post("/api/soul/forge/auto",
+                          {"enabled":True,"confirmed":True,"acknowledge_paid":True})
+        self.assertTrue(enabled["enabled"])
+        disabled=self.post("/api/soul/forge/auto",
+                           {"enabled":False,"confirmed":True})
+        self.assertFalse(disabled["enabled"])
+        result=self.post("/api/soul/forge/decide",
+                         {"skill_id":created["id"],"approve":True,"confirmed":True})
+        self.assertEqual(result["state"],"approved")
+        self.assertEqual(self.get("/api/soul/forge/ready")["items"],[])
+
     def test_ui_includes_skill_forge_and_old_panels(self):
         root=Path(__file__).resolve().parents[1]
         html=(root/"ui"/"index.html").read_text(encoding="utf-8")
@@ -299,9 +416,13 @@ class ForgeHttpTests(unittest.TestCase):
         for name in ("skill-forge","forge-domain","forge-state",
                      "forge-candidates","forge-budget","forge-budget-calls",
                      "forge-budget-approve","forge-propose","forge-shadow",
-                     "forge-history","cognitive-unified","cognitive-advanced"):
+                     "forge-history","cognitive-unified","cognitive-advanced",
+                     "forge-chat-proposal","forge-chat-apply","forge-chat-dismiss",
+                     "forge-auto-toggle","forge-chat-toggle"):
             self.assertIn('id="'+name+'"',html)
         self.assertIn("refreshSkillForge",ts)
+        self.assertIn("refreshForgeChatUI",ts)
+        self.assertIn("toggleForgeAuto",ts)
         self.assertIn("confirm_cloud_calls:true",ts)
         self.assertIn("ack_unpriced:true",ts)
         api=(root/"launcher.py").read_text(encoding="utf-8")

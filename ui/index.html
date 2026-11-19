@@ -35,6 +35,7 @@
         <div class="chat-heading">
           <span>ДИАЛОГ</span>
           <div class="chat-controls">
+            <button id="forge-chat-toggle" type="button" class="quiet-button" aria-pressed="false" title="Автообучение Skill Forge через Cloud.ru, до одного платного запроса в сутки">Навыки · выкл</button>
             <label class="sr-only" for="chat-sessions">История диалогов</label>
             <select id="chat-sessions" title="История диалогов" aria-label="История диалогов"><option value="">Новый диалог</option></select>
             <button type="button" id="chat-new" class="quiet-button" title="Новый диалог" aria-label="Новый диалог">+</button>
@@ -61,6 +62,15 @@
             <div class="greeting-detail" id="persona-traits">Загрузка профиля…</div>
           </div>
         </div>
+        <aside class="forge-chat-proposal" id="forge-chat-proposal" hidden aria-label="Новый навык готов к проверке">
+          <p class="forge-proposal-kicker">SKILL FORGE · ПРЕДЛОЖЕНИЕ</p>
+          <p id="forge-chat-proposal-text" class="forge-chat-proposal-text"></p>
+          <p class="forge-proposal-note">Локально проверен только порядок шагов, не качество ответов. Применение требует твоего решения.</p>
+          <div class="memory-actions">
+            <button id="forge-chat-apply" class="quiet-button" type="button">Применить навык</button>
+            <button id="forge-chat-dismiss" class="quiet-button" type="button">Отклонить</button>
+          </div>
+        </aside>
         <div class="composer">
           <label class="sr-only" for="message">Сообщение</label>
           <textarea id="message" rows="1" maxlength="8000" disabled placeholder="Подключи Cloud.ru в настройках" aria-label="Текст сообщения"></textarea>
@@ -245,6 +255,10 @@
           </details>
           <details class="memory-queue" id="skill-forge">
             <summary>Cognitive Soul 6.0 <span class="muted">Autonomous Skill Forge</span></summary>
+            <div class="forge-auto-controls">
+              <button type="button" id="forge-auto-toggle" class="quiet-button" aria-pressed="false">Cloud.ru самообучение: ВЫКЛ</button>
+              <p class="memory-empty">Включение разрешает не более 1 потенциально платного Cloud.ru-запроса в сутки для создания черновиков. Денежная цена неизвестна. Предлагать готовые навыки Цукиёра будет прямо в чате, применять сама — нет.</p>
+            </div>
             <p class="memory-empty">Навыки создаются из подтверждённых положительных оценок и безопасных шаблонов. Локальная проверка оценивает порядок шагов, а не истинное качество LLM. Новые навыки не включаются без отдельного одобрения.</p>
             <p id="forge-state" class="memory-empty" role="status">Загрузка библиотеки навыков…</p>
             <label for="forge-domain">Специализация</label>
@@ -267,7 +281,7 @@
             <div id="forge-candidates" class="memory-results"></div>
             <div id="forge-history" class="memory-results"></div>
             <details id="forge-budget" class="memory-queue">
-              <summary>Cloud.ru — отдельное согласование бюджета</summary>
+              <summary>Дополнительные ручные настройки бюджета Cloud.ru</summary>
               <p class="memory-empty">Бюджет по умолчанию равен нулю. Для будущего облачного конструирования нужны: отдельный запрос бюджета, отдельное одобрение, затем отдельное подтверждение КАЖДОГО платного вызова. Точная стоимость токенов неизвестна; дневной лимит запросов не гарантирует денежного лимита.</p>
               <p id="forge-budget-status" class="memory-empty" role="status"></p>
               <label for="forge-budget-calls">Предлагаемый максимум облачных вызовов в сутки (1–20)</label>

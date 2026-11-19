@@ -74,6 +74,16 @@ def _score(recipe, required):
 class SkillForge:
     def __init__(self,path):
         self.store=MemoryStore(path)
+        self._cloud=None
+        self._persona=None
+        self._chat_lock=None
+
+    def bind_cloud_runtime(self,cloud,persona,chat_lock):
+        """Only the running Python server supplies Cloud.ru; unit cores stay offline."""
+        self._cloud=cloud
+        self._persona=persona
+        self._chat_lock=chat_lock
+
 
     def initialize(self):
         with closing(self.store.connect()) as db, db:
@@ -130,6 +140,16 @@ class SkillForge:
                 CREATE TABLE IF NOT EXISTS forge_cloud_usage(
                     day TEXT PRIMARY KEY,
                     reserved_calls INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS forge_auto(
+                    id INTEGER PRIMARY KEY CHECK(id=1),
+                    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1))
+                );
+                INSERT OR IGNORE INTO forge_auto(id,enabled) VALUES(1,0);
+                CREATE TABLE IF NOT EXISTS forge_auto_attempts(
+                    skill_id INTEGER PRIMARY KEY REFERENCES forge_skills(id),
+                    status TEXT NOT NULL DEFAULT 'reserved',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
                 CREATE INDEX IF NOT EXISTS forge_skill_state
                     ON forge_skills(domain,state,id DESC);
@@ -202,7 +222,7 @@ class SkillForge:
             positive=[dict(x) for x in db.execute(
                 "SELECT f.message_id,m.content,f.note FROM cognitive_feedback f "
                 "JOIN messages m ON m.id=f.message_id "
-                "WHERE f.helpful=1 AND length(trim(f.note))>=8 "
+                "WHERE f.helpful=1 "
                 "ORDER BY f.message_id DESC LIMIT 160"
             )]
             negative=[dict(x) for x in db.execute(
@@ -210,15 +230,19 @@ class SkillForge:
                 "JOIN messages m ON m.id=f.message_id "
                 "WHERE f.helpful=0 ORDER BY f.message_id DESC LIMIT 120"
             )]
-        good=defaultdict(list); bad=defaultdict(list)
+        good=defaultdict(list); detailed=defaultdict(int); bad=defaultdict(list)
         for row in positive:
-            good[detect_domain((row["content"]+" "+row["note"])[:1400])].append(row["message_id"])
+            domain=detect_domain((row["content"]+" "+row["note"])[:1400])
+            good[domain].append(row["message_id"])
+            if len(row["note"].strip())>=8:
+                detailed[domain]+=1
         for row in negative:
             bad[detect_domain(row["content"][:1200])].append(row["message_id"])
         created=0; weak=[]
         for domain in DOMAINS:
             sources=good[domain]
-            if len(sources)>=2:
+            # Two explained successes OR three simple positive ratings.
+            if len(sources)>=3 or (len(sources)>=2 and detailed[domain]>=2):
                 outcome=self._insert(domain,BASE[domain],"positive_feedback",
                                      evidence=sources[:20])
                 created+=int(outcome["created"])
@@ -604,6 +628,74 @@ class SkillForge:
             )]
         return {"items":events,"original_sources_unchanged":True}
 
+    def ready_proposals(self,limit=4):
+        """Shadow-checked drafts for a real action card in chat, not fake LLM speech."""
+        if type(limit) is not int or not 1<=limit<=10:
+            raise ValueError("Неверное число предложений.")
+        with closing(self.store.connect()) as db:
+            rows=[dict(x) for x in db.execute(
+                "SELECT s.id,s.domain,s.origin,s.version,s.parent_id,s.recipe "
+                "FROM forge_skills s WHERE s.state='shadow' "
+                "AND (SELECT COUNT(*) FROM forge_trials t WHERE t.skill_id=s.id)=4 "
+                "AND (SELECT COALESCE(SUM(candidate),0) FROM forge_trials t "
+                "WHERE t.skill_id=s.id)=4 ORDER BY s.id DESC LIMIT ?",(limit,)
+            )]
+            for item in rows:
+                item["steps"]=json.loads(item.pop("recipe"))
+                item["source_count"]=self._metrics(db,item["id"])["positive_sources"]
+        return {"items":rows,"manual_approval_required":True,
+                "check_type":"offline_structure_only",
+                "real_quality_proven":False}
+
+    def auto_status(self):
+        with closing(self.store.connect()) as db:
+            row=db.execute("SELECT enabled FROM forge_auto WHERE id=1").fetchone()
+            budget=db.execute("SELECT state,approved_calls FROM forge_budget WHERE id=1").fetchone()
+            usage=db.execute(
+                "SELECT reserved_calls FROM forge_cloud_usage WHERE day=?",
+                (datetime.now(timezone.utc).strftime("%Y-%m-%d"),)
+            ).fetchone()
+        return {"enabled":bool(row["enabled"]),"max_paid_calls_per_day":1,
+                "used_today":usage["reserved_calls"] if usage else 0,
+                "budget_approved":budget["state"]=="approved"
+                    and budget["approved_calls"]>=1,
+                "price_in_rubles_known":False,
+                "background_paid_calls_if_enabled":True,
+                "auto_activation":False}
+
+    def set_auto(self,enabled,*,confirmed=False,acknowledge_paid=False):
+        """One deliberate switch; turning ON is separate consent for 1 attempt/day.
+
+        The old manual budget API remains for backwards compatibility.
+        OFF cancels all future automatic requests and revokes Forge budget.
+        Already dispatched requests cannot be cancelled retroactively.
+        """
+        if type(enabled) is not bool or confirmed is not True:
+            raise ValueError("Включение самообучения требует явного подтверждения.")
+        if enabled and acknowledge_paid is not True:
+            raise ValueError("Подтверди возможность расходов Cloud.ru: до 1 запроса в сутки.")
+        with closing(self.store.connect()) as db,db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.execute("UPDATE forge_auto SET enabled=? WHERE id=1",(int(enabled),))
+                if enabled:
+                    # The toggle itself is the explicit agreement to a
+                    # ONE-attempt/day limit; never reset used attempts.
+                    db.execute(
+                        "UPDATE forge_budget SET requested_calls=1,approved_calls=1,"
+                        "state='approved' WHERE id=1"
+                    )
+                else:
+                    db.execute(
+                        "UPDATE forge_budget SET approved_calls=0,state='revoked' "
+                        "WHERE id=1"
+                    )
+                db.commit()
+            except BaseException:
+                db.rollback()
+                raise
+        return self.auto_status()
+
     def budget_status(self):
         day=datetime.now(timezone.utc).strftime("%Y-%m-%d")
         with closing(self.store.connect()) as db:
@@ -618,7 +710,7 @@ class SkillForge:
         return {**dict(row),"today_reserved":spent["reserved_calls"] if spent else 0,
                 "currency_budget_verified":False,
                 "price_per_request_known":False,
-                "automatic_cloud_calls":False,
+                "automatic_cloud_calls":self.auto_status()["enabled"],
                 "notice":"Платные вызовы блокируются до отдельного согласования. "
                          "Количество запросов не равно денежной стоимости."}
 
@@ -653,7 +745,7 @@ class SkillForge:
                 )
         return self.budget_status()
 
-    def _reserve_paid_call(self):
+    def _reserve_paid_call(self,*,auto_source=None):
         day=datetime.now(timezone.utc).strftime("%Y-%m-%d")
         with closing(self.store.connect()) as db:
             db.execute("BEGIN IMMEDIATE")
@@ -668,6 +760,18 @@ class SkillForge:
                 spent=used["reserved_calls"] if used else 0
                 if row["state"]!="approved" or row["approved_calls"]<=spent:
                     raise ValueError("Cloud.ru заблокирован до отдельного согласования бюджета.")
+                if auto_source is not None:
+                    setting=db.execute(
+                        "SELECT enabled FROM forge_auto WHERE id=1"
+                    ).fetchone()
+                    if not setting or not setting["enabled"] or spent>=1:
+                        raise ValueError("Автоматические облачные запросы выключены или исчерпаны.")
+                    # UNIQUE skill_id + same transaction prevent accidental
+                    # repeated paid attempts after crash or concurrent ticks.
+                    db.execute(
+                        "INSERT INTO forge_auto_attempts(skill_id,status)"
+                        " VALUES(?,'reserved')",(auto_source,)
+                    )
                 db.execute(
                     "INSERT INTO forge_cloud_usage(day,reserved_calls)"
                     " VALUES(?,?) ON CONFLICT(day) DO UPDATE "
@@ -692,11 +796,14 @@ class SkillForge:
             raise ValueError("Сначала проверь подключение Cloud.ru и модель.")
         # The cloud's original ResourceGuard still enforces chat limits.
         self._reserve_paid_call()
-        # Static domain and ID catalog, no user messages, notes or documents.
+        return self._generate_with_cloud(item,cloud,persona)
+
+    def _generate_with_cloud(self,item,cloud,persona):
+        """Use only a fixed catalog, never send user notes, messages, memories or files."""
         task=("Сформируй один новый неисполняемый план навыка для области "
               +item["domain"]+". Разрешены только эти ID шагов: "
               +", ".join(STEPS)+". Ответ строго JSON объект "
-              "{\"steps\":[\"scope\",...]} из 3–10 разных разрешённых шагов. "
+              '{"steps":["scope",...]} из 3–10 разных разрешённых шагов. '
               "Первый шаг scope. Никакого кода или команд.")
         answer=cloud.complete(
             persona,[{"role":"user","content":task}],[],extra_guidance="")
@@ -708,9 +815,69 @@ class SkillForge:
         except (ValueError,TypeError,json.JSONDecodeError):
             return {"state":"rejected_cloud_output","cloud_calls_reserved":1,
                     "candidate_created":False}
-        output=self._insert(item["domain"],recipe,"cloud_draft",parent_id=skill_id)
+        output=self._insert(item["domain"],recipe,"cloud_draft",parent_id=item["id"])
         return {**output,"cloud_calls_reserved":1,
                 "auto_approved":False,"needs_shadow_test":True}
+
+    def auto_cloud_once(self):
+        """Opt-in background max ONE possibly billable call per UTC day.
+
+        This is the only background path that can call Cloud.ru. It is
+        disabled by default, accepts user consent in set_auto(), and never
+        enables a new skill. The existing chat_lock protects chat priority.
+        """
+        if not self.auto_status()["enabled"]:
+            return {"cloud_calls":0,"reason":"disabled"}
+        if self._cloud is None or self._persona is None or self._chat_lock is None:
+            return {"cloud_calls":0,"reason":"no_runtime"}
+        if not self._chat_lock.acquire(blocking=False):
+            return {"cloud_calls":0,"reason":"chat_active"}
+        try:
+            cloud=self._cloud
+            state=cloud.status()
+            if not (state.get("configured") and state.get("verified") and state.get("model")):
+                return {"cloud_calls":0,"reason":"cloud_not_ready"}
+            with closing(self.store.connect()) as db:
+                item=db.execute(
+                    "SELECT s.id,s.domain,s.recipe,s.state "
+                    "FROM forge_skills s WHERE s.state='shadow' "
+                    "AND (SELECT COUNT(*) FROM forge_trials t WHERE t.skill_id=s.id)=4 "
+                    "AND (SELECT COALESCE(SUM(candidate),0) FROM forge_trials t "
+                    "WHERE t.skill_id=s.id)=4 "
+                    "AND NOT EXISTS(SELECT 1 FROM forge_auto_attempts a "
+                    "WHERE a.skill_id=s.id) ORDER BY s.id DESC LIMIT 1"
+                ).fetchone()
+            if item is None:
+                return {"cloud_calls":0,"reason":"no_new_checked_skill"}
+            # Persist the reservation before hitting the provider. Turning
+            # OFF thereafter prevents new calls, not one already in flight.
+            try:
+                self._reserve_paid_call(auto_source=item["id"])
+            except (sqlite3.Error,ValueError):
+                return {"cloud_calls":0,"reason":"daily_limit_or_already_tried"}
+            if not self.auto_status()["enabled"]:
+                self._finish_auto_attempt(item["id"],"disabled_after_reserve")
+                return {"cloud_calls":0,"reason":"disabled_after_reserve"}
+            try:
+                result=self._generate_with_cloud(item,cloud,self._persona)
+                self._finish_auto_attempt(item["id"],
+                    "rejected" if result.get("state")=="rejected_cloud_output"
+                    else "completed")
+                return {"cloud_calls":1,"new_draft":int(
+                    result.get("created",False)),"needs_user_approval":True}
+            except Exception:
+                # Expose no exception messages, prompts, token values or keys.
+                self._finish_auto_attempt(item["id"],"failed")
+                return {"cloud_calls_reserved":1,"new_draft":0,"reason":"provider_failed"}
+        finally:
+            self._chat_lock.release()
+
+    def _finish_auto_attempt(self,skill_id,status):
+        with closing(self.store.connect()) as db,db:
+            db.execute(
+                "UPDATE forge_auto_attempts SET status=? WHERE skill_id=?",
+                (status,skill_id)
+            )
 
     def status(self):
         skills=self.skills(limit=MAX_CANDIDATES)["items"]

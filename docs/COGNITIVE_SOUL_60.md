@@ -57,10 +57,54 @@ All source dialogue content stays in existing local SQLite. The newly
 stored skill recipes contain only fixed step identifiers and source message
 IDs. No original message content or API keys are copied into skills.
 
+## Simple Cloud.ru ON/OFF switch and skill offers in chat
+
+The new everyday control is **Cloud.ru самообучение: ВКЛ/ВЫКЛ**
+in Cognitive Soul 6.0, mirrored by **Навыки · вкл/выкл** in the chat heading.
+
+- OFF is the default. NO automatic paid requests occur while OFF.
+- Switching ON requires an explicit confirmation warning that a
+  Cloud.ru attempt may cost money and real token pricing is unknown.
+  The toggle itself grants consent for **at most ONE potentially paid
+  model call per UTC day** for Skill Forge, not unlimited spending.
+- The existing provider's ResourceGuard quotas still apply. The Forge
+  counter is reserved in SQLite before a call; disabling/re-enabling
+  cannot reset the day's allowance. A given candidate is never
+  retried automatically, even after a failure or restart.
+- The Python worker uses only the existing V5 SQLite queue
+  (cog6_cloud once per hour). It skips if no fully shadow-checked
+  candidate exists, the main safe-local worker is paused, Cloud.ru
+  is disconnected, or the chat is busy.
+- The request sends only a static allowed step catalog + domain and
+  the existing persona. No user conversations, memory text, private
+  documents or explicit positive ratings go to the test request.
+- The returned JSON is validated against fixed non-executable steps.
+  Any valid new sequence is saved only as an inactive draft and
+  later checked by the ordinary offline shadow worker.
+- Disabling blocks new automatic requests but cannot retroactively
+  cancel an already transmitted request.
+- After the offline four-scenario structural check, **ready drafts
+  are offered inside the chat** with "Применить навык" and "Отклонить".
+  Only explicit approval activates one; dismissal archives the proposal
+  but preserves the history. These are real SQLite cards, not invented
+  chat messages. The chat checks for offers on startup, after responses,
+  and periodically while open.
+- To form candidates without requiring a typed positive feedback note:
+  3 separate helpful ratings in a domain now suffice; 2 ratings with
+  substantive explanatory notes still suffice.
+
+The ON switch is a **call-count cap, NOT a money cap**. Review actual
+Cloud.ru tariffs before opting in; the app cannot guarantee a ruble
+amount from that switch. The previous advanced manual budget controls
+are retained for backwards compatibility, but are no longer required
+for the one-call/day automation switch. The old manually triggered
+Cloud path still requires its own confirmations and quotas.
+
 ## Cloud.ru: separate budget approval, NEVER automatic by default
 
-Default budget is ZERO, status unconfigured. Merely selecting extended
-learning in this request does not authorize a paid call.
+The default state remains OFF with zero authorized calls.
+Switching ON later inside the app is an explicit one-call-per-day
+permission. The old *manual* budget workflow below is still available.
 
 1. Explicitly propose 1–20 potentially paid Cloud.ru attempts per UTC day.
    Proposal is pending and does not grant permission.

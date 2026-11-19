@@ -685,6 +685,20 @@ function attachFeedback(node, messageId) {
     });
     controls.append(button);
   }
+  const detailed = document.createElement("button");
+  detailed.type="button";
+  detailed.className="feedback-button";
+  detailed.textContent="Оценить подробно";
+  detailed.title="Точность, ясность, источники и контекст";
+  detailed.addEventListener("click",async()=>{
+    if(!dialog.open)dialog.showModal();
+    $("cognitive-details").open=true;
+    $("answers15").open=true;
+    await refreshAnswers15();
+    $("answers15-message").value=String(messageId);
+    $("answers15").scrollIntoView({block:"nearest",behavior:"smooth"});
+  });
+  controls.append(detailed);
   node.append(controls);
 }
 

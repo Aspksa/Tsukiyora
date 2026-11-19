@@ -17,12 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import launcher
-from cognitive_core import CognitiveCore
-from layered_memory import LayeredMemory
-from maintenance import Maintenance
-from memory_store import MemoryStore, _fingerprint
-from reasoning import ReasoningAudit
-from reliability import Reliability
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.memory.layered_memory import LayeredMemory
+from tsukiyora.runtime.maintenance import Maintenance
+from tsukiyora.memory.memory_store import MemoryStore, _fingerprint
+from tsukiyora.cognition.reasoning import ReasoningAudit
+from tsukiyora.runtime.reliability import Reliability
 
 
 class V07StorageTests(unittest.TestCase):

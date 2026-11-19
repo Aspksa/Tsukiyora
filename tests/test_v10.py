@@ -18,15 +18,15 @@ from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-import cloudru
+import tsukiyora.cloud.cloudru as cloudru
 import launcher
-from academy_experiments import AcademyExperiments
-from brain_atlas import BrainAtlas,REGION_SPAN
-from cognitive_core import CognitiveCore
-from memory_store import MemoryStore,_fingerprint
-from rag_fusion import RagFusion
-from reliability import Reliability
-from resource_guard import ResourceGuard,LimitReached
+from tsukiyora.academy.academy_experiments import AcademyExperiments
+from tsukiyora.memory.brain_atlas import BrainAtlas,REGION_SPAN
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.memory.memory_store import MemoryStore,_fingerprint
+from tsukiyora.documents.rag_fusion import RagFusion
+from tsukiyora.runtime.reliability import Reliability
+from tsukiyora.cloud.resource_guard import ResourceGuard,LimitReached
 
 
 class V10DataTests(unittest.TestCase):

@@ -12,8 +12,8 @@ from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
 import launcher
-from cognitive_core import CognitiveCore
-from memory_store import MemoryStore
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.memory.memory_store import MemoryStore
 
 
 class CognitiveNextTests(unittest.TestCase):

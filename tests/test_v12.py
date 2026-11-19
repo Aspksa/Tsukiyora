@@ -22,14 +22,14 @@ from urllib.request import build_opener,ProxyHandler,Request
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import launcher
-from memory_store import MemoryStore
-from migration_guard import SCHEMA_VERSION
-from document_parser import extract_document
-from contract_insights import ContractInsights
-from atlas_materializer import AtlasMaterializer
-from academy_practice import AcademyPractice
-from academy_rollback import AcademyRollback
-from reliability import Reliability
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.memory.migration_guard import SCHEMA_VERSION
+from tsukiyora.documents.document_parser import extract_document
+from tsukiyora.documents.contract_insights import ContractInsights
+from tsukiyora.memory.atlas_materializer import AtlasMaterializer
+from tsukiyora.academy.academy_practice import AcademyPractice
+from tsukiyora.academy.academy_rollback import AcademyRollback
+from tsukiyora.runtime.reliability import Reliability
 
 
 def sample_docx(text="Договор поставки. Оплата 1250 рублей до 20.11.2026."):

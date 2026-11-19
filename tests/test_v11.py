@@ -17,13 +17,13 @@ from urllib.error import HTTPError
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import launcher
-from cognitive_core import CognitiveCore
-from local_documents import LocalDocuments
-from evidence_review import EvidenceReview
-from academy_curriculum import AcademyCurriculum
-from persona_arc import PersonaArc
-from memory_store import MemoryStore
-from migration_guard import SCHEMA_VERSION
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.documents.local_documents import LocalDocuments
+from tsukiyora.documents.evidence_review import EvidenceReview
+from tsukiyora.academy.academy_curriculum import AcademyCurriculum
+from tsukiyora.personality.persona_arc import PersonaArc
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.memory.migration_guard import SCHEMA_VERSION
 
 
 class V11LocalTests(unittest.TestCase):
@@ -64,7 +64,7 @@ class V11LocalTests(unittest.TestCase):
         fact=self.store.add_memory("fact","Компания заключила договор поставки")
         doc=self.core.evidence.documents.import_text(
             "agreement.txt","Договор поставки продукции между компаниями",confirmed=True)
-        with patch("cloudru._request",side_effect=AssertionError("No hidden Cloud.ru")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("No hidden Cloud.ru")):
             result=self.core.evidence.search("договор поставки",limit=10)
         self.assertEqual(result["cloud_requests"],0)
         self.assertIn(fact["id"],[x["id"] for x in result["memories"]])
@@ -136,7 +136,7 @@ class V11LocalTests(unittest.TestCase):
         kinds={x["kind"] for x in self.core.scheduler.pending()["jobs"]}
         self.assertTrue({"academy_curriculum","persona_arc",
                          "document_index","source_audit"}<=kinds)
-        with patch("cloudru._request",side_effect=AssertionError("No paid worker")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("No paid worker")):
             result=self.core.scheduler.tick(self.core)
         self.assertIn(result["status"],("ok","warning"))
 

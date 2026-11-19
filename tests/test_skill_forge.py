@@ -13,10 +13,10 @@ from urllib.error import HTTPError
 from urllib.request import Request, ProxyHandler, build_opener
 
 import launcher
-from memory_store import MemoryStore
-from cognitive_core import CognitiveCore
-from maintenance import JOBS
-from skill_forge import SkillForge, BASE, STEPS, DOMAINS
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.runtime.maintenance import JOBS
+from tsukiyora.cognition.skill_forge import SkillForge, BASE, STEPS, DOMAINS
 
 
 class FakeCloud:
@@ -167,7 +167,7 @@ class ForgeTests(unittest.TestCase):
     def test_bg_queue_cannot_send_cloud_or_change_persona(self):
         persona=launcher.load_personality()
         memory=self.store.add_memory("fact","Проверочная запись не меняется")
-        with patch("cloudru._request",side_effect=AssertionError("Never in background")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("Never in background")):
             for kind in ("cog6_discover","cog6_shadow","cog6_audit",
                          "cog6_curriculum"):
                 result=self.core.orchestrator.run_job(kind,self.core)
@@ -252,7 +252,7 @@ class ForgeTests(unittest.TestCase):
         priority=threading.Lock()
         self.forge.bind_cloud_runtime(cloud,{},priority)
         # The V5 worker is not allowed to call Cloud while the flag is OFF.
-        with patch("cloudru._request",side_effect=AssertionError("No Cloud")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("No Cloud")):
             self.assertEqual(self.core.orchestrator.run_job(
                 "cog6_cloud",self.core)["cloud_calls"],0)
         self.assertEqual(cloud.calls,[])

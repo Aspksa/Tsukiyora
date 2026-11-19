@@ -10,7 +10,7 @@ import argparse
 import json
 
 import launcher
-from reliability import Reliability
+from tsukiyora.runtime.reliability import Reliability
 
 
 def main(argv=None):

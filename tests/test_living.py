@@ -15,11 +15,11 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import cloudru
+import tsukiyora.cloud.cloudru as cloudru
 import launcher
-from memory_store import MemoryStore
-from soul_growth import SoulGrowth
-from stream_runtime import StreamCancellation, stop_stream
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.personality.soul_growth import SoulGrowth
+from tsukiyora.cloud.stream_runtime import StreamCancellation, stop_stream
 
 
 def stream_stub(self, prompt, history, cancellation):

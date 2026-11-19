@@ -18,10 +18,10 @@ from urllib.error import HTTPError
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import launcher
-from memory_store import MemoryStore
-from conversation_memory import ConversationMemory
-from semantic_groups import SemanticGroups
-from migration_guard import SCHEMA_VERSION
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.personality.conversation_memory import ConversationMemory
+from tsukiyora.memory.semantic_groups import SemanticGroups
+from tsukiyora.memory.migration_guard import SCHEMA_VERSION
 
 
 class HistoryLocalTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class HistoryLocalTests(unittest.TestCase):
                 "client_message_id":"query-"+str(i)}])
         self.store.append_messages(recent["id"],[{
             "role":"user","content":"Совсем другая тема", "client_message_id":"new"}])
-        with patch("cloudru._request",side_effect=AssertionError("Cloud call forbidden")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("Cloud call forbidden")):
             result=self.history.search("договор поставки",limit=15)
         self.assertEqual(result["cloud_requests"],0)
         self.assertEqual(len(result["items"]),15)

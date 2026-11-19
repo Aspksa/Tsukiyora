@@ -13,11 +13,11 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
-import cloudru
+import tsukiyora.cloud.cloudru as cloudru
 import launcher
-from cognitive_core import CognitiveCore, CognitiveWorker
-from maintenance import JOBS
-from memory_store import MemoryStore
+from tsukiyora.cognition.cognitive_core import CognitiveCore, CognitiveWorker
+from tsukiyora.runtime.maintenance import JOBS
+from tsukiyora.memory.memory_store import MemoryStore
 
 
 class UnifiedCoreTests(unittest.TestCase):
@@ -92,7 +92,7 @@ class UnifiedCoreTests(unittest.TestCase):
         pref=self.store.add_memory("preference","Предпочитаю аккуратные ответы")
         before=self.store.stats()["memories"]
         persona_before=launcher.load_personality()
-        with patch("cloudru._request",side_effect=AssertionError("No background Cloud.ru")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("No background Cloud.ru")):
             for name in ("cog5_links","cog5_skills","cog5_hypotheses",
                          "cog5_simulator","cog5_insights","cog5_budget"):
                 result=self.unified.run_job(name,self.core)
@@ -166,7 +166,7 @@ class UnifiedCoreTests(unittest.TestCase):
             {"role":"assistant","content":"Неточный ответ "+str(i)}
             for i in range(4)
         ])
-        with patch("cloudru._request",side_effect=AssertionError("Forbidden cloud")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("Forbidden cloud")):
             for row in messages:
                 self.core.feedback(row["id"],False,"Не удалось проверить ответ")
             self.unified.run_job("cog5_hypotheses",self.core)
@@ -232,7 +232,7 @@ class UnifiedHttpTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as denied:
             self.post("/api/soul/unified/tick",{"confirmed":False})
         self.assertEqual(denied.exception.code,400)
-        with patch("cloudru._request",side_effect=AssertionError("No remote calls")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("No remote calls")):
             result=self.post("/api/soul/unified/tick",{"confirmed":True})
         self.assertIn(result["status"],("ok","idle","warning","deferred"))
         self.assertEqual(self.get("/api/soul/unified")["cloud_calls"],0)

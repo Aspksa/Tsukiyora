@@ -320,6 +320,18 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/inner12":
+            try:
+                return self.send_json(self.server.cognition.inner12.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/inner12/notes":
+            try:
+                return self.send_json(self.server.cognition.inner12.notes(
+                    limit=int(args.get("limit",["20"])[0])))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/memory11":
             try:
                 return self.send_json(self.server.cognition.memory11.status(
@@ -572,6 +584,20 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/inner12/inspect":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.inner12.inspect(
+                    self.server.cognition, obj.get("note_id")))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/inner12/dismiss":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.inner12.dismiss(
+                    obj.get("note_id"), confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/memory11/search":
             try:
                 obj = self._read_body()

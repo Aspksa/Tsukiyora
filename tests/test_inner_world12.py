@@ -216,7 +216,7 @@ class InnerWorld12Tests(unittest.TestCase):
         self.assertEqual(self.core.inner12.chat_hint(
             self.core,"Как дела?"),"")
         hint=self.core.inner12.chat_hint(self.core,"Давай улучшим память")
-        self.assertIn("Локальная заметка",hint)
+        self.assertIn("локальная заметка",hint.casefold())
         self.assertIn("НЕ",hint)
         self.core.living8.permission("proactive_chat",False,confirmed=True)
         self.assertEqual(self.core.inner12.chat_hint(

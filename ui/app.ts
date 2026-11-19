@@ -31,30 +31,34 @@ async function loadState() {
     const status = await statusResponse.json();
     $("persona-name").textContent = profile.identity.name_ru || profile.identity.name;
     $("persona-subtitle").textContent = profile.identity.persona_summary;
-    $("persona-traits").textContent = profile.archetypes
-      .map((a) => a.adopt.join(", ")).join("  ·  ");
-    $("status").textContent = "● ЯДРО ЗАГРУЖЕНО";
+    setAppStatus("local", "Ядро загружено");
     $("server-info").textContent = "Работает локально";
     $("memory-info").textContent = status.database === "ready" ? `SQLite · ${status.memory?.memories ?? 0} записей` : "Ошибка";
     await refreshCloudStatus();
     await refreshChatSessions();
     await refreshForgeChatUI();
     await Promise.all([refreshBrain(), refreshCognition()]);
-    $("welcome").textContent =
-      "Хозяин… Моё ядро личности уже здесь. Я сохраню верность, нежность и собственный разум, даже когда мы подключим облачную модель.";
   } catch (error) {
-    $("status").textContent = "● ОШИБКА ЗАГРУЗКИ";
+    setAppStatus("error", "Ошибка загрузки");
     $("server-info").textContent = "Проверьте сервер";
-    $("persona-traits").textContent = "Не удалось загрузить личность из Python API.";
   }
 }
 
-$("settings-open").addEventListener("click", () => dialog.showModal());
+function setAppStatus(state, message) {
+  $("status").dataset.state = state;
+  $("status").textContent = message;
+}
+
+function openSettings() {
+  dialog.showModal();
+  refreshCognition();
+}
+
+$("settings-open").addEventListener("click", openSettings);
 $("settings-close").addEventListener("click", () => dialog.close());
 dialog.addEventListener("click", (event) => {
   if (event.target === dialog) dialog.close();
 });
-loadState();
 
 function resize() {
   const rect = canvas.getBoundingClientRect();
@@ -553,11 +557,11 @@ function setCloudReady(ready, model = "") {
     ? "Напиши Цукиёре…"
     : "Подключи Cloud.ru в настройках";
   $("model-info").textContent = cloudReady ? model : "Не подключена";
-  $("status").textContent = cloudReady ? "● CLOUD.RU · ОНЛАЙН" : "● ЯДРО ЗАГРУЖЕНО";
+  setAppStatus(cloudReady ? "online" : "local",
+    cloudReady ? "Cloud.ru подключён" : "Ядро загружено");
+  const greeting = $("conversation").querySelector(".greeting");
+  if (greeting) updateGreeting(greeting);
   $("cloud-diagnose").disabled = !cloudReady;
-  $("chat-notice").textContent = cloudReady
-    ? "Диалоги сохраняются в локальной SQLite. Важные факты добавляй в памяти."
-    : "Подключи Cloud.ru через значок настроек. История останется в локальной SQLite.";
 }
 
 async function refreshCloudStatus() {
@@ -648,7 +652,7 @@ function addChatBubble(role, content) {
   const node = document.createElement("div");
   node.className = "chat-bubble " + (role === "user" ? "from-user" : "from-assistant");
   const label = document.createElement("small");
-  label.textContent = role === "user" ? "ТЫ" : "ЦУКИЁРА";
+  label.textContent = role === "user" ? "Ты" : "Цукиёра";
   const body = document.createElement("p");
   body.textContent = content;
   node.append(label, body);
@@ -702,19 +706,24 @@ function attachFeedback(node, messageId) {
   node.append(detailed);
 }
 
+function updateGreeting(greeting) {
+  greeting.querySelector(".greeting-detail").textContent = cloudReady
+    ? "О чём поговорим сегодня?"
+    : "Подключи модель Cloud.ru, чтобы начать разговор.";
+  greeting.querySelector(".greeting-connect").hidden = cloudReady;
+}
+
 function showGreeting() {
   const target = $("conversation");
   target.classList.remove("has-messages");
-  target.replaceChildren();
-  const item = document.createElement("div");
-  item.className = "greeting";
-  const mark = document.createElement("span");
-  mark.className = "greeting-mark";
-  mark.textContent = "✧";
-  const p = document.createElement("p");
-  p.textContent = "Хозяин, я здесь. Как только подключим нейросеть, сможем говорить по-настоящему.";
-  item.append(mark, p);
-  target.append(item);
+  const greeting = $("chat-greeting").content.firstElementChild.cloneNode(true);
+  greeting.querySelector(".greeting-connect").addEventListener("click", () => {
+    $("cloud-details").open = true;
+    openSettings();
+    $("cloud-key").focus();
+  });
+  updateGreeting(greeting);
+  target.replaceChildren(greeting);
 }
 
 async function loadChatHistory() {
@@ -953,7 +962,7 @@ async function parseEventStream(response, receive) {
 function autoScrollChat() {
   const log = $("conversation");
   if (log.scrollHeight - log.scrollTop - log.clientHeight < 165) {
-    log.scrollTo({top: log.scrollHeight, behavior: "smooth"});
+    log.scrollTo({top: log.scrollHeight, behavior: reducedMotion ? "auto" : "smooth"});
   }
 }
 
@@ -3431,7 +3440,6 @@ $("cognitive-details").addEventListener("toggle", () => {
 $("vector-details").addEventListener("toggle", () => {
   if ($("vector-details").open) refreshCognition();
 });
-$("settings-open").addEventListener("click", refreshCognition);
 
 // Avoid constant UI/API work when browser is hidden or user is offline.
 window.setInterval(() => {
@@ -3860,3 +3868,6 @@ $("academy-practice-evaluate").addEventListener("click",async () => {
     $("academy-practice-result").textContent="Ошибка проверки: "+error.message;
   } finally {button.disabled=false;}
 });
+
+showGreeting();
+loadState();

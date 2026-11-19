@@ -198,7 +198,7 @@ class LivingPersonalityTests(unittest.TestCase):
         self.assertEqual(self.store.find_memories(limit=1)[0]["id"],memory["id"])
         self.assertEqual(self.soul.journal()["simulation_not_subjective_life"],True)
         self.assertTrue({"cog8_discover","cog8_practice","cog8_reflect",
-                         "cog8_health","cog8_daily"} <= set(JOBS))
+                         "cog8_health","cog8_daily","cog8_research"} <= set(JOBS))
         with closing(self.store.connect()) as conn:
             self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0],"ok")
 

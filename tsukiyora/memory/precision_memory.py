@@ -115,6 +115,9 @@ class PrecisionMemory:
             ids = []
             rank = {}
             method = "local_lexical"
+            # A correct empty FTS5 result must not trigger a costly fuzzy
+            # scan over the newest 2,500 memories on a million-row database.
+            fts_queried = False
             if words:
                 expression = " OR ".join('"' + w.replace('"', '""') + '"' for w in words)
                 try:
@@ -126,14 +129,15 @@ class PrecisionMemory:
                     ids = [x["rowid"] for x in matches]
                     rank = {x["rowid"]: -float(x["rank"]) for x in matches}
                     method = "fts5_hybrid"
+                    fts_queried = True
                 except sqlite3.OperationalError:
                     pass
             # Fallback / supplemental recent material if FTS5 is unavailable
             # or the query has no eligible word tokens.
-            if not ids:
+            if not ids and not fts_queried:
                 ids = [x["id"] for x in db.execute(
                     "SELECT id FROM memory_items WHERE status='active' "
-                    "ORDER BY id DESC LIMIT 2500"
+                    "ORDER BY id DESC LIMIT 600"
                 ).fetchall()]
             placeholder = ",".join("?" for _ in ids)
             records = [] if not ids else [dict(x) for x in db.execute(

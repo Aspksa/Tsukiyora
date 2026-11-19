@@ -1686,6 +1686,102 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Cognitive Soul 7.0 — shared V1–V6 registry and offline evidence review.
+// No provider request or active model trial is launched by these controls.
+async function refreshCognitive7(){
+  if(!$("cognitive-v7").open)return;
+  try{
+    const [status,plan,health]=await Promise.all([
+      requestJSON("/api/soul/cognitive7"),
+      requestJSON("/api/soul/cognitive7/plan"),
+      requestJSON("/api/soul/cognitive7/health")
+    ]);
+    $("v7-state").textContent="Общий реестр: "+status.unified_registry.count+
+      " элементов · контрольных сравнений: "+
+      status.unified_registry.user_attested_cases+
+      " · SQLite: "+(health.healthy?"проверена":"нужна проверка")+
+      " · внешних тестов Cloud.ru: 0.";
+    const registry=$("v7-registry");registry.replaceChildren();
+    for(const group of ["forge6","experience1","evolution4","academy"]){
+      const list=status.unified_registry.items.filter(x=>x.source===group);
+      addCognitiveLine(registry,group+": "+list.length+
+        " элементов (выборка, без копирования исходных таблиц)");
+    }
+    const pane=$("v7-plan");pane.replaceChildren();
+    for(const item of plan.tasks.slice(0,8)){
+      const line=document.createElement("div");line.className="memory-record";
+      addCognitiveLine(line,"Навык #"+item.skill_id+" · "+item.domain+
+        " · парных проверок осталось: "+item.remaining_cases+
+        " · регрессий: "+item.regressions+
+        (item.ready?" · готов к ручному одобрению":" · нужна проверка"));
+      const btn=document.createElement("button");btn.type="button";
+      btn.className="quiet-button";btn.textContent="Открыть проверку";
+      btn.addEventListener("click",()=>{
+        $("v7-skill-id").value=String(item.skill_id);
+        $("v7-test-panel").open=true;
+      });
+      line.append(btn);pane.append(line);
+    }
+    if(!plan.tasks.length)addCognitiveLine(pane,
+      "Проверяемых черновиков пока нет. Новые навыки появятся из обратной связи и Skill Forge.");
+  }catch(error){
+    $("v7-state").textContent="Не удалось обновить Cognitive Soul 7.0: "+error.message;
+  }
+}
+$("cognitive-v7").addEventListener("toggle",refreshCognitive7);
+$("v7-refresh").addEventListener("click",refreshCognitive7);
+function v7SelectedSkill(){
+  const id=Number($("v7-skill-id").value);
+  if(!Number.isSafeInteger(id)||id<=0)throw Error("Укажи положительный ID навыка.");
+  return id;
+}
+$("v7-add-case").addEventListener("click",async()=>{
+  try{
+    const skill=v7SelectedSkill();
+    if(!window.confirm("Ты действительно сравнил два ответа одной модели в сопоставимых условиях? "+
+      "В SQLite запишется только хеш вопроса и результаты, без исходного текста. "+
+      "Это пользовательские свидетельства, а не независимый тест LLM."))return;
+    const result=await requestJSON("/api/soul/cognitive7/case","POST",{
+      skill_id:skill,question:$("v7-question").value,
+      expected:$("v7-expected").value,
+      baseline_answer:$("v7-baseline").value,
+      candidate_answer:$("v7-candidate").value,
+      model:$("v7-model").value,confirmed:true,attested:true
+    });
+    $("v7-case-state").textContent="Контрольных пар: "+result.cases+
+      "/"+result.min_cases+" · улучшение: "+result.net_gain+
+      " · регрессии: "+result.regressions+
+      (result.evidence_ready?" · готов к ручному одобрению":" · нужно продолжить проверку");
+    for(const name of ["v7-question","v7-expected","v7-baseline","v7-candidate"])
+      $(name).value="";
+    await refreshCognitive7();await refreshForgeChatUI();
+  }catch(error){$("v7-case-state").textContent=error.message;}
+});
+$("v7-verdict").addEventListener("click",async()=>{
+  try{
+    const report=await requestJSON("/api/soul/cognitive7/verdict?skill_id="+v7SelectedSkill());
+    $("v7-case-state").textContent="Проверено "+report.cases+
+      " пар · старый метод: "+report.baseline_correct+
+      " · новый: "+report.candidate_correct+
+      " · регрессий: "+report.regressions+
+      " · подтверждение по данным пользователя: "+(report.evidence_ready?"да":"нет")+
+      ". Автоматических облачных тестов не было.";
+  }catch(error){$("v7-case-state").textContent=error.message;}
+});
+$("v7-approve").addEventListener("click",async()=>{
+  try{
+    const id=v7SelectedSkill();
+    if(!window.confirm("Одобрить навык #"+id+
+      " после проверки результатов на контрольных примерах? "+
+      "Его можно отключить, если результаты ухудшатся."))return;
+    const result=await requestJSON("/api/soul/cognitive7/approve","POST",
+      {skill_id:id,confirmed:true});
+    $("v7-case-state").textContent="Навык #"+id+" вручную одобрен. "+
+      "Применение включено, история и исходники сохранены.";
+    await refreshCognitive7();await refreshForgeChatUI();
+  }catch(error){$("v7-case-state").textContent="Не одобрено: "+error.message;}
+});
+
 // One visible switch; no complicated budget form in the normal workflow.
 // ON is explicit permission for at most one potentially paid Cloud.ru call
 // per UTC day. OFF prevents new auto calls, not requests already in flight.
@@ -1714,6 +1810,11 @@ async function refreshForgeChatUI(){
     panel.hidden=!pendingForgeProposal;
     if(pendingForgeProposal){
       const p=pendingForgeProposal;
+      $("forge-chat-apply").textContent=p.can_approve
+        ?"Применить навык":"Проверить навык";
+      $("forge-chat-evidence-note").textContent=p.can_approve
+        ?"Доступно ручное одобрение. Структурные тесты не доказывают качество модели."
+        :"Для нового навыка 7.0 нужны минимум 8 подтверждённых сравнений со старым методом. Автоматических платных испытаний не будет.";
       const areas={logic:"Логика",coding:"Программирование",
                    legal:"Договоры",rag:"RAG и память",documents:"Документы"};
       $("forge-chat-proposal-text").textContent=
@@ -1761,6 +1862,15 @@ $("forge-auto-toggle").addEventListener("click",toggleForgeAuto);
 $("forge-chat-apply").addEventListener("click",async()=>{
   if(!pendingForgeProposal||forgeUIBusy)return;
   const p=pendingForgeProposal;
+  if(!p.can_approve){
+    const settings=$("settings-dialog");
+    if(!settings.open)settings.showModal();
+    $("cognitive-v7").open=true;
+    $("v7-test-panel").open=true;
+    $("v7-skill-id").value=String(p.id);
+    await refreshCognitive7();
+    return;
+  }
   if(!window.confirm("Применить проверенный локально навык #"+p.id+
     " к будущим ответам? Реальная правильность ответов этим не доказана."))return;
   forgeUIBusy=true;

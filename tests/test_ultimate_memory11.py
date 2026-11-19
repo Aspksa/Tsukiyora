@@ -258,7 +258,7 @@ class UltimateMemory11HttpTests(unittest.TestCase):
         self.assertIn("memory11.prompt",(
             launcher.ROOT/"tsukiyora"/"cognition"/"life_cycle10.py"
         ).read_text(encoding="utf-8"))
-        self.assertIn("memory11_audit",(
+        self.assertIn("mem11_audit",(
             launcher.ROOT/"tsukiyora"/"runtime"/"maintenance.py"
         ).read_text(encoding="utf-8"))
         self.assertTrue((launcher.ROOT/"soul"/"personality.json").exists())

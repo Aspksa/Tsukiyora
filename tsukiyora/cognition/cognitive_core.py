@@ -54,6 +54,7 @@ from tsukiyora.personality.topic_recall import TopicRecall
 from tsukiyora.cognition.growth_quality import GrowthQuality
 from tsukiyora.cognition.life_cycle10 import UnifiedLifeCycle10
 from tsukiyora.memory.ultimate_memory11 import UltimateMemory11
+from tsukiyora.cognition.inner_world12 import InnerWorld12
 
 
 class CognitiveCore:
@@ -101,6 +102,7 @@ class CognitiveCore:
         self.growth_quality = GrowthQuality(path)
         self.life10 = UnifiedLifeCycle10(path)
         self.memory11 = UltimateMemory11(path)
+        self.inner12 = InnerWorld12(path)
         self.chat_priority = None
 
     def connect(self):
@@ -157,6 +159,7 @@ class CognitiveCore:
         self.supervisor7.initialize()
         self.living8.initialize()
         self.dialogue9.initialize()
+        self.inner12.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -319,6 +322,7 @@ class CognitiveCore:
                 "skill_forge": self.forge.status(),
                 "cognitive_soul7": self.supervisor7.status(self),
                 "cognitive_soul8": self.living8.state(self),
+                "inner_world12":{"source_linked_working_notes":True,"same_queue":True,"extra_cloud_calls":0},
                 "memory11":{"adaptive_local_retrieval":True,"single_sqlite":True,"extra_cloud_calls":0},
                 "life_cycle10":{"integrated":True,"one_queue":True,"extra_cloud_calls":0},
                 "living_dialogue9":{"local_resume":True,"long_chat_source_links":True,

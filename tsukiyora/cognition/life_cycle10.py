@@ -90,6 +90,12 @@ class UnifiedLifeCycle10:
             core, text[:500], conversation_id, recent_history, max_chars=440)
         if approved:
             put("\n" + approved)
+        # V12 offers only an existing fixed, source-linked working note
+        # while the user asks about a relevant topic. It is never an
+        # unbounded generated inner monologue or independent Cloud call.
+        note_hint = core.inner12.chat_hint(core, text, max_chars=240)
+        if note_hint:
+            put("\n" + note_hint)
         recent_ids = {x["id"] for x in recent_history}
         older = core.dialogue9.continuity(conversation_id, recent_history)
         older_ids = {x["message_id"] for x in older["sources"]}

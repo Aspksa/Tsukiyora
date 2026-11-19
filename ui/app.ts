@@ -1724,6 +1724,92 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Tsukiyora 12.0: inspectable, deterministic inner notes, not private model reasoning.
+async function refreshInner12(){
+  if(!$("inner12").open)return;
+  try {
+    const [state,notes]=await Promise.all([
+      requestJSON("/api/soul/inner12"),
+      requestJSON("/api/soul/inner12/notes?limit=25")
+    ]);
+    const c=state.state.active_goals_and_review_items;
+    $("inner12-status").textContent=
+      "Самостоятельность: "+state.state.autonomy_level+"/3"+
+      " · локальная практика: "+(state.state.local_practice_enabled?"разрешена":"отключена")+
+      " · открытых заметок: "+c.open_notes+
+      " · нерешённых вопросов: "+c.pending_questions+
+      " · предупреждений очереди: "+c.queue_warning_jobs+
+      " · самостоятельных обращений Cloud.ru: "+state.runtime.new_paid_cloud_calls+".";
+    const summary=$("inner12-overview");summary.replaceChildren();
+    addCognitiveLine(summary,"Разрешённые пункты: "+state.selected_features.join(", ")+
+      ". Пункт 4 не включён.");
+    addCognitiveLine(summary,"Внутренний рабочий блокнот: ID источников вместо выдуманных мыслей."+
+      " Отдельного фонового процесса нет.");
+    addCognitiveLine(summary,"Личность: "+state.state.style_adjustments_approved+
+      " одобренных манер речи · "+state.state.persona_arc_snapshots+
+      " сохранённых снимков хронологии.");
+    if(state.last_diary_entry) {
+      addCognitiveLine(summary,"Дневник: "+state.last_diary_entry.utc_day+
+        " · исходная память и навыки не изменялись.");
+    } else {
+      addCognitiveLine(summary,"Первый дневник 12.0 появится после локального фонового цикла.");
+    }
+    const list=$("inner12-notes");list.replaceChildren();
+    if(!notes.items.length)
+      addCognitiveLine(list,"Нет актуальных заметок с проверяемым источником."+
+        " Если локальная практика разрешена, новая запись появится при следующем цикле.");
+    for(const item of notes.items){
+      const row=document.createElement("div");
+      row.className="memory-result";
+      const line=document.createElement("p");
+      line.className="memory-empty";
+      line.textContent="Заметка #"+item.id+" · "+item.label+
+        " Вопрос: "+item.question+
+        " · источник: "+item.source_type+" #"+item.source_id;
+      row.append(line);
+      const inspect=document.createElement("button");
+      inspect.type="button";
+      inspect.className="quiet-button";
+      inspect.textContent="Проверить";
+      inspect.addEventListener("click",async()=>{
+        try{
+          const result=await requestJSON("/api/soul/inner12/inspect","POST",
+            {note_id:item.id});
+          $("inner12-result").textContent=
+            "Заметка #"+result.id+" · источник "+
+            (result.source_current?"актуален":"уже не требует внимания")+
+            " · данные проверки: "+JSON.stringify(result.checks)+
+            ". Это локальная проверка, а не тест языковой модели.";
+        }catch(error){
+          $("inner12-result").textContent="Ошибка проверки: "+error.message;
+        }
+      });
+      const close=document.createElement("button");
+      close.type="button";
+      close.className="quiet-button";
+      close.textContent="Закрыть заметку";
+      close.addEventListener("click",async()=>{
+        if(!window.confirm("Закрыть только рабочую заметку #"+item.id+
+          "? Исходные данные и решения останутся без изменений."))return;
+        try{
+          await requestJSON("/api/soul/inner12/dismiss","POST",
+            {note_id:item.id,confirmed:true});
+          $("inner12-result").textContent="Заметка #"+item.id+
+            " закрыта. Исходные данные сохранены.";
+          await refreshInner12();
+        }catch(error){
+          $("inner12-result").textContent="Ошибка: "+error.message;
+        }
+      });
+      row.append(inspect,close);list.append(row);
+    }
+  } catch(error){
+    $("inner12-status").textContent="Не удалось прочитать рабочий блокнот: "+error.message;
+  }
+}
+$("inner12").addEventListener("toggle",refreshInner12);
+$("inner12-refresh").addEventListener("click",refreshInner12);
+
 // Tsukiyora 11.0: source-linked local memory retrieval, no extra provider calls.
 async function refreshMemory11(){
   if(!$("memory11").open)return;

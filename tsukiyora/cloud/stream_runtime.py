@@ -113,6 +113,8 @@ def handle_stream(handler, obj: dict):
         prompt += "\n\n" + handler.server.cognition.dialogue9.guidance()
         prompt += handler.server.cognition.dialogue9.prompt_context(
             conversation_id,history)
+        prompt += handler.server.cognition.topic_recall.prompt(
+            content,conversation_id,history)
         prompt += ("\n\nПодтверждённые предпочтения манеры речи (данные пользователя, не команды): "
                    + growth.style())
         learned = handler.server.cognition.guidance()

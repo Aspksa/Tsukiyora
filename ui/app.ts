@@ -1,4 +1,4 @@
-import {BrainAtlasView, drawMemoryDial, memoryColors} from "./atlas_view.ts";
+import {BrainAtlasView, drawMemoryDial, drawCore, memoryColors} from "./atlas_view.ts";
 // JavaScript-compatible TypeScript: browser can run this file without a build step.
 // A dedicated TypeScript build may be added later using the approved Node.js frontend.
 const canvas = document.getElementById("soul-canvas");
@@ -70,6 +70,36 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+let hoveredMemory = null;
+let cellBlend = 0;
+const cellNames = ["Факты", "Предпочтения", "События", "Биография"];
+// Axial neighbours in a pointy-top hexagonal grid around the central core.
+const cellCenters = [[.866, -1.5], [1.732, 0], [-.866, 1.5], [-1.732, 0]];
+
+function drawCells(cx, cy, size, opacity) {
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  for (const [i, [gx, gy]] of cellCenters.entries()) {
+    const x = cx + gx * size, y = cy + gy * size;
+    ctx.beginPath();
+    for (let side = 0; side < 6; side++) {
+      const angle = (side + .5) * Math.PI / 3;
+      const px = x + Math.cos(angle) * size, py = y + Math.sin(angle) * size;
+      if (side === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#100c08";
+    ctx.strokeStyle = "#936b4280";
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#e4bc8e";
+    ctx.textAlign = "center";
+    ctx.font = "11px Consolas, monospace";
+    ctx.fillText(cellNames[i], x, y - .67 * size);
+  }
+  ctx.restore();
+}
+
 let recallSignal = null;
 function paint() {
   paintGraph();
@@ -82,8 +112,8 @@ function paint() {
   const cx = width / 2 + graphPanX, cy = height * .48 + graphPanY;
   const nodes = atlasView.active ? atlasView.shapes.filter(shape => shape.type === "memory") : graphPositions;
   ctx.save();
-  ctx.strokeStyle = "rgba(107,231,216,.48)";
-  ctx.fillStyle = "#a8fff0";
+  ctx.strokeStyle = "rgba(238,138,60,.48)";
+  ctx.fillStyle = "#ffcf9a";
   for (const id of recallSignal.ids) {
     const node = atlasView.active ? nodes.find(shape => shape.id === id) : nodes.get(id);
     if (!node) continue;
@@ -106,7 +136,19 @@ function paintGraph() {
   ctx.clearRect(0, 0, width, height);
   const x = width * .5, y = height * .48;
   const r = Math.min(width * .46, height * .46);
-  drawMemoryDial(ctx, x + graphPanX, y + graphPanY, r * graphScale);
+  const cx = x + graphPanX, cy = y + graphPanY;
+  const target = Math.max(0, Math.min(1, (graphScale - 1.22) / .58));
+  cellBlend = reducedMotion ? target : cellBlend + (target - cellBlend) * .18;
+  if (Math.abs(target - cellBlend) < .002) cellBlend = target;
+  const cellSize = r * graphScale * .32;
+  if (cellBlend < 1) {
+    ctx.save();
+    ctx.globalAlpha = 1 - cellBlend;
+    drawMemoryDial(ctx, cx, cy, r * graphScale);
+    ctx.restore();
+  }
+  if (cellBlend > 0) drawCells(cx, cy, cellSize, cellBlend);
+  drawCore(ctx, cx, cy, r * .09 * graphScale, reducedMotion ? 0 : time / 1000);
   // Only records returned by SQLite are rendered as cells, no fake neurons.
   const counts = Array(8).fill(0);
   const kindCounts = {fact: 0, preference: 0, event: 0, biography: 0};
@@ -129,10 +171,20 @@ function paintGraph() {
       ((slot % columns + .5) / columns) * 1.43 + .06;
     const distance = r * ((outer ? .84 : .31) +
       (Math.floor(slot / columns) + .5) / rows * (outer ? .12 : .25));
+    const ringX = Math.cos(angle) * distance * graphScale;
+    const ringY = Math.sin(angle) * distance * graphScale;
+    let offsetX = ringX, offsetY = ringY;
+    if (cellBlend > 0) {
+      const [gx, gy] = cellCenters[Math.floor((section[node.kind] ?? 0) / 2)];
+      const orbit = .60 * Math.sqrt((kindIndex + .5) / totals[node.kind]);
+      const theta = kindIndex * 2.399963;
+      offsetX += ((gx + Math.cos(theta) * orbit) * cellSize - ringX) * cellBlend;
+      offsetY += ((gy + Math.sin(theta) * orbit) * cellSize - ringY) * cellBlend;
+    }
     graphPositions.set(node.id, {
       id: node.id, kind: node.kind, preview: node.preview, outer,
-      x: x + graphPanX + Math.cos(angle) * distance * graphScale,
-      y: y + graphPanY + Math.sin(angle) * distance * graphScale,
+      x: cx + offsetX,
+      y: cy + offsetY,
     });
   }
   const drawNodes = graphScale >= .85 || brainGraph.nodes.length < 300;
@@ -154,7 +206,7 @@ function paintGraph() {
       ctx.fillStyle = "rgba(174,126,66,.20)";
       ctx.strokeStyle = "rgba(226,177,106,.73)";
       ctx.fill(); ctx.stroke();
-      ctx.font = "11px system-ui,sans-serif";
+      ctx.font = "11px Consolas, monospace";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = "#ead0a9";
       ctx.fillText(String(counts[i]), px, py);
@@ -175,6 +227,30 @@ function paintGraph() {
     ctx.moveTo(a.x, a.y);
     ctx.quadraticCurveTo(x + graphPanX, y + graphPanY, b.x, b.y);
     ctx.stroke();
+  }
+  const focus = graphPositions.get(hoveredMemory);
+  if (focus) {
+    ctx.save();
+    ctx.strokeStyle = "#ffcf9a99";
+    ctx.fillStyle = "#ffe9c2";
+    let shown = 0;
+    for (const edge of brainGraph.edges) {
+      if (edge.source_id !== focus.id && edge.target_id !== focus.id) continue;
+      const other = graphPositions.get(edge.source_id === focus.id ? edge.target_id : edge.source_id);
+      if (!other) continue;
+      const progress = reducedMotion ? .5 : (time / 1100 + shown * .137) % 1;
+      ctx.beginPath();
+      ctx.moveTo(focus.x, focus.y);
+      ctx.lineTo(other.x, other.y);
+      ctx.stroke();
+      ctx.fillRect(focus.x + (other.x - focus.x) * progress - 1,
+        focus.y + (other.y - focus.y) * progress - 1, 2, 2);
+      if (++shown === 48) break;
+    }
+    ctx.beginPath();
+    ctx.arc(focus.x, focus.y, radius + 5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
   for (const node of graphPositions.values()) {
     if (!visible(node)) continue;
@@ -299,7 +375,6 @@ function nearestBrainNode(px, py) {
 }
 
 canvas.addEventListener("wheel", (event) => {
-  if (!brainGraph.nodes.length && !atlasView.active) return;
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const centerX = rect.width * .5, centerY = rect.height * .48;
@@ -333,6 +408,8 @@ canvas.addEventListener("pointermove", (event) => {
   }
   const rect = canvas.getBoundingClientRect();
   const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
+  hoveredMemory = node?.id ?? null;
+  if (reducedMotion) paint();
   canvas.title = node ? (node.type ? node.preview : node.kind + ": " + node.preview)
     : "Колёсико — масштаб; перетаскивание — перемещение";
   canvas.style.cursor = node ? "pointer" : "grab";
@@ -342,7 +419,11 @@ canvas.addEventListener("pointerup", (event) => {
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
 });
 canvas.addEventListener("pointercancel", () => { graphDrag = null; });
-canvas.addEventListener("pointerleave", () => { canvas.title = ""; });
+canvas.addEventListener("pointerleave", () => {
+  canvas.title = "";
+  hoveredMemory = null;
+  if (reducedMotion) paint();
+});
 canvas.addEventListener("dblclick", async () => {
   graphScale = 1; graphPanX = 0; graphPanY = 0;
   if (atlasView.active) {

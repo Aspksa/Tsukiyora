@@ -23,8 +23,8 @@ function compact(n) {
 // Static dial marks describe the four memory categories. Only API records
 // produce selectable cells. Cache the dial so idle frames use one blit.
 const categories = [
-  ["fact", "Факты", "#68d7cb"], ["preference", "Предпочтения", "#93adf4"],
-  ["event", "События", "#d8aa74"], ["biography", "Биография", "#b599e6"],
+  ["fact", "Факты", "#ee8a3c"], ["preference", "Предпочтения", "#e8c25a"],
+  ["event", "События", "#e0795f"], ["biography", "Биография", "#ffcf9a"],
 ];
 export const memoryColors = Object.fromEntries(categories.map(([kind,,color]) => [kind,color]));
 const dial = document.createElement("canvas");
@@ -47,13 +47,13 @@ export function drawMemoryDial(ctx, x, y, radius) {
     function point(angle, distance) {
       return [Math.cos(angle) * distance, Math.sin(angle) * distance];
     }
-    for (const r of [26, 38, 60, 169, 186, 198]) ring(0, 0, r, "#49717d66", .7);
+    for (const r of [26, 38, 60, 169, 186, 198]) ring(0, 0, r, "#a27c5466", .7);
     for (let i = 0; i < 144; i++) {
       const a = i * Math.PI / 72;
       g.beginPath();
       g.moveTo(...point(a, 193));
       g.lineTo(...point(a, i % 6 === 0 ? 198 : 195));
-      g.strokeStyle = "#719ba280";
+      g.strokeStyle = "#bd967280";
       g.stroke();
     }
     for (const [sector, [, label, color]] of categories.entries()) {
@@ -80,16 +80,35 @@ export function drawMemoryDial(ctx, x, y, radius) {
       g.stroke();
       const [lx, ly] = point(mid, 134);
       g.textAlign = "center";
-      g.font = "10px Segoe UI, sans-serif";
+      g.font = "10px Consolas, monospace";
       g.fillStyle = color;
       g.fillText(label, lx, ly);
     }
-    ring(0, 0, 17, "#64e0cf", 1.4);
-    ring(0, 0, 13, "#418c94", .7);
-    ring(0, 0, 5, "#dbf5eb", 1.2);
+    ring(0, 0, 17, "#ee8a3c", 1.4);
+    ring(0, 0, 13, "#8a4a1c", .7);
+    ring(0, 0, 5, "#ffcf9a", 1.2);
   }
   const half = radius * 1.06;
   ctx.drawImage(dial, x - half, y - half, half * 2, half * 2);
+}
+
+// A rotating point sphere is the core glyph, drawn independently of record counts.
+export function drawCore(ctx, x, y, radius, seconds) {
+  ctx.save();
+  const phase = seconds * .48;
+  for (let i = 0; i < 96; i++) {
+    const latitude = 1 - (i + .5) / 48;
+    const band = Math.sqrt(1 - latitude * latitude);
+    const angle = i * GOLDEN + phase;
+    const depth = Math.cos(angle) * band;
+    const px = Math.sin(angle) * band;
+    const py = latitude * .94 - depth * .34;
+    ctx.globalAlpha = .22 + (depth + 1) * .36;
+    ctx.fillStyle = depth > 0 ? "#ffcf9a" : "#ee8a3c";
+    const size = Math.max(.8, radius * (.045 + .021 * depth));
+    ctx.fillRect(x + px * radius, y + py * radius, size, size);
+  }
+  ctx.restore();
 }
 
 export class BrainAtlasView {
@@ -211,7 +230,10 @@ export class BrainAtlasView {
     this.shapes=[];
     const cx=width/2+panX,cy=height*.48+panY;
     const base=Math.min(width*.34,height*.35,242);
-    if (this.level === "overview") drawMemoryDial(ctx, cx, cy, base * 1.15 * zoom);
+    if (this.level === "overview") {
+      drawMemoryDial(ctx, cx, cy, base * 1.15 * zoom);
+      drawCore(ctx, cx, cy, base * .12 * zoom, reducedMotion ? 0 : performance.now() / 1000);
+    }
     const flicker=(!reducedMotion && performance.now()-this.pulseAt<1800)
       ? .18*(1-(performance.now()-this.pulseAt)/1800) : 0;
     ctx.lineWidth=.9;
@@ -248,12 +270,12 @@ export class BrainAtlasView {
           ctx.shadowColor="rgba(228,164,72,.6)";
         }
         const color = memoryColors[item.kind] || "#89beca";
-        hex(ctx,px,py,radius*zoom,"#0b1a24",color);
+        hex(ctx,px,py,radius*zoom,"#0c0907",color);
         if (flicker>0) ctx.restore();
         ctx.textAlign="center";ctx.textBaseline="middle";
-        ctx.fillStyle="#f0d0a0";ctx.font="12px system-ui,sans-serif";
+        ctx.fillStyle="#f0d0a0";ctx.font="12px Consolas, monospace";
         ctx.fillText(compact(item.count),px,py-4);
-        ctx.font="9px system-ui,sans-serif";
+        ctx.font="9px Consolas, monospace";
         ctx.fillText(String(item.id+1),px,py+9);
         this.shapes.push({x:px,y:py,radius:radius*zoom,
                           type:"sector",sector:item.id,
@@ -275,7 +297,7 @@ export class BrainAtlasView {
         hex(ctx,px,py,radius,"rgba(179,127,65,.17)",
             "rgba(236,184,104,"+(.58+flicker)+")");
         if (zoom>1.35 || groups.length<40) {
-          ctx.fillStyle="#dec29b";ctx.font="9px system-ui,sans-serif";
+          ctx.fillStyle="#dec29b";ctx.font="9px Consolas, monospace";
           ctx.textAlign="center";ctx.textBaseline="middle";
           ctx.fillText(compact(cluster.count),px,py);
         }
@@ -289,7 +311,7 @@ export class BrainAtlasView {
       if (this.data.has_more) {
         const px=width-45,py=height-37;
         hex(ctx,px,py,19,"rgba(171,117,50,.25)","rgba(240,186,108,.85)");
-        ctx.fillStyle="#f0d1a1";ctx.textAlign="center";ctx.font="11px system-ui";
+        ctx.fillStyle="#f0d1a1";ctx.textAlign="center";ctx.font="11px Consolas, monospace";
         ctx.fillText("Ещё",px,py+4);
         this.shapes.push({x:px,y:py,radius:22,type:"more",
                           preview:"Показать следующую страницу кластеров"});
@@ -331,7 +353,7 @@ export class BrainAtlasView {
       this.level==="clusters" ? "Нажми кластер · Esc — назад" :
       "Нажми воспоминание · двойной щелчок — обзор";
     ctx.fillStyle="rgba(222,189,146,.65)";
-    ctx.font="10px system-ui,sans-serif";ctx.textAlign="center";
+    ctx.font="10px Consolas, monospace";ctx.textAlign="center";
     ctx.fillText(label,width*.5,height-22);
   }
 }

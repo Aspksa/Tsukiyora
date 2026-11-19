@@ -3,24 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101014">
+  <meta name="theme-color" content="#000000">
   <title>Цукиёра — SOUL CORE</title>
   <link rel="stylesheet" href="/ui/style.css">
   <script type="module" src="/ui/app.ts"></script>
 </head>
 <body>
-  <div class="app">
+  <nav class="workspace-rail" aria-label="Навигация по рабочему пространству">
+    <a class="rail-monogram" href="#workspace-top" title="Цукиёра — начало" aria-label="Цукиёра — начало">月</a>
+    <a href="#soul-canvas" title="Карта памяти" aria-label="Карта памяти"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3m10 7h-3M12 22v-3M2 12h3"/></svg></a>
+    <a href="#chat-panel" title="Диалог" aria-label="Диалог"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18v13H9l-6 4zM7 9h10M7 12h7"/></svg></a>
+    <button id="settings-open" class="icon-button settings-button" type="button" aria-label="Настройки" title="Настройки">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg>
+        </button>
+  </nav>
+  <div class="app" id="workspace-top">
     <header class="topbar">
       <div class="identity">
-        <span class="identity-mark" aria-hidden="true"></span>
         <span>Tsukiyora</span>
       </div>
       <div class="top-actions">
         <span class="status" id="status" role="status">Запуск…</span>
-        <button id="settings-open" class="icon-button settings-button" type="button" aria-label="Настройки">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg>
-          <span>Настройки</span>
-        </button>
+
       </div>
     </header>
 
@@ -34,12 +38,12 @@
         <div class="soul-footer">
           <span class="soul-footer-title">Карта памяти <span id="brain-activity" role="status"></span></span>
           <span id="soul-live-state">Ядро личности работает локально</span>
-          <span id="soul-zoom-note" class="muted">Колесо мыши меняет масштаб</span>
+          <span id="soul-zoom-note" class="muted">Приблизь карту, чтобы увидеть ячейки</span>
           <span id="brain-fps" class="muted" aria-live="off"></span>
         </div>
       </section>
 
-      <section class="chat-panel" aria-label="Чат Цукиёры">
+      <section class="chat-panel" id="chat-panel" tabindex="-1" aria-label="Чат Цукиёры">
         <div class="chat-heading">
           <h2>Диалог</h2>
           <div class="chat-controls">

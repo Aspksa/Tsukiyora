@@ -260,6 +260,44 @@
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
           </details>
+          <details class="memory-queue" id="coordinator13">
+            <summary>Tsukiyora 13.0 <span class="muted">единый центр · время фактов · контрольные проверки</span></summary>
+            <p class="memory-empty">Это координация уже существующей памяти, учебных задач и рабочих заметок. Никаких автоматических исправлений фактов, принятия навыков, нового «сознания» или фоновых Cloud.ru-вызовов.</p>
+            <div class="memory-actions">
+              <button type="button" id="coordinator13-refresh" class="quiet-button">Обновить состояние</button>
+              <button type="button" id="coordinator13-benchmark" class="quiet-button">Проверить поиск по моим эталонам</button>
+            </div>
+            <p id="coordinator13-status" class="memory-empty" role="status" aria-live="polite">Нет загруженных данных.</p>
+            <div id="coordinator13-overview" class="memory-results"></div>
+            <details class="memory-queue">
+              <summary>Указать действительность факта <span class="muted">только с подтверждением</span></summary>
+              <p class="memory-empty">Укажи ID существующего воспоминания и реальную дату начала или конца действия. Это твоё утверждение, а не автоматически проверенная истина. Конечная дата исключается.</p>
+              <label for="coordinator13-memory">ID воспоминания</label>
+              <input id="coordinator13-memory" type="number" min="1" step="1" placeholder="Например 25"/>
+              <label for="coordinator13-from">Действует с (необязательно)</label>
+              <input id="coordinator13-from" type="date"/>
+              <label for="coordinator13-until">Не действует начиная с (необязательно)</label>
+              <input id="coordinator13-until" type="date"/>
+              <label for="coordinator13-entity">Название сущности (необязательно)</label>
+              <input id="coordinator13-entity" maxlength="100" placeholder="Например: проект Tsukiyora"/>
+              <label for="coordinator13-reason">Почему дата верна?</label>
+              <textarea id="coordinator13-reason" maxlength="280" rows="2" placeholder="Подтверждённое изменение решения..."></textarea>
+              <div class="memory-actions">
+                <button type="button" id="coordinator13-timeline" class="quiet-button">История и версии</button>
+                <button type="button" id="coordinator13-annotate" class="quiet-button">Записать подтверждённую дату</button>
+              </div>
+            </details>
+            <details class="memory-queue">
+              <summary>Добавить проверочный вопрос <span class="muted">ручной эталон</span></summary>
+              <label for="coordinator13-question">Вопрос для проверки поиска</label>
+              <input id="coordinator13-question" maxlength="500" placeholder="Какую базу выбрали для проекта?"/>
+              <label for="coordinator13-expected">ID правильного воспоминания</label>
+              <input id="coordinator13-expected" type="number" min="1" step="1"/>
+              <button type="button" id="coordinator13-add-case" class="quiet-button">Добавить по моему подтверждению</button>
+              <p class="memory-empty">Эталон предоставляешь ты. Тест измеряет возврат указанного источника, а не качество ответа модели.</p>
+            </details>
+            <p id="coordinator13-result" class="memory-empty" role="status" aria-live="polite"></p>
+          </details>
           <details class="memory-queue" id="inner12">
             <summary>Tsukiyora 12.0 <span class="muted">внутренние заметки · развитие · дневник</span></summary>
             <p class="memory-empty">«Мысли» здесь — не скрытые рассуждения модели и не настоящие чувства, а проверяемые локальные рабочие заметки с ID источника. Они создаются через прежнюю SQLite-очередь, только пока приложение запущено и разрешена локальная практика.</p>

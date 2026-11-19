@@ -272,6 +272,9 @@ class UnifiedCognitiveCore:
         if kind=="cog6_audit":
             return core.forge.audit()
 
+        if kind=="cog6_cloud":
+            return core.forge.auto_cloud_once()
+
         if kind=="cog6_curriculum":
             # Read-only local exercises and budget telemetry, no test model.
             results=[core.forge.curriculum(domain)

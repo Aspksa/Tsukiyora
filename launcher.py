@@ -319,6 +319,26 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path.startswith("/api/soul/forge"):
+            try:
+                engine=self.server.cognition.forge
+                if path=="/api/soul/forge":
+                    return self.send_json(engine.status())
+                if path=="/api/soul/forge/skills":
+                    return self.send_json(engine.skills())
+                if path=="/api/soul/forge/history":
+                    return self.send_json(engine.history())
+                if path=="/api/soul/forge/budget":
+                    return self.send_json(engine.budget_status())
+                if path=="/api/soul/forge/curriculum":
+                    return self.send_json(engine.curriculum(
+                        args.get("domain",["logic"])[0]))
+                if path=="/api/soul/forge/compete":
+                    return self.send_json(engine.compete(
+                        args.get("domain",["logic"])[0]))
+                return self.send_json({"error":"Unknown Skill Forge resource."},404)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/skills":
             try:
                 return self.send_json(self.server.cognition.skills.list(
@@ -477,6 +497,59 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path.startswith("/api/soul/forge/"):
+            try:
+                data=self._read_body()
+                engine=self.server.cognition.forge
+                if path=="/api/soul/forge/propose":
+                    result=engine.propose(
+                        data.get("domain"),confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/variant":
+                    result=engine.variant(
+                        data.get("skill_id"),confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/compose":
+                    result=engine.compose(
+                        data.get("left_id"),data.get("right_id"),
+                        confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/transfer":
+                    result=engine.transfer(
+                        data.get("skill_id"),data.get("target"),
+                        confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/shadow":
+                    if data.get("confirmed") is not True:
+                        raise ValueError("Подтверди локальную проверку.")
+                    result=engine.shadow(limit=data.get("limit",8))
+                elif path=="/api/soul/forge/decide":
+                    result=engine.decide(
+                        data.get("skill_id"),approve=data.get("approve"),
+                        confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/archive":
+                    result=engine.archive(
+                        data.get("skill_id"),confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/budget/request":
+                    result=engine.request_budget(
+                        data.get("calls"),confirmed=data.get("confirmed",False))
+                elif path=="/api/soul/forge/budget/decide":
+                    result=engine.decide_budget(
+                        data.get("approve"),confirmed=data.get("confirmed",False),
+                        ack_unpriced=data.get("ack_unpriced",False))
+                elif path=="/api/soul/forge/cloud/draft":
+                    if not self.server.chat_lock.acquire(blocking=False):
+                        raise CloudError("Дождись окончания чата или другого теста.",409)
+                    try:
+                        result=engine.cloud_draft(
+                            data.get("skill_id"),self.server.cloud,
+                            self.server.persona,
+                            confirmed_send=data.get("confirm_cloud_calls",False))
+                    finally:
+                        self.server.chat_lock.release()
+                else:
+                    return self.send_json({"error":"Unknown Skill Forge operation."},404)
+                return self.send_json(result)
+            except CloudError as error:
+                return self.send_json({"error":str(error)},error.status)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path.startswith("/api/soul/unified/"):
             try:
                 obj=self._read_body()
@@ -974,9 +1047,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             evolving = self.server.cognition.evolution.guidance_for_conversation(conversation_id)
             improvement_id, approved = self.server.cognition.improvement.guidance()
             evol4_id, evol4_style = self.server.cognition.evolution4.guidance(content)
+            forge_id, forge_style = self.server.cognition.forge.guidance(content)
             earlier = (guidance + " " + evolving + " " + approved).strip()
-            extra = (earlier[:max(0,1799-len(evol4_style))] +
-                     " " + evol4_style).strip()[:1800]
+            combined = (evol4_style + " " + forge_style).strip()
+            extra = (earlier[:max(0,1799-len(combined))] +
+                     " " + combined).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,
                                     extra_guidance=extra)
             assistant = store.append_messages(conversation_id, [{
@@ -991,6 +1066,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             if evol4_id is not None:
                 try:
                     self.server.cognition.evolution4.applied(assistant["id"],evol4_id)
+                except (ValueError,sqlite3.Error):
+                    pass
+            if forge_id is not None:
+                try:
+                    self.server.cognition.forge.applied(assistant["id"],forge_id)
                 except (ValueError,sqlite3.Error):
                     pass
             return self.send_json({"conversation_id": conversation_id,

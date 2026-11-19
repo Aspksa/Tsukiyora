@@ -365,7 +365,9 @@ class CognitiveSupervisor7:
             item["counters"]=json.loads(item["counters"])
         return {"version":"7.0","unified_registry":self.registry(15),
                 "learning_plan":self.plan(core),
-                "health":self.health(core),"recent":recent,
+                "health":{"last_checks":recent,
+                          "expensive_sqlite_check":"available_on_demand"},
+                "recent":recent,
                 "daily":({"date":day["day"],"summary":json.loads(day["summary_json"])}
                          if day else None),
                 "new_skill_proof_required_from_id":policy,

@@ -95,7 +95,7 @@ class UltimateMemory11Tests(unittest.TestCase):
         self.assertIn(msg["id"],[x["message_id"] for x in report["history"]])
         self.assertNotIn(current["id"],[x["message_id"] for x in report["history"]])
         self.assertTrue(all(x["conversation_id"]==older["id"] for x in report["history"]))
-        self.assertFalse(report["not_independent_truth_verification"])
+        self.assertTrue(report["not_independent_truth_verification"])
         # The API explicitly reports that excerpts are not independent proof.
         self.assertEqual(report["cloud_calls"],0)
 

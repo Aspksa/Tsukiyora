@@ -22,15 +22,9 @@ let width = 0, height = 0, time = 0, last = 0;
 
 async function loadState() {
   try {
-    const [profileResponse, statusResponse] = await Promise.all([
-      fetch("/api/personality", {cache: "no-store"}),
-      fetch("/api/status", {cache: "no-store"}),
-    ]);
-    if (!profileResponse.ok || !statusResponse.ok) throw new Error("API unavailable");
-    const profile = await profileResponse.json();
-    const status = await statusResponse.json();
-    $("persona-name").textContent = profile.identity.name_ru || profile.identity.name;
-    $("persona-subtitle").textContent = profile.identity.persona_summary;
+    const response = await fetch("/api/status", {cache: "no-store"});
+    if (!response.ok) throw new Error("API unavailable");
+    const status = await response.json();
     setAppStatus("local", "Ядро загружено");
     $("server-info").textContent = "Работает локально";
     $("memory-info").textContent = status.database === "ready" ? `SQLite · ${status.memory?.memories ?? 0} записей` : "Ошибка";
@@ -100,9 +94,83 @@ function drawCells(cx, cy, size, opacity) {
   ctx.restore();
 }
 
+const traceNodes = {
+  chat: ["Чат", .88, .18], db: ["SQLite", .14, .82],
+  core: ["Контекст", .50, .48], cloud: ["Cloud.ru", .85, .80],
+};
+let traceSegments = [];
+function traceStep(from, to, description) {
+  const previous = traceSegments.at(-1);
+  // Stagger simultaneous server events so each hop can be followed.
+  const start = Math.max(performance.now(), previous ? previous.start + 320 : 0);
+  traceSegments.push({from, to, start});
+  traceNote(description);
+  if (reducedMotion) paint();
+}
+
+function traceNote(description) {
+  const li = document.createElement("li");
+  li.textContent = description;
+  $("request-steps").append(li);
+  $("request-trace").hidden = false;
+}
+
+function drawRequestTrace() {
+  if (!traceSegments.length || !width || !height) return;
+  const now = performance.now();
+  const points = Object.fromEntries(Object.entries(traceNodes).map(([key, [label, x, y]]) =>
+    [key, {label, x: width * x + (key === "core" ? graphPanX : 0),
+      y: height * y + (key === "core" ? graphPanY : 0)}]));
+  const used = new Set();
+  ctx.save();
+  for (const step of traceSegments) {
+    if (!reducedMotion && now < step.start) continue;
+    const a = points[step.from], b = points[step.to];
+    used.add(step.from); used.add(step.to);
+    const t = reducedMotion ? 1 : Math.min(1, (now - step.start) / 750);
+    const bendX = (a.x + b.x) / 2 + (a.y - b.y) * .16;
+    const bendY = (a.y + b.y) / 2 + (b.x - a.x) * .16;
+    const color = step.from === "cloud" ? "#a8d8f3" : "#ffb874";
+    ctx.strokeStyle = color + (t < 1 ? "a0" : "40");
+    ctx.lineWidth = t < 1 ? 1.6 : .8;
+    ctx.beginPath();
+    ctx.moveTo(a.x,a.y);
+    ctx.quadraticCurveTo(bendX,bendY,b.x,b.y);
+    ctx.stroke();
+    if (t < 1) {
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      for (let i = 0; i < 4; i++) {
+        const u = Math.max(0, t - i * .028), v = 1 - u;
+        ctx.beginPath();
+        ctx.arc(v*v*a.x + 2*u*v*bendX + u*u*b.x,
+          v*v*a.y + 2*u*v*bendY + u*u*b.y, 3.6-i*.7, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+  }
+  ctx.font = "12px Consolas, monospace";
+  ctx.textAlign = "center";
+  for (const key of used) {
+    const p = points[key];
+    const y = p.y + (key === "core" ? 27 : 0);
+    const w = ctx.measureText(p.label).width + 16;
+    ctx.fillStyle = "#100c09";
+    ctx.fillRect(p.x-w/2,y-10,w,20);
+    ctx.strokeStyle = "#b884506e";
+    ctx.strokeRect(p.x-w/2,y-10,w,20);
+    ctx.fillStyle = "#ffcf9a";
+    ctx.fillText(p.label,p.x,y+4);
+  }
+  ctx.restore();
+}
+
 let recallSignal = null;
 function paint() {
   paintGraph();
+  drawRequestTrace();
   if (!recallSignal) return;
   const t = (performance.now() - recallSignal.started) / 1150;
   if (t >= 1) {
@@ -464,7 +532,7 @@ canvas.addEventListener("click", async (event) => {
 
 new ResizeObserver(() => {
   resize();
-  if (reducedMotion) paint();
+  paint();
 }).observe(canvas);
 resize();
 if (reducedMotion) paint();
@@ -762,7 +830,7 @@ function attachFeedback(node, messageId) {
         await requestJSON("/api/soul/feedback", "POST", {
           message_id: messageId, helpful, note,
         });
-        controls.querySelectorAll("button").forEach(item => item.disabled = true);
+        controls.querySelectorAll("button:not(.feedback-detail)").forEach(item => item.disabled = true);
         $("chat-notice").textContent = "Оценку сохранила. Учту её в будущих ответах.";
         await refreshCognition();
         await refreshForgeChatUI();
@@ -774,19 +842,20 @@ function attachFeedback(node, messageId) {
   }
   const detailed = document.createElement("button");
   detailed.type="button";
-  detailed.className="feedback-button";
+  detailed.className="feedback-button feedback-detail";
   detailed.textContent="Оценить подробно";
   detailed.title="Точность, ясность, источники и контекст";
   detailed.addEventListener("click",async()=>{
     if(!dialog.open)dialog.showModal();
+    $("memory-details").open=true;
     $("cognitive-details").open=true;
     $("answers15").open=true;
     await refreshAnswers15();
     $("answers15-message").value=String(messageId);
     $("answers15").scrollIntoView({block:"nearest",behavior:"smooth"});
   });
+  controls.append(detailed);
   node.append(controls);
-  node.append(detailed);
 }
 
 function updateGreeting(greeting) {
@@ -1093,12 +1162,16 @@ async function sendMessage() {
     $("conversation").replaceChildren();
     $("conversation").classList.add("has-messages");
   }
+  traceSegments = [];
+  $("request-steps").replaceChildren();
+  $("request-trace").hidden = true;
   showBrainActivity("Отправка сообщения");
   animateChatSignal(false);
   addChatBubble("user", content);
   const placeholder = addChatBubble("assistant", "");
   const body = placeholder.querySelector("p");
   body.textContent = "Цукиёра думает…";
+  let cached = false;
   let received = false;
   let complete = false;
   let stopped = false;
@@ -1117,18 +1190,30 @@ async function sendMessage() {
     }
     await parseEventStream(response, (event, data) => {
       if (event === "start") {
-        showBrainActivity("Ожидание ответа");
+        cached = Boolean(data.cached);
+        traceStep("chat", "db", "Сообщение №" + data.message_id + " в SQLite · диалог " + data.conversation_id);
+        showBrainActivity(cached ? "Читаю сохранённый ответ" : "Ищу контекст");
         activeStreamId = data.stream_id;
         activeSession = data.conversation_id;
         $("stop-message").disabled = false;
       } else if (event === "context") {
+        const ids = data.memory_ids || [];
+        traceStep("db", "core", "История и память → контекст · найдено записей: " + data.memory_count +
+          (ids.length ? " (" + ids.map(id => "#" + id).join(", ") + ")" : ""));
         showBrainActivity("Поиск завершён · записей для ответа: " + data.memory_count);
         if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
           recallSignal = {started: performance.now(), ids: data.memory_ids || []};
         }
+      } else if (event === "model_request") {
+        traceStep("core", "cloud", "Подготовлен запрос к " + data.model + " · Cloud.ru /v1/chat/completions · сообщений в локальной истории: " +
+          data.history_count + ", фрагментов документов: " + data.document_count);
+        showBrainActivity("Ожидание Cloud.ru");
+      } else if (event === "stored") {
+        traceStep("chat", "db", "Ответ №" + data.message_id + " сохранён в SQLite");
       } else if (event === "token") {
         if (!received) {
           body.textContent = "";
+          traceStep(cached ? "db" : "cloud", "chat", cached ? "SQLite → чат · сохранённый ответ" : "Cloud.ru → чат · началась передача ответа");
           showBrainActivity("Приходит ответ");
           animateChatSignal(true);
         }
@@ -1144,9 +1229,11 @@ async function sendMessage() {
         $("chat-notice").textContent = "Ответ и история сохранены локально." +
           (data.audit === "needs_review" ? " Проверь источники в разделе опыта." :
            data.audit === "source_checked" ? " Ссылки на память найдены; истинность не проверена." : "");
+        if (data.pending) traceNote("Кандидатов в память на подтверждение: " + data.pending);
         if (data.pending) $("chat-notice").textContent += " Новые воспоминания ждут подтверждения: " + data.pending;
       } else if (event === "stopped") {
         stopped = true;
+        traceNote("Остановлено пользователем");
         showBrainActivity("Ответ остановлен");
         body.textContent += "\n[Ответ остановлен. Неполный текст не сохранён.]";
         pendingClientId = "";
@@ -1165,6 +1252,7 @@ async function sendMessage() {
     await refreshForgeChatUI();
   } catch (error) {
     $("message").value = content;
+    traceNote("Ошибка: " + error.message);
     showBrainActivity("Ошибка запроса");
     if (!received) placeholder.remove();
     $("chat-notice").textContent = "Ошибка: " + error.message + ". Можно повторить сообщение.";

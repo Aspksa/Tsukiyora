@@ -181,6 +181,45 @@ class LivingPersonalityTests(unittest.TestCase):
             ).fetchone()["sha256"]
         self.assertEqual(original,"0"*64)
 
+    def test_approved_question_research_uses_only_local_indexed_citations(self):
+        imported=self.core.evidence.documents.import_text(
+            "local-evidence.txt",
+            "Lyra is a fictional label used for a local reference. "
+            "A Lyra document is not independent proof of any real claim.",
+            confirmed=True
+        )
+        with closing(self.store.connect()) as conn,conn:
+            cur=conn.execute(
+                "INSERT INTO cognitive_next_questions"
+                "(fingerprint,question,source_note,state)"
+                " VALUES(?,?,?,'approved')",
+                (hashlib.sha256(b"lyra approved question").hexdigest(),
+                 "Where does Lyra appear?","User-confirmed for offline search")
+            )
+            qid=cur.lastrowid
+        off=self.soul.research(self.core)
+        self.assertEqual(off["searched"],0)
+        self.assertEqual(off["reason"],"no_document_permission")
+        self.assertEqual(self.soul.research_sources()["items"],[])
+        self.soul.permission("indexed_documents",True,confirmed=True)
+        with patch("tsukiyora.cloud.cloudru._request",
+                   side_effect=AssertionError("no Cloud")):
+            found=self.soul.research(self.core)
+        self.assertEqual(found["searched"],1)
+        self.assertGreaterEqual(found["source_links"],1)
+        matches=self.soul.research_sources()["items"]
+        self.assertEqual(matches[0]["document_id"],imported["id"])
+        self.assertEqual(matches[0]["question_id"],qid)
+        self.assertIn("Документ #",matches[0]["citation"])
+        self.assertFalse(matches[0]["source_updated_since_review"])
+        self.assertFalse(self.soul.research_sources()["model_semantic_conclusions"])
+        self.assertEqual(self.soul.research_sources()["cloud_calls"],0)
+        self.assertNotIn("fictional label",json.dumps(matches))
+        self.soul.permission("indexed_documents",False,confirmed=True)
+        self.assertEqual(self.soul.research(self.core)["searched"],0)
+        self.assertEqual(self.soul.research_sources()["items"][0]["document_id"],
+                         imported["id"])
+
     def test_journal_is_idempotent_and_no_new_cloud_calls(self):
         before=self.core.forge.auto_status()
         source_before=launcher.load_personality()
@@ -268,6 +307,7 @@ class LivingPersonalityHttpTests(unittest.TestCase):
         for name in ("living8","living8-level","living8-status","living8-goals",
                      "living8-chat-proposal","living8-chat-approve","living8-chat-reject",
                      "living8-proactive","living8-practice","living8-documents",
+                     "living8-research",
                      "cognitive-v7","skill-forge","forge-chat-proposal","cognitive-unified"):
             self.assertIn('id="'+name+'"',html)
         for phrase in ("refreshLiving8Chat","refreshLiving8",

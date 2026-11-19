@@ -435,6 +435,9 @@ class LivingPersonality8:
             if row is None or row["state"]!="pending":
                 raise ValueError("Предложение уже обработано или не найдено.")
             if approve and row["kind"]=="style":
+                level,_=self._settings(db)
+                if level<1:
+                    raise ValueError("Включи развитие личности перед одобрением стиля.")
                 source_count=self._style_sources(db)[row["target"]]
                 if source_count<3:
                     raise ValueError("Три подтверждённых положительных отзыва больше не действуют.")
@@ -469,6 +472,9 @@ class LivingPersonality8:
     def approved_style(self):
         """Fixed trusted advice only; source ratings checked on every use."""
         with closing(self.store.connect()) as db:
+            level,_=self._settings(db)
+            if level<1:
+                return ""
             counts=self._style_sources(db)
             names=[x["name"] for x in db.execute(
                 "SELECT name FROM soul8_styles ORDER BY approved_at DESC LIMIT 4"
@@ -525,6 +531,11 @@ class LivingPersonality8:
         if type(limit) is not int or not 1<=limit<=50:
             raise ValueError("Некорректный лимит.")
         with closing(self.store.connect()) as db:
+            level,perms=self._settings(db)
+            if level<3 or not perms["indexed_documents"]:
+                return {"items":[],"hidden_by_permission":True,
+                        "model_semantic_conclusions":False,"cloud_calls":0,
+                        "approved_questions_only":True}
             rows=[dict(x) for x in db.execute(
                 "SELECT r.question_id,r.document_id,r.ordinal,r.revision,"
                 "d.name,d.revision AS current_revision,r.created_at "

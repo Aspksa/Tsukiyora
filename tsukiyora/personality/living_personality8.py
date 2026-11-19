@@ -165,13 +165,9 @@ class LivingPersonality8:
     def settings(self):
         with closing(self.store.connect()) as db:
             level,perms=self._settings(db)
-            counts=dict(db.execute(
+            counts={r["state"]:r["n"] for r in db.execute(
                 "SELECT state,COUNT(*) n FROM soul8_goals GROUP BY state"
-            ).fetchall()) if False else {
-                r["state"]:r["n"] for r in db.execute(
-                    "SELECT state,COUNT(*) n FROM soul8_goals GROUP BY state"
-                )
-            }
+            )}
             pending=db.execute(
                 "SELECT COUNT(*) FROM soul8_proposals WHERE state='pending'"
             ).fetchone()[0]
@@ -200,21 +196,7 @@ class LivingPersonality8:
         # Reuse existing sources. No copying private dialogue, PDF text or
         # biographical claims into our new tables.
         academy=[dict(row) for row in db.execute(
-            "SELECT skill,samples,review_required FROM "
-            "(SELECT skill,samples,review_required FROM "
-            "(SELECT skill,samples,review_required FROM "
-            "(SELECT skill, samples,review_required FROM "
-            "academy_curriculum))) WHERE review_required=1 LIMIT 6"
-        )] if False else [dict(row) for row in db.execute(
-            "SELECT skill,samples,review_required FROM "
-            "(SELECT skill, samples, review_required FROM academy_curriculum) "
-            "WHERE review_required=1 LIMIT 6"
-        )] if False else [dict(row) for row in db.execute(
-            "SELECT skill, samples,review_required FROM "
-            "(SELECT skill,samples,review_required FROM academy_curriculum) "
-            "LIMIT 6"
-        )] if False else [dict(row) for row in db.execute(
-            "SELECT skill, samples,review_required FROM academy_curriculum "
+            "SELECT skill,samples,review_required FROM academy_curriculum "
             "WHERE review_required=1 LIMIT 6"
         )]
         skills=[dict(x) for x in db.execute(
@@ -231,8 +213,8 @@ class LivingPersonality8:
             "SELECT COUNT(*) FROM cognitive_next_questions WHERE state='pending'"
         ).fetchone()[0]
         documents=db.execute(
-            "SELECT COUNT(*) FROM documents"
-        ).fetchone()[0] if False else 0
+            "SELECT COUNT(*) FROM source_documents"
+        ).fetchone()[0]
         return {"academy":academy,"skills":skills,"memory":memory,
                 "conflicts":conflicts,"curiosity":curiosity,
                 "documents":documents}
@@ -300,11 +282,31 @@ class LivingPersonality8:
                 "SELECT COUNT(*) FROM cognitive_next_questions WHERE state='pending'"
             ).fetchone()[0]}
         if category=="documents":
-            # Placeholder intentionally: document content/permissions not read.
-            return {"raw_documents_accessed":0}
+            x=db.execute(
+                "SELECT COUNT(*) n,COALESCE(SUM(revision),0) rev "
+                "FROM source_documents"
+            ).fetchone()
+            # Local metadata only; no private body text, file writes or uploads.
+            return {"indexed_documents":x["n"],
+                    "source_revisions":x["rev"],"raw_documents_accessed":0}
         return {"rated_answers":db.execute(
             "SELECT COUNT(*) FROM cognitive_feedback"
         ).fetchone()[0]}
+
+    def agenda(self,limit=20):
+        if type(limit) is not int or not 1<=limit<=50:
+            raise ValueError("Некорректный лимит.")
+        with closing(self.store.connect()) as db:
+            rows=[dict(x) for x in db.execute(
+                "SELECT id,category,source_ref,state,progress,evidence_count,"
+                "created_at,updated_at FROM soul8_goals ORDER BY id DESC LIMIT ?",
+                (limit,)
+            )]
+        for row in rows:
+            row["label"]=GOALS[row["category"]][0]
+            row["checkpoint_count"]=row.pop("progress")
+        return {"items":rows,"automatic_approval":False,
+                "user_source_data_changed":False}
 
     def _proposal(self,db,kind,target,source_id):
         if kind=="style" and target not in PERSONA_STYLES:

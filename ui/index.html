@@ -38,6 +38,7 @@
             <button id="forge-chat-toggle" type="button" class="quiet-button" aria-pressed="false" title="Автообучение Skill Forge через Cloud.ru, до одного платного запроса в сутки">Навыки · выкл</button>
             <label class="sr-only" for="chat-sessions">История диалогов</label>
             <select id="chat-sessions" title="История диалогов" aria-label="История диалогов"><option value="">Новый диалог</option></select>
+            <button type="button" id="dialogue9-resume" class="quiet-button" title="Открыть последний сохранённый разговор без нового запроса Cloud.ru" hidden>Продолжить</button>
             <button type="button" id="chat-new" class="quiet-button" title="Новый диалог" aria-label="Новый диалог">+</button>
           </div>
         </div>
@@ -55,6 +56,7 @@
           <pre id="dialogue-summary" class="chat-excerpts" aria-live="polite"></pre>
           <p class="memory-empty">Сводка — только выдержки из реальных сообщений со ссылками, без облачной модели.</p>
         </details>
+        <p id="dialogue9-resume-note" class="composer-note" hidden></p>
         <div class="conversation" id="conversation" role="log" aria-live="polite">
           <div class="greeting">
             <span class="greeting-mark" aria-hidden="true">✧</span>
@@ -79,6 +81,15 @@
             <button type="button" id="living8-chat-approve" class="quiet-button">Одобрить</button>
             <button type="button" id="living8-chat-reject" class="quiet-button">Отклонить</button>
             <button type="button" id="living8-chat-details" class="quiet-button">Показать прогресс</button>
+          </div>
+        </aside>
+        <aside class="forge-chat-proposal" id="dialogue9-initiative" hidden aria-label="Предложение продолжить местную задачу">
+          <p class="forge-proposal-kicker">ДИАЛОГ · УМЕСТНАЯ ИНИЦИАТИВА</p>
+          <p class="forge-chat-proposal-text" id="dialogue9-initiative-text"></p>
+          <p class="forge-proposal-note">Основано только на существующей локальной цели. Никаких автоматических сообщений модели и платных запросов.</p>
+          <div class="memory-actions">
+            <button id="dialogue9-initiative-open" class="quiet-button" type="button">Посмотреть цель</button>
+            <button id="dialogue9-initiative-later" class="quiet-button" type="button">Не напоминать сутки</button>
           </div>
         </aside>
         <div class="composer">

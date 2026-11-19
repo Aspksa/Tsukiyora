@@ -320,6 +320,17 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path.startswith("/api/soul/dialogue9"):
+            try:
+                dialogue=self.server.cognition.dialogue9
+                if path=="/api/soul/dialogue9/resume":
+                    return self.send_json(dialogue.resume(
+                        args.get("conversation_id",[None])[0]))
+                if path=="/api/soul/dialogue9/initiative":
+                    return self.send_json(dialogue.initiative(self.server.cognition))
+                return self.send_json({"error":"Unknown dialogue9 resource."},404)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path.startswith("/api/soul/living8"):
             try:
                 soul=self.server.cognition.living8
@@ -541,6 +552,14 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path=="/api/soul/dialogue9/snooze":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.dialogue9.snooze(
+                    self.server.cognition,obj.get("goal_id"),obj.get("progress"),
+                    confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path.startswith("/api/soul/living8/"):
             try:
                 obj=self._read_body()
@@ -1131,7 +1150,8 @@ class SoulHandler(BaseHTTPRequestHandler):
             if existing:
                 return self.send_json({"conversation_id": conversation_id,
                                        "answer": existing["content"], "cached": True})
-            history = store.list_messages(conversation_id, limit=24)
+            history = store.list_messages(
+                conversation_id,limit=18)
             if not history or history[-1]["id"] != user["id"]:
                 raise ValueError("Нельзя повторить старое сообщение после новых. Начни новый диалог.")
             memories = store.find_memories(limit=20)
@@ -1142,8 +1162,13 @@ class SoulHandler(BaseHTTPRequestHandler):
             forge_id, forge_style = self.server.cognition.forge.guidance(content)
             earlier = (guidance + " " + evolving + " " + approved).strip()
             combined = (evol4_style + " " + forge_style).strip()
-            extra = (earlier[:max(0,1799-len(combined))] +
-                     " " + combined).strip()[:1800]
+            dialogue=self.server.cognition.dialogue9
+            continuity=dialogue.prompt_context(conversation_id,history)
+            # Bounded total guidance; NO extra provider call or background cost.
+            fixed=dialogue.guidance()
+            prefix=(fixed + continuity)[:1150]
+            remaining=max(0,1800-len(prefix)-2)
+            extra=(prefix+"\n"+(earlier+" "+combined)[:remaining]).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,
                                     extra_guidance=extra)
             assistant = store.append_messages(conversation_id, [{

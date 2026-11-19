@@ -49,6 +49,7 @@ from tsukiyora.cognition.unified_cognitive import UnifiedCognitiveCore
 from tsukiyora.cognition.skill_forge import SkillForge
 from tsukiyora.cognition.cognitive_supervisor7 import CognitiveSupervisor7
 from tsukiyora.personality.living_personality8 import LivingPersonality8
+from tsukiyora.personality.living_dialogue9 import LivingDialogue9
 
 
 class CognitiveCore:
@@ -91,6 +92,7 @@ class CognitiveCore:
         self.forge = SkillForge(path)
         self.supervisor7 = CognitiveSupervisor7(path)
         self.living8 = LivingPersonality8(path)
+        self.dialogue9 = LivingDialogue9(path)
         self.chat_priority = None
 
     def connect(self):
@@ -146,6 +148,7 @@ class CognitiveCore:
         self.forge.initialize()
         self.supervisor7.initialize()
         self.living8.initialize()
+        self.dialogue9.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -308,6 +311,8 @@ class CognitiveCore:
                 "skill_forge": self.forge.status(),
                 "cognitive_soul7": self.supervisor7.status(self),
                 "cognitive_soul8": self.living8.state(self),
+                "living_dialogue9":{"local_resume":True,"long_chat_source_links":True,
+                                    "bounded_initiative":True,"extra_cloud_calls":0},
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

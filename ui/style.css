@@ -357,3 +357,15 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 #living8-status,#living8-message{line-height:1.6;overflow-wrap:anywhere}
 #living8-chat-proposal{margin-top:6px}
 #living8-chat-proposal .memory-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Living Dialogue 9.0: unobtrusive resume and sourced suggestions. */
+#dialogue9-resume{font-size:11px;padding:6px 9px;white-space:nowrap;
+  border-color:rgba(193,148,83,.45)}
+#dialogue9-resume[hidden],#dialogue9-resume-note[hidden],
+#dialogue9-initiative[hidden]{display:none!important}
+#dialogue9-resume-note{margin:4px 12px 6px;max-height:55px;overflow:auto;
+  color:#baa482;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+#dialogue9-initiative{border-color:rgba(186,147,88,.28)}
+#dialogue9-initiative .memory-actions{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:650px){#dialogue9-resume{font-size:10px;padding:5px 6px}
+  #dialogue9-resume-note{margin:4px 6px}}

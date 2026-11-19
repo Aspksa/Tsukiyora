@@ -320,6 +320,17 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/grey14":
+            try:
+                return self.send_json(self.server.cognition.grey14.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/grey14/cases":
+            try:
+                return self.send_json(self.server.cognition.grey14.cases())
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/coordinator13":
             try:
                 return self.send_json(self.server.cognition.coordinator13.status(
@@ -609,6 +620,36 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/grey14/preview":
+            try:
+                from tsukiyora.cognition.grey_matter14 import solve
+                obj = self._read_body()
+                return self.send_json(solve(
+                    obj.get("facts"),obj.get("rules"),obj.get("target")))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/grey14/case":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.grey14.create_case(
+                    obj.get("facts"),obj.get("rules"),obj.get("target"),
+                    obj.get("expected"),
+                    source_memory_id=obj.get("source_memory_id"),
+                    confirmed=obj.get("confirmed",False)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/grey14/benchmark":
+            try:
+                obj = self._read_body()
+                if obj.get("confirmed") is not True:
+                    raise ValueError("Нужно подтвердить локальный тест логики.")
+                if self.server.chat_lock.locked():
+                    return self.send_json(
+                        {"status":"deferred","reason":"chat_active"})
+                return self.send_json(self.server.cognition.grey14.benchmark(
+                    self.server.cognition,limit=obj.get("limit",20)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/temporal13/annotate":
             try:
                 obj = self._read_body()

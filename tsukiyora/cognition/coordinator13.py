@@ -233,6 +233,7 @@ class CognitiveCoordinator13:
                 "jobs_with_failures": queue["warnings"] or 0,
                 "policy": "static_priority_with_aging; no load_adaptation"},
             "memory": core.memory13.status(),
+            "cached_vector_index": core.vector13.status(),
             "working_notebook": core.inner12.status(core)["state"][
                 "active_goals_and_review_items"],
             "reviews_sampled": review["sampled_count"],

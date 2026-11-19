@@ -745,7 +745,7 @@ class SkillForge:
                 )
         return self.budget_status()
 
-    def _reserve_paid_call(self):
+    def _reserve_paid_call(self,*,auto_source=None):
         day=datetime.now(timezone.utc).strftime("%Y-%m-%d")
         with closing(self.store.connect()) as db:
             db.execute("BEGIN IMMEDIATE")
@@ -760,6 +760,18 @@ class SkillForge:
                 spent=used["reserved_calls"] if used else 0
                 if row["state"]!="approved" or row["approved_calls"]<=spent:
                     raise ValueError("Cloud.ru заблокирован до отдельного согласования бюджета.")
+                if auto_source is not None:
+                    setting=db.execute(
+                        "SELECT enabled FROM forge_auto WHERE id=1"
+                    ).fetchone()
+                    if not setting or not setting["enabled"] or spent>=1:
+                        raise ValueError("Автоматические облачные запросы выключены или исчерпаны.")
+                    # UNIQUE skill_id + same transaction prevent accidental
+                    # repeated paid attempts after crash or concurrent ticks.
+                    db.execute(
+                        "INSERT INTO forge_auto_attempts(skill_id,status)"
+                        " VALUES(?,'reserved')",(auto_source,)
+                    )
                 db.execute(
                     "INSERT INTO forge_cloud_usage(day,reserved_calls)"
                     " VALUES(?,?) ON CONFLICT(day) DO UPDATE "
@@ -784,11 +796,14 @@ class SkillForge:
             raise ValueError("Сначала проверь подключение Cloud.ru и модель.")
         # The cloud's original ResourceGuard still enforces chat limits.
         self._reserve_paid_call()
-        # Static domain and ID catalog, no user messages, notes or documents.
+        return self._generate_with_cloud(item,cloud,persona)
+
+    def _generate_with_cloud(self,item,cloud,persona):
+        """Use only a fixed catalog, never send user notes, messages, memories or files."""
         task=("Сформируй один новый неисполняемый план навыка для области "
               +item["domain"]+". Разрешены только эти ID шагов: "
               +", ".join(STEPS)+". Ответ строго JSON объект "
-              "{\"steps\":[\"scope\",...]} из 3–10 разных разрешённых шагов. "
+              "{\\\"steps\\\":[\\\"scope\\\",...]} из 3–10 разных разрешённых шагов. "
               "Первый шаг scope. Никакого кода или команд.")
         answer=cloud.complete(
             persona,[{"role":"user","content":task}],[],extra_guidance="")
@@ -800,9 +815,69 @@ class SkillForge:
         except (ValueError,TypeError,json.JSONDecodeError):
             return {"state":"rejected_cloud_output","cloud_calls_reserved":1,
                     "candidate_created":False}
-        output=self._insert(item["domain"],recipe,"cloud_draft",parent_id=skill_id)
+        output=self._insert(item["domain"],recipe,"cloud_draft",parent_id=item["id"])
         return {**output,"cloud_calls_reserved":1,
                 "auto_approved":False,"needs_shadow_test":True}
+
+    def auto_cloud_once(self):
+        """Opt-in background max ONE possibly billable call per UTC day.
+
+        This is the only background path that can call Cloud.ru. It is
+        disabled by default, accepts user consent in set_auto(), and never
+        enables a new skill. The existing chat_lock protects chat priority.
+        """
+        if not self.auto_status()["enabled"]:
+            return {"cloud_calls":0,"reason":"disabled"}
+        if self._cloud is None or self._persona is None or self._chat_lock is None:
+            return {"cloud_calls":0,"reason":"no_runtime"}
+        if not self._chat_lock.acquire(blocking=False):
+            return {"cloud_calls":0,"reason":"chat_active"}
+        try:
+            cloud=self._cloud
+            state=cloud.status()
+            if not (state.get("configured") and state.get("verified") and state.get("model")):
+                return {"cloud_calls":0,"reason":"cloud_not_ready"}
+            with closing(self.store.connect()) as db:
+                item=db.execute(
+                    "SELECT s.id,s.domain,s.recipe,s.state "
+                    "FROM forge_skills s WHERE s.state='shadow' "
+                    "AND (SELECT COUNT(*) FROM forge_trials t WHERE t.skill_id=s.id)=4 "
+                    "AND (SELECT COALESCE(SUM(candidate),0) FROM forge_trials t "
+                    "WHERE t.skill_id=s.id)=4 "
+                    "AND NOT EXISTS(SELECT 1 FROM forge_auto_attempts a "
+                    "WHERE a.skill_id=s.id) ORDER BY s.id DESC LIMIT 1"
+                ).fetchone()
+            if item is None:
+                return {"cloud_calls":0,"reason":"no_new_checked_skill"}
+            # Persist the reservation before hitting the provider. Turning
+            # OFF thereafter prevents new calls, not one already in flight.
+            try:
+                self._reserve_paid_call(auto_source=item["id"])
+            except (sqlite3.Error,ValueError):
+                return {"cloud_calls":0,"reason":"daily_limit_or_already_tried"}
+            if not self.auto_status()["enabled"]:
+                self._finish_auto_attempt(item["id"],"disabled_after_reserve")
+                return {"cloud_calls":0,"reason":"disabled_after_reserve"}
+            try:
+                result=self._generate_with_cloud(item,cloud,self._persona)
+                self._finish_auto_attempt(item["id"],
+                    "completed" if result.get("candidate_created",False)
+                    else "rejected")
+                return {"cloud_calls":1,"new_draft":int(
+                    result.get("created",False)),"needs_user_approval":True}
+            except Exception:
+                # Expose no exception messages, prompts, token values or keys.
+                self._finish_auto_attempt(item["id"],"failed")
+                return {"cloud_calls_reserved":1,"new_draft":0,"reason":"provider_failed"}
+        finally:
+            self._chat_lock.release()
+
+    def _finish_auto_attempt(self,skill_id,status):
+        with closing(self.store.connect()) as db,db:
+            db.execute(
+                "UPDATE forge_auto_attempts SET status=? WHERE skill_id=?",
+                (status,skill_id)
+            )
 
     def status(self):
         skills=self.skills(limit=MAX_CANDIDATES)["items"]

@@ -320,6 +320,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/life10":
+            try:
+                return self.send_json(self.server.cognition.life10.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/growth-quality":
             try:
                 return self.send_json(self.server.cognition.growth_quality.status(
@@ -1170,14 +1176,11 @@ class SoulHandler(BaseHTTPRequestHandler):
             forge_id, forge_style = self.server.cognition.forge.guidance(content)
             earlier = (guidance + " " + evolving + " " + approved).strip()
             combined = (evol4_style + " " + forge_style).strip()
-            dialogue=self.server.cognition.dialogue9
-            continuity=dialogue.prompt_context(conversation_id,history)
-            # Bounded total guidance; NO extra provider call or background cost.
-            fixed=dialogue.guidance()
-            topic= self.server.cognition.topic_recall.prompt(
-                content,conversation_id,history)
-            # Keep the existing 1800-character total guidance budget.
-            prefix=(fixed + "\n" + continuity[:420] + "\n" + topic[:680])[:1450]
+            # One V10 context compositor, shared with streaming; complete
+            # source IDs are retained, never truncated mid-citation.
+            prefix=self.server.cognition.life10.chat_context(
+                self.server.cognition,content,conversation_id,history,
+                max_chars=1400)
             remaining=max(0,1800-len(prefix)-2)
             extra=(prefix+"\n"+(earlier+" "+combined)[:remaining]).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,

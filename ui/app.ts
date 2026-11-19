@@ -1724,6 +1724,63 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Tsukiyora 10.0: ONE read-only status surface over existing modules and queue.
+async function refreshLife10(){
+  if(!$("life10").open)return;
+  try{
+    const report=await requestJSON("/api/soul/life10");
+    const q=report.feedback,s=report.signals,p=report.systems;
+    $("life10-state").textContent=
+      "Единый локальный планировщик · автономность "+p.personality.autonomy_level+
+      "/3 · память: "+p.memory.active_items+
+      " · оценки ответов: "+q.positive+" полезных / "+q.negative+" отрицательных"+
+      " · предупреждения очереди: "+s.queue_warning_jobs+
+      " · дополнительных запросов Cloud.ru: "+report.additional_paid_requests+".";
+    const systems=$("life10-systems");systems.replaceChildren();
+    addCognitiveLine(systems,"Системы · один источник данных вместо копирования");
+    addCognitiveLine(systems,"Общение: общий ограниченный контекст обычного и потокового чата, ссылки на сообщения");
+    addCognitiveLine(systems,"Память: "+p.memory.active_items+
+      " активных записей · "+p.memory.review_signals+
+      " сигналов на проверку (не подтверждённые противоречия)");
+    addCognitiveLine(systems,"Личность: "+p.personality.approved_styles+
+      " одобренных манер общения · исходный характер защищён");
+    addCognitiveLine(systems,"Обучение: "+p.learning.review_required+
+      " учебных проверок · "+p.learning.skill_candidates+
+      " кандидатов · контрольные пары V7 не считаются независимым тестом модели");
+    addCognitiveLine(systems,"Управление: 1 SQLite-очередь, 1 рабочий поток; фоновая работа V10 не вызывает модель");
+    const actions=$("life10-actions");actions.replaceChildren();
+    addCognitiveLine(actions,"Что требует внимания (ничего не применяется автоматически)");
+    if(!report.actions.length)addCognitiveLine(actions,"Пока нет новых локальных сигналов для просмотра.");
+    for(const action of report.actions){
+      const button=document.createElement("button");
+      button.type="button";
+      button.className="quiet-button";
+      button.textContent=action.label+" · "+action.count+" · открыть";
+      button.addEventListener("click",()=>{
+        const target=$(action.section);
+        if(!target)return;
+        target.open=true;
+        target.scrollIntoView({behavior:"smooth",block:"center"});
+      });
+      actions.append(button);
+    }
+    const evidence=$("life10-evidence");evidence.replaceChildren();
+    const last=report.last_local_audit;
+    addCognitiveLine(evidence,last
+      ?"Последний локальный аудит: "+last.day+
+        " · отрицательных оценок среди последних 30 оценённых ответов: "+
+         last.counts.recent_negative+
+        " · предупреждений очереди: "+last.counts.queue_warning_jobs
+      :"Аудит V10 ещё не выполнялся: задача ожидает очереди. Качество модели не доказано.");
+    addCognitiveLine(evidence,"Источники: существующие SQLite-таблицы V5/V7/V8/V9. "+
+      "Платные проверки, автоизменение личности и автоматическое включение навыков запрещены.");
+  }catch(error){
+    $("life10-state").textContent="Не удалось прочитать единый цикл: "+error.message;
+  }
+}
+$("life10").addEventListener("toggle",refreshLife10);
+$("life10-refresh").addEventListener("click",refreshLife10);
+
 // Unified read-only view of EXISTING quality evidence (no new Cloud.ru calls).
 async function refreshGrowthQuality(){
   if(!$("growth-quality").open)return;

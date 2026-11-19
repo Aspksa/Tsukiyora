@@ -142,14 +142,14 @@ class RealAnswerQualityTests(unittest.TestCase):
                     assistant["id"],clarity=bad,confirmed=True)
         self.core.quality15.review(
             assistant["id"],clarity=True,grounding=False,confirmed=True)
-        self.assertIn("достаточно",self.core.quality15.guidance(convo))
+        self.assertIn("не хватало подтверждений",self.core.quality15.guidance(convo))
         self.assertEqual(original,(launcher.ROOT/"soul"/"personality.json").read_bytes())
         with closing(self.store.connect()) as db:
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM evolution_trials WHERE state='active'"
             ).fetchone()[0],0)
-        self.assertFalse(self.core.quality15.status(self.core)[
-            "protected_persona_unchanged"] is False)
+        self.assertTrue(self.core.quality15.status(self.core)[
+            "protected_persona_unchanged"])
 
     def test_schema16_preupgrade_backup_and_reply_integrity(self):
         convo,answer=self.exchange("Вопрос до миграции","Старый ответ")

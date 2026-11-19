@@ -308,3 +308,17 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 #unified-review-list,#unified-activity{max-height:250px;overflow:auto}
 #cognitive-advanced{margin-top:6px}
 #cognitive-advanced>details{margin:6px 0}
+
+/* Skill Forge 6.0: no extra pages; keep the existing black/gold typography. */
+#skill-forge input,#skill-forge textarea,#skill-forge select{
+  display:block;width:100%;min-width:0;box-sizing:border-box;margin:8px 0;
+  padding:9px;color:#ebd4ac;background:#0e0e10;
+  border:1px solid #6b5031;border-radius:7px}
+#skill-forge label{display:block;margin-top:10px;font-size:12px;color:#c7a77b}
+#skill-forge .memory-actions{display:flex;gap:7px;flex-wrap:wrap;margin:7px 0}
+#skill-forge .quiet-button{margin:5px 7px 5px 0}
+#skill-forge .memory-record{padding:9px 0;border-bottom:1px solid #ffffff13;
+  overflow-wrap:anywhere}
+#forge-candidates{max-height:480px;overflow:auto}
+#forge-history{max-height:220px;overflow:auto}
+#forge-result,#forge-state,#forge-budget-status{overflow-wrap:anywhere;line-height:1.6}

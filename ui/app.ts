@@ -1736,6 +1736,8 @@ async function refreshCoordinator13(){
     $("coordinator13-status").textContent=
       "Единая очередь: "+state.queue.registered_jobs+
       " задач · с ошибками: "+state.queue.jobs_with_failures+
+      " · приблизительно проиндексированных векторов: "+state.cached_vector_index.existing_indexed_vectors+
+      " / "+state.cached_vector_index.memory_embedding_links+
       " · аннотаций действительности: "+state.memory.validity_annotations+
       " · проверочных эталонов: "+state.user_attested_holdout_cases+
       " · новых платных фоновых обращений: "+state.new_background_model_calls+".";

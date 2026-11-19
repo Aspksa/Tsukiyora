@@ -271,7 +271,7 @@ class CognitiveSupervisor7:
     def health(self, core):
         with closing(self.store.connect()) as db:
             sqlite_ok=db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
-            fk_count=len(db.execute("PRAGMA foreign_key_check LIMIT 8").fetchall())
+            fk_count=len(db.execute("SELECT * FROM pragma_foreign_key_check LIMIT 8").fetchall())
             old=db.execute(
                 "SELECT COUNT(*) FROM maintenance_queue "
                 "WHERE state='running'"

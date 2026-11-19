@@ -188,7 +188,7 @@ class LivingPersonalityTests(unittest.TestCase):
         with patch("tsukiyora.cloud.cloudru._request",
                    side_effect=AssertionError("No Cloud for Cognitive Soul 8")):
             for kind in ("cog8_discover","cog8_practice","cog8_reflect",
-                         "cog8_health","cog8_daily"):
+                         "cog8_health","cog8_daily","cog8_research"):
                 self.assertIsInstance(self.soul.run_job(kind,self.core),dict)
         one=self.soul.daily(self.core)
         self.assertTrue(one["already_recorded"])

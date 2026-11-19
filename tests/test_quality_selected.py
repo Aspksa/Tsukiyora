@@ -130,7 +130,13 @@ class QualitySelectedTests(unittest.TestCase):
         self.assertIn('id="growth-quality-skills"', html)
         self.assertIn("/api/soul/growth-quality", py)
         self.assertIn("/api/soul/growth-quality", js)
-        self.assertIn("topic_recall.prompt", py)
+        # V10 centralizes the same local source search in one composer;
+        # legacy endpoint behavior is retained, but no longer duplicates
+        # direct retrieval instructions in launcher.py.
+        life10 = (launcher.ROOT / "tsukiyora" / "cognition" /
+                  "life_cycle10.py").read_text(encoding="utf-8")
+        self.assertIn("life10.chat_context", py)
+        self.assertIn("core.topic_recall.relevant", life10)
         self.assertIn("conversation_id:activeSession", js)
 
 

@@ -62,15 +62,17 @@ class CoordinatedCognition13Tests(unittest.TestCase):
 
     def test_background_notes_fair_paging_no_recreation_after_prune(self):
         convo = self.store.create_conversation("Test")
+        sources = [
+            self.store.append_messages(convo["id"], [{
+                "role":"user", "content": f"Запомни уникальное событие {i:04d}"
+            }])[0]["id"] for i in range(18)
+        ]
         with closing(self.store.connect()) as db, db:
-            for i in range(18):
-                msg = self.store.append_messages(convo["id"],[{
-                    "role":"user", "content": f"Запомни уникальное событие {i:04d}"
-                }])[0]
+            for i, message_id in enumerate(sources):
                 db.execute(
                     "INSERT INTO memory_suggestions "
                     "(message_id,kind,content,fingerprint) VALUES(?,'fact',?,?)",
-                    (msg["id"],f"Уникальный тест {i}",f"cursor-{i}")
+                    (message_id,f"Уникальный тест {i}",f"cursor-{i}")
                 )
         # A tiny notebook retention for the test makes re-creation visible
         # without running hundreds of maintenance cycles.
@@ -131,7 +133,7 @@ class CoordinatedCognition13Tests(unittest.TestCase):
             self.core,"SQLite Tsukiyora",as_of="2024-01-01")
         self.assertNotIn(memory["id"],[r["memory_id"] for r in old["items"]])
         valid=self.core.memory11.search(
-            self.core,"SQLite Tsukiyora",as_of="2026-01-01")
+            self.core,"SQLite Tsukiyora",as_of="2026-12-01")
         self.assertIn(memory["id"],[r["memory_id"] for r in valid["items"]])
         self.store.correct_memory(memory["id"],
             "Tsukiyora использует SQLite для локальной базы")
@@ -139,7 +141,7 @@ class CoordinatedCognition13Tests(unittest.TestCase):
         self.assertFalse(timeline["validity_annotations"][0][
             "applies_to_current_version"])
         valid=self.core.memory11.search(
-            self.core,"SQLite Tsukiyora",as_of="2026-01-01")
+            self.core,"SQLite Tsukiyora",as_of="2026-12-01")
         for item in valid["items"]:
             if item["memory_id"]==memory["id"]:
                 self.assertEqual(item["time_basis"],"stale_annotation_excluded")

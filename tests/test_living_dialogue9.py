@@ -83,8 +83,7 @@ class LivingDialogue9Tests(unittest.TestCase):
         self.make_messages(convo,5)
         recent=self.store.list_messages(convo["id"],limit=RECENT_WINDOW)
         self.assertEqual(self.dialogue.prompt_context(convo["id"],recent),"")
-        with self.assertRaises(ValueError):
-            self.dialogue.resume("not-an-existing-id")
+        self.assertFalse(self.dialogue.resume("not-an-existing-id")["found"])
         with self.assertRaises(ValueError):
             self.dialogue.continuity(convo["id"],[{"id":1}],max_chars=99999)
 
@@ -103,8 +102,7 @@ class LivingDialogue9Tests(unittest.TestCase):
         self.assertEqual(before["last_messages"][-1]["excerpt"],
                          "Хорошо, остановились на 你好.")
         self.assertTrue(before["not_fabricated"])
-        with self.assertRaises(ValueError):
-            self.dialogue.resume("123456789not-existing")
+        self.assertFalse(self.dialogue.resume("123456789not-existing")["found"])
         # A read-only resume does not create messages or Cloud calls.
         self.assertEqual(self.store.list_messages(recent["id"],limit=100)[-1]["content"],
                          "Хорошо, остановились на 你好.")

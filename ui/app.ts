@@ -1686,6 +1686,122 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Living Personality 8.0: bounded local autonomy with explicit user choices.
+let pendingLiving8=null;
+let living8Busy=false;
+async function refreshLiving8Chat(){
+  try{
+    const proposals=await requestJSON("/api/soul/living8/proposals");
+    pendingLiving8=proposals.items[0]||null;
+    $("living8-chat-proposal").hidden=!pendingLiving8;
+    if(pendingLiving8){
+      $("living8-chat-text").textContent=
+        "Хозяин, "+pendingLiving8.label+" · "+pendingLiving8.effect;
+    }
+  }catch(_error){
+    pendingLiving8=null;
+    $("living8-chat-proposal").hidden=true;
+  }
+}
+async function refreshLiving8(){
+  if(!$("living8").open)return;
+  try{
+    const [state,agenda,diary]=await Promise.all([
+      requestJSON("/api/soul/living8"),
+      requestJSON("/api/soul/living8/agenda"),
+      requestJSON("/api/soul/living8/journal")
+    ]);
+    $("living8-level").value=String(state.autonomy_level);
+    const rights=state.local_permissions;
+    $("living8-proactive").checked=Boolean(rights.proactive_chat);
+    $("living8-practice").checked=Boolean(rights.local_practice);
+    $("living8-documents").checked=Boolean(rights.indexed_documents);
+    $("living8-status").textContent="Автономность: "+state.autonomy_level+
+      " · целей: "+state.progress.total_goals+
+      " · ждут просмотра: "+state.progress.waiting_review+
+      " · согласованных манер: "+state.progress.approved_style_adjustments+
+      " · новых платных вызовов V8: 0.";
+    const goals=$("living8-goals");goals.replaceChildren();
+    addCognitiveLine(goals,"Планы и контрольные точки");
+    for(const item of agenda.items.slice(0,14)){
+      addCognitiveLine(goals,"#"+item.id+" · "+item.label+
+        " · "+item.state+" · шаги "+item.checkpoint_count+"/3"+
+        " · источников метрик: "+item.evidence_count);
+    }
+    if(!agenda.items.length)addCognitiveLine(goals,
+      "Пока нет целей: фоновый планировщик изучит существующие оценки, вопросы и предупреждения.");
+    const log=$("living8-chronicle");log.replaceChildren();
+    addCognitiveLine(log,"Дневник локального развития (без текста переписки)");
+    for(const item of diary.items.slice(0,12)){
+      addCognitiveLine(log,item.created_at+" · "+item.event+
+        " · "+item.source_type+" · "+item.source_ref);
+    }
+    if(!diary.items.length)addCognitiveLine(log,"Записей пока нет.");
+  }catch(error){
+    $("living8-status").textContent="Состояние 8.0 недоступно: "+error.message;
+  }
+}
+$("living8").addEventListener("toggle",refreshLiving8);
+$("living8-refresh").addEventListener("click",refreshLiving8);
+$("living8-save-level").addEventListener("click",async()=>{
+  try{
+    const level=Number($("living8-level").value);
+    if(!Number.isInteger(level)||level<0||level>3)throw Error("Неверный уровень.");
+    if(!window.confirm("Установить уровень автономности "+level+
+      "? Для Cloud.ru, изменения личности и внешних действий по-прежнему требуется отдельное согласие."))return;
+    await requestJSON("/api/soul/living8/control","POST",{level,confirmed:true});
+    $("living8-message").textContent="Уровень сохранён: "+level+".";
+    await refreshLiving8();await refreshLiving8Chat();
+  }catch(error){$("living8-message").textContent=error.message;}
+});
+for(const [element,scope] of [["living8-proactive","proactive_chat"],
+                               ["living8-practice","local_practice"],
+                               ["living8-documents","indexed_documents"]]){
+  $(element).addEventListener("change",async value=>{
+    const enabled=Boolean(value.target.checked);
+    try{
+      if(!window.confirm("Изменить локальное разрешение "+scope+" на "+
+        (enabled?"ВКЛ":"ВЫКЛ")+"? Платные и внешние действия это не разрешает.")){
+        await refreshLiving8();return;
+      }
+      await requestJSON("/api/soul/living8/permission","POST",
+        {scope,enabled,confirmed:true});
+      $("living8-message").textContent="Локальное разрешение обновлено.";
+      await refreshLiving8();await refreshLiving8Chat();
+    }catch(error){
+      $("living8-message").textContent=error.message;await refreshLiving8();
+    }
+  });
+}
+async function decideLiving8(approve){
+  if(!pendingLiving8||living8Busy)return;
+  const item=pendingLiving8;
+  if(!window.confirm((approve?"Одобрить":"Отклонить")+
+    " предложение #"+item.id+"? "+
+    (item.kind==="style"
+      ?"Только согласованный стиль ответов, исходная личность не изменится."
+      :"Это отметит просмотр локального отчёта; не активирует навыки.")))return;
+  living8Busy=true;
+  try{
+    await requestJSON("/api/soul/living8/decision","POST",
+      {proposal_id:item.id,approve,confirmed:true});
+    $("chat-notice").textContent=approve
+      ?"Предложение саморазвития одобрено.":"Предложение отклонено.";
+    await refreshLiving8Chat();
+    await refreshLiving8();
+  }catch(error){
+    $("chat-notice").textContent="Решение не сохранено: "+error.message;
+  }finally{living8Busy=false;}
+}
+$("living8-chat-approve").addEventListener("click",()=>decideLiving8(true));
+$("living8-chat-reject").addEventListener("click",()=>decideLiving8(false));
+$("living8-chat-details").addEventListener("click",async()=>{
+  const dialog=$("settings-dialog");
+  if(!dialog.open)dialog.showModal();
+  $("living8").open=true;
+  await refreshLiving8();
+});
+
 // Cognitive Soul 7.0 — shared V1–V6 registry and offline evidence review.
 // No provider request or active model trial is launched by these controls.
 async function refreshCognitive7(){
@@ -1828,6 +1944,7 @@ async function refreshForgeChatUI(){
     $("forge-chat-proposal").hidden=true;
     $("forge-chat-toggle").title="Skill Forge: "+error.message;
   }
+  await refreshLiving8Chat();
 }
 async function toggleForgeAuto(){
   if(forgeUIBusy)return;

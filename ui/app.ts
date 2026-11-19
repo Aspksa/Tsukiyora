@@ -1808,7 +1808,7 @@ $("grey14-benchmark").addEventListener("click",async()=>{
   try{
     const result=await requestJSON("/api/soul/grey14/benchmark","POST",
       {confirmed:true,limit:20});
-    $("grey14-status").textContent=result.status==="deferred"
+    $("grey14-example-result").textContent=result.status==="deferred"
       ?"Проверка отложена, пока идёт чат."
       :"Проверено: "+result.tested+
         " · совпало: "+result.passed+
@@ -1819,7 +1819,7 @@ $("grey14-benchmark").addEventListener("click",async()=>{
         ". Это НЕ оценка интеллекта облачной LLM.";
     await refreshGrey14();
   }catch(error){
-    $("grey14-status").textContent="Ошибка проверки: "+error.message;
+    $("grey14-example-result").textContent="Ошибка проверки: "+error.message;
   }
 });
 

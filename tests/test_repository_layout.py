@@ -13,11 +13,11 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 MODULES = {
     "academy": "academy_curriculum academy_experiments academy_metrics academy_practice academy_rollback soul_academy",
-    "cognition": "cognitive_core cognitive_evolution cognitive_next cognitive_supervisor7 reasoning reflective_optimization reflective_recall self_improvement unified_cognitive skill_forge",
+    "cognition": "cognitive_core cognitive_evolution cognitive_next cognitive_supervisor7 reasoning reflective_optimization reflective_recall self_improvement unified_cognitive skill_forge growth_quality",
     "memory": "atlas_materializer brain_atlas layered_memory memory_quality memory_store migration_guard precision_memory semantic_groups vector_memory",
     "cloud": "cloudru resource_guard stream_runtime",
     "runtime": "reliability maintenance",
-    "personality": "persona_arc persona_continuity soul_growth living_personality8 living_dialogue9 experience_engine experience_skills conversation_memory",
+    "personality": "persona_arc persona_continuity soul_growth living_personality8 living_dialogue9 experience_engine experience_skills conversation_memory topic_recall",
     "documents": "contract_insights document_parser evidence_review local_documents rag_fusion rag_pipeline",
 }
 

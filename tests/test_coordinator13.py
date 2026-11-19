@@ -226,6 +226,90 @@ class CoordinatedCognition13Tests(unittest.TestCase):
         self.assertEqual(self.core.coordinator13.followup_hint(
             "Новый подробный вопрос",[]),"")
 
+    def test_old_cached_vectors_reachable_via_incremental_buckets(self):
+        target = self.store.add_memory(
+            "fact", "Редкий драгоценный изумруд пустынного цвета")
+        text = "Галактическая энергия космической орбиты"
+        self.core.vectors._remember(
+            "offline-test", target["content"], [1.0, 0.0, 0.0], target["id"])
+        for i in range(178):
+            other = self.store.add_memory(
+                "fact", "Ежегодное заседание совета по протоколу "+str(i))
+            self.core.vectors._remember(
+                "offline-test", other["content"], [0.0, 1.0, 0.0], other["id"])
+        self.core.vectors._remember(
+            "offline-test", text, [1.0, 0.0, 0.0], None)
+        # Without V13 buckets, the V11 144-most-recent pool misses target.
+        with closing(self.store.connect()) as db:
+            old = self.core.memory11._cached_vector_ranking(
+                db, text, vector_index=None)
+        self.assertNotIn(target["id"],old)
+        batches = []
+        for _ in range(15):
+            step = self.core.vector13.index_step(limit=30)
+            batches.append(step)
+            if step["pass_complete"]:
+                break
+        self.assertTrue(batches[-1]["pass_complete"])
+        self.assertGreaterEqual(
+            self.core.vector13.status()["existing_indexed_vectors"],179)
+        with patch("tsukiyora.cloud.cloudru._request",
+                   side_effect=AssertionError("No model calls")):
+            found = self.core.memory11.search(self.core,text,limit=8)
+        self.assertIn(target["id"],
+                      [r["memory_id"] for r in found["items"]])
+        # A correction invalidates the SHA even before the next background pass.
+        self.store.correct_memory(
+            target["id"],"Исправленное актуальное описание камня")
+        stale = self.core.memory11.search(self.core,text,limit=8)
+        self.assertNotIn(target["id"],
+                         [r["memory_id"] for r in stale["items"]])
+
+    def test_composite_vector_cursor_covers_two_models_per_memory(self):
+        memory = self.store.add_memory("fact","Разные модельные векторы")
+        self.core.vectors._remember("a-model",memory["content"],
+                                    [1.0,0.0],memory["id"])
+        self.core.vectors._remember("z-model",memory["content"],
+                                    [0.0,1.0],memory["id"])
+        self.core.vector13.index_step(limit=1)
+        with closing(self.store.connect()) as db:
+            count=db.execute(
+                "SELECT COUNT(*) FROM memory13_vector_buckets "
+                "WHERE memory_id=?", (memory["id"],)
+            ).fetchone()[0]
+        self.assertEqual(count,1)
+        self.core.vector13.index_step(limit=1)
+        with closing(self.store.connect()) as db:
+            count=db.execute(
+                "SELECT COUNT(*) FROM memory13_vector_buckets "
+                "WHERE memory_id=?", (memory["id"],)
+            ).fetchone()[0]
+        self.assertEqual(count,2)
+        self.assertEqual(self.core.vector13.status()["cloud_calls"],0)
+
+    def test_schema_v14_upgrades_existing_v13_with_preflight_backup(self):
+        from tsukiyora.memory.migration_guard import SCHEMA_VERSION
+        self.assertEqual(SCHEMA_VERSION,14)
+        kept = self.store.add_memory(
+            "fact","История SQLite до обновления схемы")
+        with closing(self.store.connect()) as db, db:
+            db.execute("PRAGMA user_version=13")
+        launcher.init_database(self.path)
+        with closing(self.store.connect()) as db:
+            self.assertEqual(db.execute(
+                "PRAGMA user_version").fetchone()[0],14)
+            self.assertIsNotNone(db.execute(
+                "SELECT id FROM memory_items WHERE id=?",
+                (kept["id"],)).fetchone())
+        backups=list((self.path.parent/"backups").glob("*.sqlite3"))
+        self.assertTrue(backups)
+        import sqlite3
+        with closing(sqlite3.connect(backups[-1])) as db:
+            row=db.execute(
+                "SELECT id FROM memory_items WHERE id=?",(kept["id"],)
+            ).fetchone()
+        self.assertIsNotNone(row)
+
     def test_bat_and_protected_persona_not_modified(self):
         root=launcher.ROOT
         self.assertTrue((root/"Tsukiyora.bat").exists())

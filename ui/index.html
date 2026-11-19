@@ -243,6 +243,42 @@
             <div id="unified-review-list" class="memory-results"></div>
             <div id="unified-activity" class="memory-results"></div>
           </details>
+          <details class="memory-queue" id="skill-forge">
+            <summary>Cognitive Soul 6.0 <span class="muted">Autonomous Skill Forge</span></summary>
+            <p class="memory-empty">Навыки создаются из подтверждённых положительных оценок и безопасных шаблонов. Локальная проверка оценивает порядок шагов, а не истинное качество LLM. Новые навыки не включаются без отдельного одобрения.</p>
+            <p id="forge-state" class="memory-empty" role="status">Загрузка библиотеки навыков…</p>
+            <label for="forge-domain">Специализация</label>
+            <select id="forge-domain">
+              <option value="logic">Логика</option>
+              <option value="coding">Код и разработка</option>
+              <option value="legal">Договоры и право</option>
+              <option value="rag">RAG и память</option>
+              <option value="documents">Документы</option>
+            </select>
+            <div class="memory-actions">
+              <button type="button" id="forge-propose" class="quiet-button">Создать кандидат</button>
+              <button type="button" id="forge-shadow" class="quiet-button">Локально проверить</button>
+              <button type="button" id="forge-refresh" class="quiet-button">Обновить</button>
+            </div>
+            <p class="memory-empty">Перенос в другую область и составные навыки формируют только черновики. Для активации нужна проверка и твоё подтверждение.</p>
+            <div id="forge-curriculum" class="memory-results"></div>
+            <div id="forge-candidates" class="memory-results"></div>
+            <div id="forge-history" class="memory-results"></div>
+            <details id="forge-budget" class="memory-queue">
+              <summary>Cloud.ru — отдельное согласование бюджета</summary>
+              <p class="memory-empty">Бюджет по умолчанию равен нулю. Для будущего облачного конструирования нужны: отдельный запрос бюджета, отдельное одобрение, затем отдельное подтверждение КАЖДОГО платного вызова. Точная стоимость токенов неизвестна; дневной лимит запросов не гарантирует денежного лимита.</p>
+              <p id="forge-budget-status" class="memory-empty" role="status"></p>
+              <label for="forge-budget-calls">Предлагаемый максимум облачных вызовов в сутки (1–20)</label>
+              <input id="forge-budget-calls" type="number" min="1" max="20" step="1" value="2"/>
+              <div class="memory-actions">
+                <button type="button" id="forge-budget-request" class="quiet-button">Подготовить предложение бюджета</button>
+                <button type="button" id="forge-budget-approve" class="quiet-button">Отдельно согласовать лимит</button>
+                <button type="button" id="forge-budget-revoke" class="quiet-button">Отозвать разрешение</button>
+              </div>
+              <p class="memory-empty">Облачный вариант — только черновик из разрешённых шагов, без отправки памяти, документов или исходных диалогов. Согласование бюджета не запускает Cloud.ru.</p>
+            </details>
+            <p id="forge-result" class="memory-empty" role="status" aria-live="polite"></p>
+          </details>
           <details class="memory-queue" id="cognitive-advanced">
             <summary>Расширенные инструменты Cognitive Soul 1–4 <span class="muted">ручные эксперименты и прежние настройки</span></summary>
           <details class="memory-queue" id="cognitive-tools">

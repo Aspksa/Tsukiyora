@@ -46,6 +46,7 @@ from cognitive_next import CognitiveNext
 from self_improvement import SelfImprovement
 from cognitive_evolution import CognitiveEvolution
 from unified_cognitive import UnifiedCognitiveCore
+from skill_forge import SkillForge
 
 
 class CognitiveCore:
@@ -85,6 +86,7 @@ class CognitiveCore:
         self.improvement = SelfImprovement(path)
         self.evolution4 = CognitiveEvolution(path)
         self.orchestrator = UnifiedCognitiveCore(path)
+        self.forge = SkillForge(path)
         self.chat_priority = None
 
     def connect(self):
@@ -137,6 +139,7 @@ class CognitiveCore:
         self.improvement.initialize()
         self.evolution4.initialize()
         self.orchestrator.initialize()
+        self.forge.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -163,12 +166,14 @@ class CognitiveCore:
         evolution = self.evolution.record(message_id, helpful)
         improvement = self.improvement.feedback(message_id, helpful)
         evolved = self.evolution4.feedback(message_id, helpful)
+        forge_result = self.forge.feedback(message_id, helpful)
         evolution4_drafts = self.evolution4.observe()
         hypothesis = self.improvement.observe()
         return {"message_id": message_id, "helpful": helpful, "category": category,
                 "skill_candidate": skill, "strategy_trial": evolution,
                 "self_improvement": improvement, "new_hypothesis": hypothesis,
                 "evolution4_feedback": evolved,
+                "skill_forge": forge_result,
                 "evolution4_drafts": evolution4_drafts,
                 "suspended_styles":rollback.get("suspended",[]),
                 "curriculum_review_required": len(curriculum.get("regressions",[])),
@@ -293,6 +298,7 @@ class CognitiveCore:
                 "self_improvement": self.improvement.report(),
                 "evolution4": self.evolution4.report(),
                 "unified_cognitive": self.orchestrator.status(self.scheduler),
+                "skill_forge": self.forge.status(),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

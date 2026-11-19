@@ -283,6 +283,10 @@ class Maintenance:
                 result = core.memory11.audit_once(core)
             elif kind == "cog12_reflect":
                 result = core.inner12.cycle(core)
+                logic = core.grey14.cycle(core)
+                result["grey14_checked"] = logic["tested"]
+                result["grey14_passed"] = logic.get("passed",0)
+                result["grey14_paused"] = bool(logic.get("paused",False))
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

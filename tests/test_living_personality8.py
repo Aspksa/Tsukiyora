@@ -233,7 +233,8 @@ class LivingPersonalityHttpTests(unittest.TestCase):
     def test_http_level_and_permission_guards_and_intentions(self):
         for path in ("/api/soul/living8","/api/soul/living8/agenda",
                      "/api/soul/living8/proposals","/api/soul/living8/journal",
-                     "/api/soul/living8/diary"):
+                     "/api/soul/living8/diary",
+                     "/api/soul/living8/research"):
             self.assertIsInstance(self.get(path),dict)
         self.assertEqual(self.get("/api/soul/living8")["autonomy_level"],3)
         with self.assertRaises(HTTPError) as error:

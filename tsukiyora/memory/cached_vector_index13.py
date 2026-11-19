@@ -66,7 +66,8 @@ class CachedVectorIndex13:
                     ON memory13_vector_buckets(model,signature,memory_id);
                 CREATE TABLE IF NOT EXISTS memory13_vector_cursor(
                     id INTEGER PRIMARY KEY CHECK(id=1),
-                    last_memory_id INTEGER NOT NULL DEFAULT 0
+                    last_memory_id INTEGER NOT NULL DEFAULT 0,
+                    last_model TEXT NOT NULL DEFAULT ''
                 );
                 INSERT OR IGNORE INTO memory13_vector_cursor(id,last_memory_id)
                     VALUES(1,0);
@@ -79,8 +80,9 @@ class CachedVectorIndex13:
             db.execute("BEGIN IMMEDIATE")
             try:
                 cursor = db.execute(
-                    "SELECT last_memory_id FROM memory13_vector_cursor WHERE id=1"
-                ).fetchone()[0]
+                    "SELECT last_memory_id,last_model "
+                    "FROM memory13_vector_cursor WHERE id=1"
+                ).fetchone()
                 rows = db.execute(
                     "SELECT e.memory_id,e.model,e.text_sha256,"
                     "m.content,c.dimension,c.vector "
@@ -88,8 +90,10 @@ class CachedVectorIndex13:
                     "JOIN memory_items m ON m.id=e.memory_id "
                     "JOIN embedding_cache c ON c.model=e.model "
                     "AND c.text_sha256=e.text_sha256 "
-                    "WHERE e.memory_id>? ORDER BY e.memory_id,e.model LIMIT ?",
-                    (cursor,limit)
+                    "WHERE e.memory_id>? OR (e.memory_id=? AND e.model>?) "
+                    "ORDER BY e.memory_id,e.model LIMIT ?",
+                    (cursor["last_memory_id"],cursor["last_memory_id"],
+                     cursor["last_model"],limit)
                 ).fetchall()
                 made = stale = 0
                 for row in rows:
@@ -113,27 +117,22 @@ class CachedVectorIndex13:
                          row["text_sha256"],bucket)
                     )
                     made += 1
-                # When multiple models share a memory_id, the safe cursor
-                # must not advance past a partially processed memory.
+                # Composite cursor cannot skip models when a batch ends
+                # in the middle of several embeddings for one memory ID.
                 if rows:
-                    last = rows[-1]["memory_id"]
-                    tail = db.execute(
-                        "SELECT COUNT(*) FROM memory_embeddings "
-                        "WHERE memory_id=?",(last,)
-                    ).fetchone()[0]
-                    seen_tail = sum(x["memory_id"]==last for x in rows)
-                    advance = last if seen_tail >= tail else last - 1
+                    last = rows[-1]
                     db.execute(
-                        "UPDATE memory13_vector_cursor SET last_memory_id=? "
-                        "WHERE id=1", (max(0,advance),)
+                        "UPDATE memory13_vector_cursor SET "
+                        "last_memory_id=?,last_model=? WHERE id=1",
+                        (last["memory_id"],last["model"])
                     )
                 completed = len(rows)<limit
                 if completed:
                     # Cycling lets re-embedded older memories refresh later;
                     # previous SHA is rechecked again at query time.
                     db.execute(
-                        "UPDATE memory13_vector_cursor SET last_memory_id=0 "
-                        "WHERE id=1"
+                        "UPDATE memory13_vector_cursor SET "
+                        "last_memory_id=0,last_model=\'\' WHERE id=1"
                     )
                 db.commit()
             except Exception:

@@ -1724,6 +1724,105 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// GREY MATTER 14: explicit user cases, bounded symbolic logic, not LLM training.
+function grey14Payload(){
+  const facts=JSON.parse($("grey14-facts").value);
+  const rules=JSON.parse($("grey14-rules").value);
+  const target=$("grey14-target").value.trim();
+  return {facts,rules,target,expected:$("grey14-expected").value};
+}
+async function refreshGrey14(){
+  if(!$("grey14").open)return;
+  try{
+    const [status,cases]=await Promise.all([
+      requestJSON("/api/soul/grey14"),
+      requestJSON("/api/soul/grey14/cases")
+    ]);
+    $("grey14-status").textContent=
+      "Проверенных логических примеров: "+status.evaluated_cases+
+      " из "+status.symbolic_cases+
+      " · совпало с эталонами: "+status.passing_cases+
+      " · действующих A/B-испытаний: "+status.active_prompt_trials+
+      " · готово к ручному рассмотрению: "+status.prompt_trials_waiting_review+
+      " · платных фоновых запросов: "+status.additional_paid_calls+".";
+    const panel=$("grey14-results");panel.replaceChildren();
+    addCognitiveLine(panel,"Единый механизм: логика без модели + прежние "+
+      "CognitiveEvolution / ReflectiveOptimization / V7. Существующая очередь SQLite.");
+    addCognitiveLine(panel,"Кандидатов CognitiveEvolution, ожидающих проверки: "+
+      status.evolution4_candidates_proposed+
+      ". Автоодобрение стратегий и изменение личности запрещены.");
+    if(status.last_background_day)
+      addCognitiveLine(panel,"Последняя фоновая проверка: "+
+        status.last_background_day.source_ref+" UTC.");
+    for(const item of cases.items.slice(0,12))
+      addCognitiveLine(panel,
+        "Тест #"+item.id+" · цель "+item.target+
+        " · ожидается: "+item.expected+
+        " · проверено: "+(item.passed===null?"нет":item.passed?"совпало":"ошибка")+
+        " · источник: "+(item.source_current?"актуален":"изменился или удалён"));
+    if(!cases.items.length)
+      addCognitiveLine(panel,"Нет пользовательских эталонов. Добавь пример ниже.");
+  }catch(error){
+    $("grey14-status").textContent="Ошибка GREY MATTER: "+error.message;
+  }
+}
+$("grey14").addEventListener("toggle",refreshGrey14);
+$("grey14-refresh").addEventListener("click",refreshGrey14);
+$("grey14-preview").addEventListener("click",async()=>{
+  try{
+    const result=await requestJSON("/api/soul/grey14/preview","POST",grey14Payload());
+    $("grey14-example-result").textContent=
+      "Вывод: "+result.conclusion+
+      " · правило положительного вывода: "+(result.support.positive||"нет")+
+      " · правило отрицательного вывода: "+(result.support.negative||"нет")+
+      " · шагов: "+result.iterations+
+      ". Это формальная логика, не проверка реальных фактов.";
+  }catch(error){
+    $("grey14-example-result").textContent="Ошибка примера: "+error.message;
+  }
+});
+$("grey14-save").addEventListener("click",async()=>{
+  try{
+    const data=grey14Payload();
+    const input=$("grey14-memory-source").value.trim();
+    if(input){
+      const id=Number(input);
+      if(!Number.isSafeInteger(id)||id<=0)
+        throw new Error("Неверный ID источника.");
+      data.source_memory_id=id;
+    }
+    if(!window.confirm("Сохранить этот пример как утверждённый тобой эталон? "+
+      "Это не обучает нейросеть и не меняет исходную память."))return;
+    const result=await requestJSON("/api/soul/grey14/case","POST",
+      {...data,confirmed:true});
+    $("grey14-example-result").textContent=
+      "Эталон #"+result.case_id+" сохранён с твоим подтверждением.";
+    await refreshGrey14();
+  }catch(error){
+    $("grey14-example-result").textContent="Ошибка сохранения: "+error.message;
+  }
+});
+$("grey14-benchmark").addEventListener("click",async()=>{
+  if(!window.confirm("Проверить сохранённые эталоны локально? "+
+    "Дополнительных запросов Cloud.ru не будет."))return;
+  try{
+    const result=await requestJSON("/api/soul/grey14/benchmark","POST",
+      {confirmed:true,limit:20});
+    $("grey14-status").textContent=result.status==="deferred"
+      ?"Проверка отложена, пока идёт чат."
+      :"Проверено: "+result.tested+
+        " · совпало: "+result.passed+
+        " · исключено из-за изменения источника: "+result.skipped_stale+
+        " · точность символических примеров: "+
+        (result.accuracy_on_user_attested_cases===null
+          ?"нет данных":result.accuracy_on_user_attested_cases)+
+        ". Это НЕ оценка интеллекта облачной LLM.";
+    await refreshGrey14();
+  }catch(error){
+    $("grey14-status").textContent="Ошибка проверки: "+error.message;
+  }
+});
+
 // Tsukiyora 13.0: one read-only view and explicit opt-in metadata actions.
 async function refreshCoordinator13(){
   if(!$("coordinator13").open)return;

@@ -135,9 +135,10 @@ class CloudSession:
             except LimitReached as exc:
                 raise CloudError(str(exc), 429) from None
 
-    def status(self) -> dict:
+    def status(self, *, include_models: bool = False) -> dict:
         with self._lock:
-            return {"provider": "cloud.ru", "configured": bool(self._key),
+            return {**({"models": list(self._models)} if include_models else {}),
+                    "provider": "cloud.ru", "configured": bool(self._key),
                     "verified": self._verified, "model": self._model,
                     "embedding_model": self._embedding_model,
                     "vector_chat_enabled": self._vector_chat_enabled,

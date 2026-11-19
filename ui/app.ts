@@ -70,7 +70,35 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+let recallSignal = null;
 function paint() {
+  paintGraph();
+  if (!recallSignal) return;
+  const t = (performance.now() - recallSignal.started) / 1150;
+  if (t >= 1) {
+    recallSignal = null;
+    return;
+  }
+  const cx = width / 2 + graphPanX, cy = height * .48 + graphPanY;
+  const nodes = atlasView.active ? atlasView.shapes.filter(shape => shape.type === "memory") : graphPositions;
+  ctx.save();
+  ctx.strokeStyle = "rgba(107,231,216,.48)";
+  ctx.fillStyle = "#a8fff0";
+  for (const id of recallSignal.ids) {
+    const node = atlasView.active ? nodes.find(shape => shape.id === id) : nodes.get(id);
+    if (!node) continue;
+    ctx.beginPath();
+    ctx.moveTo(node.x, node.y);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(node.x + (cx - node.x) * t, node.y + (cy - node.y) * t, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function paintGraph() {
   if (atlasView.active) {
     atlasView.draw(width,height,graphScale,graphPanX,graphPanY,reducedMotion);
     return;
@@ -237,7 +265,10 @@ async function refreshBrain() {
     if (graphLoaded) {
       const previous = new Set(brainGraph.nodes.map(node => node.id));
       graphFreshIds = new Set(data.nodes.filter(node => !previous.has(node.id)).map(node => node.id));
-      if (graphFreshIds.size) graphPulseAt = performance.now();
+      if (graphFreshIds.size) {
+        graphPulseAt = performance.now();
+        showBrainActivity("Карта памяти обновлена");
+      }
     }
     graphLoaded = true;
     brainGraph = data;
@@ -539,18 +570,34 @@ function setCloudReady(ready, model = "") {
   $("cloud-diagnose").disabled = !cloudReady;
 }
 
+function fillModelSelect(id, names, selected, placeholder) {
+  const select = $(id);
+  select.replaceChildren(...names.map(name => new Option(name, name)));
+  if (!names.length) select.add(new Option(placeholder, ""));
+  if (names.includes(selected)) select.value = selected;
+  select.disabled = !names.length;
+}
+
+function applyCloudStatus(status) {
+  const names = status.models || [];
+  const embedding = names.filter(name => /embed|bge-/i.test(name));
+  const chat = names.filter(name => !embedding.includes(name));
+  fillModelSelect("cloud-model", chat, status.model, "Нет доступных моделей чата");
+  fillModelSelect("embedding-model", embedding, status.embedding_model, "Нет моделей эмбеддингов");
+  $("cloud-select").disabled = !chat.length;
+  $("embedding-select").disabled = !embedding.length;
+  $("embedding-index").disabled = !embedding.includes(status.embedding_model);
+  $("embedding-auto").checked = Boolean(status.vector_chat_enabled);
+  $("embedding-auto").disabled = !status.verified || !status.embedding_model;
+  setCloudReady(status.configured && status.verified && status.model, status.model);
+  $("cloud-connect").textContent = status.configured ? "Обновить список моделей" : "Подключить и загрузить модели";
+}
+
 async function refreshCloudStatus() {
   try {
     const status = await requestJSON("/api/cloud/status");
-    setCloudReady(status.configured && status.verified && status.model, status.model);
-    $("embedding-auto").checked = Boolean(status.vector_chat_enabled);
-    $("embedding-auto").disabled = !(status.configured && status.verified && status.embedding_model);
-    $("cloud-connect").textContent = status.configured ? "Обновить список моделей" : "Подключить и загрузить модели";
-    if (status.model) {
-      cloudMessage(status.configured
-        ? "Выбрана модель " + status.model + ". Ключ действует только до закрытия сервера."
-        : "Модель сохранена. Вставь ключ Cloud.ru для нового сеанса.");
-    }
+    applyCloudStatus(status);
+    if (status.verified && status.model) cloudMessage("Выбрана модель " + status.model + ".");
   } catch (error) {
     setCloudReady(false);
     cloudMessage(error.message);
@@ -559,49 +606,29 @@ async function refreshCloudStatus() {
 
 $("cloud-connect").addEventListener("click", async () => {
   const button = $("cloud-connect");
+  const input = $("cloud-key");
   button.disabled = true;
+  input.disabled = true;
+  applyCloudStatus({});
+  cloudMessage("Запрашиваю список моделей у Cloud.ru…");
   try {
-    const key = $("cloud-key").value.trim();
+    const key = input.value.trim();
     if (key) {
       await requestJSON("/api/cloud/key", "POST", {api_key: key});
-      $("cloud-key").value = "";
+      input.value = "";
     }
     const result = await requestJSON("/api/cloud/models");
-    const previous = await requestJSON("/api/cloud/status");
-    const select = $("cloud-model");
-    select.replaceChildren();
-    for (const name of result.models) {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      select.append(option);
-    }
-    select.disabled = result.models.length === 0;
-    $("cloud-select").disabled = result.models.length === 0;
-    if (result.models.includes(previous.model)) select.value = previous.model;
-    const vectorSelect = $("embedding-model");
-    vectorSelect.replaceChildren();
-    for (const model of result.models.filter(x => /embed|bge-/i.test(x))) {
-      const option = document.createElement("option");
-      option.value = model;
-      option.textContent = model;
-      vectorSelect.append(option);
-    }
-    vectorSelect.disabled = vectorSelect.options.length === 0;
-    $("embedding-select").disabled = vectorSelect.disabled;
-    if (result.models.includes(previous.embedding_model)) {
-      vectorSelect.value = previous.embedding_model;
-      $("embedding-index").disabled = false;
-    }
-    cloudMessage(result.models.length
-      ? "Моделей найдено: " + result.models.length + ". Выбери модель и нажми «Использовать»."
-      : "Cloud.ru не вернул доступных моделей для этого ключа.");
-    await refreshCloudStatus();
+    const status = await requestJSON("/api/cloud/status");
+    applyCloudStatus({...status, models: result.models});
+    cloudMessage($("cloud-model").disabled
+      ? "Ключ принят. В каталоге нет доступных моделей для диалога."
+      : "Ключ принят. Выбери модель и нажми «Использовать модель».");
+    if (!$("cloud-model").disabled) $("cloud-model").focus();
   } catch (error) {
-    setCloudReady(false);
     cloudMessage(error.message);
   } finally {
     button.disabled = false;
+    input.disabled = false;
   }
 });
 
@@ -941,6 +968,32 @@ function autoScrollChat() {
   }
 }
 
+let activityTimer;
+function showBrainActivity(text) {
+  const status = $("brain-activity");
+  clearTimeout(activityTimer);
+  status.textContent = text;
+  activityTimer = setTimeout(() => { status.textContent = ""; }, 5000);
+}
+
+// The moving signal carries no message content. Coordinates follow the
+// current layout and graph pan, including the stacked mobile layout.
+function animateChatSignal(returning) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = canvas.getBoundingClientRect();
+  const composer = $("message").getBoundingClientRect();
+  const core = [box.left + box.width / 2 + graphPanX, box.top + box.height * .48 + graphPanY];
+  const chat = [composer.left + composer.width / 2, composer.top + composer.height / 2];
+  const points = returning ? [core, chat] : [chat, core];
+  const signal = document.createElement("i");
+  signal.className = "chat-signal";
+  signal.setAttribute("aria-hidden", "true");
+  document.body.append(signal);
+  const frames = points.map(([x, y]) => ({ transform: "translate(" + x + "px," + y + "px)" }));
+  const animation = signal.animate(frames, {duration: 820, easing: "ease-in-out"});
+  animation.onfinish = animation.oncancel = () => signal.remove();
+}
+
 async function sendMessage() {
   if (!cloudReady || chatBusy) return;
   const content = $("message").value.trim();
@@ -959,6 +1012,8 @@ async function sendMessage() {
     $("conversation").replaceChildren();
     $("conversation").classList.add("has-messages");
   }
+  showBrainActivity("Отправка сообщения");
+  animateChatSignal(false);
   addChatBubble("user", content);
   const placeholder = addChatBubble("assistant", "");
   const body = placeholder.querySelector("p");
@@ -981,16 +1036,27 @@ async function sendMessage() {
     }
     await parseEventStream(response, (event, data) => {
       if (event === "start") {
+        showBrainActivity("Ожидание ответа");
         activeStreamId = data.stream_id;
         activeSession = data.conversation_id;
         $("stop-message").disabled = false;
+      } else if (event === "context") {
+        showBrainActivity("Поиск завершён · записей для ответа: " + data.memory_count);
+        if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          recallSignal = {started: performance.now(), ids: data.memory_ids || []};
+        }
       } else if (event === "token") {
-        if (!received) body.textContent = "";
+        if (!received) {
+          body.textContent = "";
+          showBrainActivity("Приходит ответ");
+          animateChatSignal(true);
+        }
         received = true;
         body.textContent += data.text || "";
         autoScrollChat();
       } else if (event === "done") {
         complete = true;
+        showBrainActivity(data.pending ? "Воспоминания ждут подтверждения" : "Диалог сохранён");
         attachFeedback(placeholder, data.message_id);
         pendingClientId = "";
         currentPrompt = "";
@@ -1000,6 +1066,7 @@ async function sendMessage() {
         if (data.pending) $("chat-notice").textContent += " Новые воспоминания ждут подтверждения: " + data.pending;
       } else if (event === "stopped") {
         stopped = true;
+        showBrainActivity("Ответ остановлен");
         body.textContent += "\n[Ответ остановлен. Неполный текст не сохранён.]";
         pendingClientId = "";
         currentPrompt = "";
@@ -1017,6 +1084,7 @@ async function sendMessage() {
     await refreshForgeChatUI();
   } catch (error) {
     $("message").value = content;
+    showBrainActivity("Ошибка запроса");
     if (!received) placeholder.remove();
     $("chat-notice").textContent = "Ошибка: " + error.message + ". Можно повторить сообщение.";
   } finally {

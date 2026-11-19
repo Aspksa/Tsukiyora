@@ -552,7 +552,7 @@ class SoulHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/cloud/"):
             try:
                 if path == "/api/cloud/status":
-                    return self.send_json(self.server.cloud.status())
+                    return self.send_json(self.server.cloud.status(include_models=True))
                 if path == "/api/cloud/models":
                     return self.send_json({"models": self.server.cloud.models()})
                 return self.send_json({"error": "Unknown cloud endpoint."}, 404)

@@ -167,6 +167,8 @@ class CloudApiTests(unittest.TestCase):
             self.assertEqual([x["role"] for x in history["messages"]], ["user", "assistant"])
             self.assertEqual(MemoryStore(self.path).stats()["messages"], 2)
             _, public_status = self.request("/api/cloud/status")
+            self.assertEqual(public_status["models"], catalog["models"])
+            self.assertEqual(public_status["model"], "test/model-1")
             self.assertNotIn("super-secret", json.dumps(public_status))
             self.assertNotIn("super-secret", (self.path.parent / "cloudru_preferences.json").read_text(encoding="utf-8"))
             payload = remote.call_args_list[-1].args[3]

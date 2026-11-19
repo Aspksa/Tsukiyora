@@ -109,6 +109,10 @@ def handle_stream(handler, obj: dict):
             raise ValueError("Локальный поиск вернул неполный результат.")
         memories = search["memories"][:8]
         cited_documents = search["documents"][:3]
+        send_event(handler, "context", {
+            "memory_ids": [item["id"] for item in memories if isinstance(item.get("id"), int)],
+            "memory_count": len(memories),
+        })
         prompt = persona_prompt(handler.server.persona, memories)
         # V10 uses the SAME bounded, locally sourced dialogue composer
         # as the ordinary chat endpoint, avoiding duplicated V9 guidance.

@@ -50,6 +50,8 @@ from tsukiyora.cognition.skill_forge import SkillForge
 from tsukiyora.cognition.cognitive_supervisor7 import CognitiveSupervisor7
 from tsukiyora.personality.living_personality8 import LivingPersonality8
 from tsukiyora.personality.living_dialogue9 import LivingDialogue9
+from tsukiyora.personality.topic_recall import TopicRecall
+from tsukiyora.cognition.growth_quality import GrowthQuality
 
 
 class CognitiveCore:
@@ -93,6 +95,8 @@ class CognitiveCore:
         self.supervisor7 = CognitiveSupervisor7(path)
         self.living8 = LivingPersonality8(path)
         self.dialogue9 = LivingDialogue9(path)
+        self.topic_recall = TopicRecall(path)
+        self.growth_quality = GrowthQuality(path)
         self.chat_priority = None
 
     def connect(self):

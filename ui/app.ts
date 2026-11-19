@@ -1724,6 +1724,43 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Unified read-only view of EXISTING quality evidence (no new Cloud.ru calls).
+async function refreshGrowthQuality(){
+  if(!$("growth-quality").open)return;
+  try{
+    const report=await requestJSON("/api/soul/growth-quality");
+    const f=report.ratings,g=report.growth;
+    $("growth-quality-state").textContent=
+      "Диалогов: "+report.conversation.dialogues+
+      " · сообщений: "+report.conversation.messages+
+      " · подтверждённых и рабочих записей памяти: "+report.memory.active+
+      " · оценки ответов: "+f.positive+" положительных, "+f.negative+" отрицательных"+
+      " · локальных целей: "+g.goals+
+      " · ждут решения: "+g.pending_review+
+      " · ошибки очереди: "+g.queue_warnings+".";
+    const target=$("growth-quality-skills");target.replaceChildren();
+    addCognitiveLine(target,"Навыки: реальный пользовательский отзыв ≠ контрольное сравнение ≠ доказательство причинного улучшения");
+    if(!report.skills.length){
+      addCognitiveLine(target,"Навыки ещё не зарегистрированы.");
+    }
+    for(const skill of report.skills){
+      const pct=skill.observed_positive_share===null?"оценок пока нет":
+        Math.round(skill.observed_positive_share*100)+"% положительных";
+      addCognitiveLine(target,"Навык #"+skill.skill_id+" · "+skill.domain+
+        " · "+skill.state+" · реальных оценок: "+skill.real_answer_ratings+
+        " ("+pct+") · контрольных пар: "+skill.attested_cases+
+        " · прирост по ручным эталонам: "+skill.attested_gain+
+        " · регрессии: "+skill.attested_regressions+
+        (skill.real_answer_ratings<5?" · недостаточно отзывов для устойчивого сигнала":"")+
+        " · независимое улучшение модели не доказано");
+    }
+  }catch(error){
+    $("growth-quality-state").textContent="Не удалось получить результаты: "+error.message;
+  }
+}
+$("growth-quality").addEventListener("toggle",refreshGrowthQuality);
+$("growth-quality-refresh").addEventListener("click",refreshGrowthQuality);
+
 // Living Personality 8.0: bounded local autonomy with explicit user choices.
 let pendingLiving8=null;
 let living8Busy=false;
@@ -1956,7 +1993,13 @@ async function refreshDialogue9Initiative(){
       pendingDialogue9Goal=null;
       return;
     }
-    const state=await requestJSON("/api/soul/dialogue9/initiative");
+    if(chatBusy||!activeSession){
+      pendingDialogue9Goal=null;
+      $("dialogue9-initiative").hidden=true;
+      return;
+    }
+    const state=await requestJSON("/api/soul/dialogue9/initiative?"+
+      new URLSearchParams({conversation_id:activeSession}));
     pendingDialogue9Goal=state.item||null;
     $("dialogue9-initiative").hidden=!pendingDialogue9Goal;
     if(pendingDialogue9Goal){

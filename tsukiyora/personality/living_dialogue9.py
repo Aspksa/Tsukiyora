@@ -173,31 +173,74 @@ class LivingDialogue9:
                                  for x in rows],
                 "not_fabricated":True,"cloud_calls":0}
 
-    def initiative(self,core):
-        """Suggest an existing, unfinished LOCAL goal; no unsolicited chat API call."""
+    def initiative(self, core, conversation_id=None):
+        """Offer one relevant unfinished goal, never a model-generated message.
+
+        When a chat is selected, only an active recent topic can trigger it.
+        The original no-context API remains for local diagnostics and tests.
+        """
         state=core.living8.settings()
         rights=state["local_permissions"]
         if state["autonomy_level"]<3 or not rights.get("proactive_chat"):
             return {"item":None,"reason":"autonomy_off","cloud_calls":0}
+        if conversation_id is not None and (
+            not isinstance(conversation_id,str) or not 1<=len(conversation_id)<=64):
+            raise ValueError("Invalid conversation id.")
         now=datetime.now(timezone.utc).isoformat()
+        topics={
+            "academy":("учеб","обуч","ошиб","академ","практик"),
+            "skill":("навык","тест","провер","код","skill"),
+            "memory":("памят","вспом","факт","истори"),
+            "curiosity":("вопрос","исслед","узна","любопыт"),
+            "documents":("документ","договор","файл","источник"),
+            "daily":("развит","прогресс","дневник","цель","план"),
+        }
+        allowed=None
         with closing(self.store.connect()) as db:
-            row=db.execute(
+            if conversation_id is not None:
+                latest=db.execute(
+                    "SELECT content,created_at FROM messages WHERE conversation_id=? "
+                    "AND role='user' ORDER BY id DESC LIMIT 1",
+                    (conversation_id,)
+                ).fetchone()
+                if not latest:
+                    return {"item":None,"reason":"no_recent_topic","cloud_calls":0}
+                age_limit=(datetime.now(timezone.utc)-timedelta(days=7)).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                if latest["created_at"]<age_limit:
+                    return {"item":None,"reason":"chat_inactive","cloud_calls":0}
+                text=latest["content"].casefold()
+                allowed={key for key,words in topics.items()
+                         if any(word in text for word in words)}
+                if not allowed:
+                    return {"item":None,"reason":"not_relevant_to_chat","cloud_calls":0}
+            # A V8 action card already occupies the same surface.
+            if db.execute(
+                "SELECT 1 FROM soul8_proposals WHERE state='pending' LIMIT 1"
+            ).fetchone():
+                return {"item":None,"reason":"v8_proposal_already_pending","cloud_calls":0}
+            options=db.execute(
                 "SELECT g.id,g.category,g.progress,g.state,g.updated_at "
                 "FROM soul8_goals g "
                 "LEFT JOIN dialogue9_snooze s ON s.goal_id=g.id "
                 "AND s.progress=g.progress "
                 "WHERE g.state='active' AND g.progress>=1 "
                 "AND (s.until_utc IS NULL OR s.until_utc<=?) "
-                "ORDER BY g.updated_at DESC,g.id DESC LIMIT 1",
+                "ORDER BY g.progress DESC,g.updated_at DESC,g.id DESC LIMIT 20",
                 (now,)
-            ).fetchone()
-        if not row:
-            return {"item":None,"reason":"no_eligible_goal","cloud_calls":0}
+            ).fetchall()
+        row=next((r for r in options if allowed is None or
+                  r["category"] in allowed),None)
+        if row is None:
+            return {"item":None,"reason":"no_relevant_unfinished_goal","cloud_calls":0}
         return {"item":{"goal_id":row["id"],"progress":row["progress"],
                         "label":"Хозяин, можем продолжить "
                         +CATEGORY_LABELS.get(row["category"],"локальную задачу")
                         +". Проверено шагов: "+str(row["progress"])+"/3.",
-                        "source":"soul8_goals"},
+                        "source":"soul8_goals","category":row["category"],
+                        "relevance":"recent_chat_topic" if allowed is not None
+                        else "existing_local_goal"},
                 "requires_user_action":True,"cloud_calls":0,
                 "not_model_generated":True}
 

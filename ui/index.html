@@ -284,6 +284,15 @@
             <div id="living8-chronicle" class="memory-results"></div>
             <p id="living8-message" class="memory-empty" role="status" aria-live="polite"></p>
           </details>
+          <details class="memory-queue" id="growth-quality">
+            <summary>Результаты развития <span class="muted">реальные оценки и контрольные задания</span></summary>
+            <p class="memory-empty">Показатели читаются из существующей SQLite. Отзывы о реальных ответах и ручные сравнения по эталонам разделены. Ручное сравнение не доказывает улучшение модели.</p>
+            <div class="memory-actions">
+              <button type="button" id="growth-quality-refresh" class="quiet-button">Обновить результаты</button>
+            </div>
+            <p id="growth-quality-state" class="memory-empty" role="status">Открой раздел для чтения результатов.</p>
+            <div id="growth-quality-skills" class="memory-results"></div>
+          </details>
           <details class="memory-queue" id="cognitive-v7">
             <summary>Cognitive Soul 7.0 <span class="muted">единый центр развития и доказательных проверок</span></summary>
             <p class="memory-empty">Объединяет прежние источники навыков без копирования памяти, с одной существующей SQLite-очередью. Новые навыки можно одобрить только после 8 уникальных парных контрольных примеров, улучшения минимум на 2 ответа и без регрессий. Сравнения вручную подтверждаются пользователем; это не автоматический тест реальной LLM.</p>

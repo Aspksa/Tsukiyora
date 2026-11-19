@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#07080b">
+  <meta name="theme-color" content="#101014">
   <title>Цукиёра — SOUL CORE</title>
   <link rel="stylesheet" href="/ui/style.css">
   <script type="module" src="/ui/app.ts"></script>
@@ -11,29 +11,38 @@
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="identity"><span class="identity-mark" aria-hidden="true">✦</span><span>TSUKIYORA</span></div>
+      <div class="identity">
+        <span class="identity-mark" aria-hidden="true"></span>
+        <span>Tsukiyora</span>
+      </div>
       <div class="top-actions">
         <span class="status" id="status" role="status">Запуск…</span>
-        <button id="settings-open" class="icon-button" aria-label="Сведения и настройки" title="Сведения и настройки">
+        <button id="settings-open" class="icon-button settings-button" type="button" aria-label="Настройки">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="4"/></svg>
+          <span>Настройки</span>
         </button>
       </div>
     </header>
 
     <main class="stage">
       <section class="soul-panel" aria-label="Ядро личности Цукиёры">
+        <div class="soul-orbit" aria-hidden="true"><span></span></div>
         <canvas id="soul-canvas" tabindex="0" aria-label="Интерактивная карта памяти. Стрелки перемещают, плюс и минус масштабируют, Home сбрасывает вид. Мышью: колесо и перетаскивание."></canvas>
         <div class="soul-title">
-          <span class="soul-kicker">SOUL CORE · 01</span>
           <h1 id="persona-name">Цукиёра</h1>
           <p id="persona-subtitle">Локальная личность</p>
         </div>
-        <div class="soul-footnote"><span class="signal"></span><span id="soul-live-state">Ядро личности · локально</span><span id="soul-zoom-note" class="muted">· масштаб мышью</span><span id="brain-fps" class="muted" aria-live="off"></span></div>
+        <div class="soul-footer">
+          <span class="soul-footer-title">Карта памяти</span>
+          <span id="soul-live-state">Ядро личности работает локально</span>
+          <span id="soul-zoom-note" class="muted">Колесо мыши меняет масштаб</span>
+          <span id="brain-fps" class="muted" aria-live="off"></span>
+        </div>
       </section>
 
       <section class="chat-panel" aria-label="Чат Цукиёры">
         <div class="chat-heading">
-          <span>ДИАЛОГ</span>
+          <h2>Диалог</h2>
           <div class="chat-controls">
             <button id="forge-chat-toggle" type="button" class="quiet-button" aria-pressed="false" title="Автообучение Skill Forge через Cloud.ru, до одного платного запроса в сутки">Навыки · выкл</button>
             <label class="sr-only" for="chat-sessions">История диалогов</label>
@@ -43,7 +52,7 @@
           </div>
         </div>
         <details id="dialogue-memory" class="chat-memory">
-          <summary>История · поиск и сводка <span class="muted">локально</span></summary>
+          <summary>Поиск и сводка диалогов</summary>
           <div class="memory-actions">
             <label class="sr-only" for="dialogue-query">Поиск по прошлым сообщениям</label>
             <input id="dialogue-query" type="search" maxlength="250" placeholder="Найти в старых диалогах">
@@ -57,13 +66,7 @@
           <p class="memory-empty">Сводка — только выдержки из реальных сообщений со ссылками, без облачной модели.</p>
         </details>
         <p id="dialogue9-resume-note" class="composer-note" hidden></p>
-        <div class="conversation" id="conversation" role="log" aria-live="polite">
-          <div class="greeting">
-            <span class="greeting-mark" aria-hidden="true">✧</span>
-            <p id="welcome">Хозяин, мой характер уже хранится в этой папке. Скоро мы сможем разговаривать.</p>
-            <div class="greeting-detail" id="persona-traits">Загрузка профиля…</div>
-          </div>
-        </div>
+        <div class="conversation" id="conversation" role="log" aria-live="polite"></div>
         <aside class="forge-chat-proposal" id="forge-chat-proposal" hidden aria-label="Новый навык готов к проверке">
           <p class="forge-proposal-kicker">SKILL FORGE · ПРЕДЛОЖЕНИЕ</p>
           <p id="forge-chat-proposal-text" class="forge-chat-proposal-text"></p>
@@ -96,16 +99,27 @@
           <label class="sr-only" for="message">Сообщение</label>
           <textarea id="message" rows="1" maxlength="8000" disabled placeholder="Подключи Cloud.ru в настройках" aria-label="Текст сообщения"></textarea>
           <button class="quiet-button" id="stop-message" type="button" hidden aria-label="Остановить ответ">■</button>
-          <button class="send" id="send-message" type="button" disabled aria-label="Отправить сообщение">↗</button>
+          <button class="send" id="send-message" type="button" disabled aria-label="Отправить сообщение">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
+          </button>
         </div>
-        <p class="composer-note" id="chat-notice">Подключи Cloud.ru через значок настроек. История останется в локальной SQLite.</p>
+        <p class="composer-note" id="chat-notice">История диалогов хранится на этом устройстве.</p>
       </section>
     </main>
   </div>
 
+  <template id="chat-greeting">
+    <div class="greeting">
+      <span class="greeting-mark" aria-hidden="true"></span>
+      <h3>Я здесь, хозяин.</h3>
+      <p class="greeting-detail">Подключи модель Cloud.ru, чтобы начать разговор.</p>
+      <button class="accent-button greeting-connect" type="button">Подключить Cloud.ru</button>
+    </div>
+  </template>
+
   <dialog id="settings-dialog" aria-labelledby="settings-heading">
     <div class="dialog-header">
-      <h2 id="settings-heading">Состояние Цукиёры</h2>
+      <h2 id="settings-heading">Настройки</h2>
       <button class="icon-button" id="settings-close" aria-label="Закрыть">×</button>
     </div>
     <dl class="settings-list">

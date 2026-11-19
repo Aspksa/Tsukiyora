@@ -628,6 +628,74 @@ class SkillForge:
             )]
         return {"items":events,"original_sources_unchanged":True}
 
+    def ready_proposals(self,limit=4):
+        """Shadow-checked drafts for a real action card in chat, not fake LLM speech."""
+        if type(limit) is not int or not 1<=limit<=10:
+            raise ValueError("Неверное число предложений.")
+        with closing(self.store.connect()) as db:
+            rows=[dict(x) for x in db.execute(
+                "SELECT s.id,s.domain,s.origin,s.version,s.parent_id,s.recipe "
+                "FROM forge_skills s WHERE s.state='shadow' "
+                "AND (SELECT COUNT(*) FROM forge_trials t WHERE t.skill_id=s.id)=4 "
+                "AND (SELECT COALESCE(SUM(candidate),0) FROM forge_trials t "
+                "WHERE t.skill_id=s.id)=4 ORDER BY s.id DESC LIMIT ?",(limit,)
+            )]
+            for item in rows:
+                item["steps"]=json.loads(item.pop("recipe"))
+                item["source_count"]=self._metrics(db,item["id"])["positive_sources"]
+        return {"items":rows,"manual_approval_required":True,
+                "check_type":"offline_structure_only",
+                "real_quality_proven":False}
+
+    def auto_status(self):
+        with closing(self.store.connect()) as db:
+            row=db.execute("SELECT enabled FROM forge_auto WHERE id=1").fetchone()
+            budget=db.execute("SELECT state,approved_calls FROM forge_budget WHERE id=1").fetchone()
+            usage=db.execute(
+                "SELECT reserved_calls FROM forge_cloud_usage WHERE day=?",
+                (datetime.now(timezone.utc).strftime("%Y-%m-%d"),)
+            ).fetchone()
+        return {"enabled":bool(row["enabled"]),"max_paid_calls_per_day":1,
+                "used_today":usage["reserved_calls"] if usage else 0,
+                "budget_approved":budget["state"]=="approved"
+                    and budget["approved_calls"]>=1,
+                "price_in_rubles_known":False,
+                "background_paid_calls_if_enabled":True,
+                "auto_activation":False}
+
+    def set_auto(self,enabled,*,confirmed=False,acknowledge_paid=False):
+        """One deliberate switch; turning ON is separate consent for 1 attempt/day.
+
+        The old manual budget API remains for backwards compatibility.
+        OFF cancels all future automatic requests and revokes Forge budget.
+        Already dispatched requests cannot be cancelled retroactively.
+        """
+        if type(enabled) is not bool or confirmed is not True:
+            raise ValueError("Включение самообучения требует явного подтверждения.")
+        if enabled and acknowledge_paid is not True:
+            raise ValueError("Подтверди возможность расходов Cloud.ru: до 1 запроса в сутки.")
+        with closing(self.store.connect()) as db,db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                db.execute("UPDATE forge_auto SET enabled=? WHERE id=1",(int(enabled),))
+                if enabled:
+                    # The toggle itself is the explicit agreement to a
+                    # ONE-attempt/day limit; never reset used attempts.
+                    db.execute(
+                        "UPDATE forge_budget SET requested_calls=1,approved_calls=1,"
+                        "state='approved' WHERE id=1"
+                    )
+                else:
+                    db.execute(
+                        "UPDATE forge_budget SET approved_calls=0,state='revoked' "
+                        "WHERE id=1"
+                    )
+                db.commit()
+            except BaseException:
+                db.rollback()
+                raise
+        return self.auto_status()
+
     def budget_status(self):
         day=datetime.now(timezone.utc).strftime("%Y-%m-%d")
         with closing(self.store.connect()) as db:
@@ -642,7 +710,7 @@ class SkillForge:
         return {**dict(row),"today_reserved":spent["reserved_calls"] if spent else 0,
                 "currency_budget_verified":False,
                 "price_per_request_known":False,
-                "automatic_cloud_calls":False,
+                "automatic_cloud_calls":self.auto_status()["enabled"],
                 "notice":"Платные вызовы блокируются до отдельного согласования. "
                          "Количество запросов не равно денежной стоимости."}
 

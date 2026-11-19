@@ -320,6 +320,25 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path.startswith("/api/soul/living8"):
+            try:
+                soul=self.server.cognition.living8
+                core=self.server.cognition
+                if path=="/api/soul/living8":
+                    return self.send_json(soul.state(core))
+                if path=="/api/soul/living8/agenda":
+                    return self.send_json(soul.agenda())
+                if path=="/api/soul/living8/proposals":
+                    return self.send_json(soul.proposals())
+                if path=="/api/soul/living8/journal":
+                    return self.send_json(soul.journal())
+                if path=="/api/soul/living8/diary":
+                    return self.send_json({"journal":soul.journal(limit=10),
+                                           "continuity":core.continuity.state()["conversations"],
+                                           "autonomy":soul.settings()})
+                return self.send_json({"error":"Unknown Living Soul 8 resource."},404)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path.startswith("/api/soul/cognitive7"):
             try:
                 engine=self.server.cognition.supervisor7
@@ -520,6 +539,26 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path.startswith("/api/soul/living8/"):
+            try:
+                obj=self._read_body()
+                soul=self.server.cognition.living8
+                if path=="/api/soul/living8/control":
+                    result=soul.control(obj.get("level"),
+                                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/living8/permission":
+                    result=soul.permission(
+                        obj.get("scope"),obj.get("enabled"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/living8/decision":
+                    result=soul.decide(
+                        obj.get("proposal_id"),obj.get("approve"),
+                        confirmed=obj.get("confirmed",False))
+                else:
+                    return self.send_json({"error":"Unknown Living Soul 8 action."},404)
+                return self.send_json(result)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path.startswith("/api/soul/cognitive7/"):
             try:
                 obj=self._read_body()

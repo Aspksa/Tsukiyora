@@ -287,9 +287,9 @@ class CoordinatedCognition13Tests(unittest.TestCase):
         self.assertEqual(count,2)
         self.assertEqual(self.core.vector13.status()["cloud_calls"],0)
 
-    def test_schema_v14_upgrades_existing_v13_with_preflight_backup(self):
+    def test_schema_v15_upgrades_existing_v13_with_preflight_backup(self):
         from tsukiyora.memory.migration_guard import SCHEMA_VERSION
-        self.assertEqual(SCHEMA_VERSION,14)
+        self.assertEqual(SCHEMA_VERSION,15)
         kept = self.store.add_memory(
             "fact","История SQLite до обновления схемы")
         with closing(self.store.connect()) as db, db:
@@ -297,7 +297,7 @@ class CoordinatedCognition13Tests(unittest.TestCase):
         launcher.init_database(self.path)
         with closing(self.store.connect()) as db:
             self.assertEqual(db.execute(
-                "PRAGMA user_version").fetchone()[0],14)
+                "PRAGMA user_version").fetchone()[0],15)
             self.assertIsNotNone(db.execute(
                 "SELECT id FROM memory_items WHERE id=?",
                 (kept["id"],)).fetchone())

@@ -260,6 +260,41 @@
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
           </details>
+          <details class="memory-queue" id="grey14">
+            <summary>Tsukiyora 14.0 · GREY MATTER <span class="muted">логика · контрпримеры · развитие</span></summary>
+            <p class="memory-empty">Локальные формальные задачи на рассуждение: доказать, опровергнуть, найти противоречие или честно признать отсутствие данных. Факты и ожидаемый результат задаёт и подтверждает пользователь. Это не чтение скрытых мыслей LLM и не доказательство сознания.</p>
+            <div class="memory-actions">
+              <button id="grey14-refresh" type="button" class="quiet-button">Состояние серого вещества</button>
+              <button id="grey14-benchmark" type="button" class="quiet-button">Проверить подтверждённые задачи</button>
+            </div>
+            <p id="grey14-status" class="memory-empty" role="status" aria-live="polite">Открой раздел для обновления.</p>
+            <div id="grey14-results" class="memory-results"></div>
+            <details class="memory-queue">
+              <summary>Контрольный пример логики <span class="muted">формальные условия</span></summary>
+              <p class="memory-empty">Используй короткие английские обозначения. Например: fact_a, fact_b. `!fact_a` означает отрицание. Правило «если A, то B» задаётся через when и then.</p>
+              <label for="grey14-facts">Исходные утверждения (JSON-массив)</label>
+              <textarea id="grey14-facts" rows="2" maxlength="1500">["a"]</textarea>
+              <label for="grey14-rules">Правила перехода (JSON-массив)</label>
+              <textarea id="grey14-rules" rows="3" maxlength="3500">[{"when":["a"],"then":"b"},{"when":["b"],"then":"c"}]</textarea>
+              <label for="grey14-target">Что проверить</label>
+              <input id="grey14-target" type="text" maxlength="32" value="c"/>
+              <label for="grey14-expected">Твой подтверждённый эталон</label>
+              <select id="grey14-expected">
+                <option value="entailed">Следует из условий</option>
+                <option value="refuted">Опровергается условиями</option>
+                <option value="unknown">Неизвестно</option>
+                <option value="conflict">Есть противоречие</option>
+              </select>
+              <label for="grey14-memory-source">ID подтверждённого воспоминания (необязательно)</label>
+              <input id="grey14-memory-source" type="number" min="1" step="1" placeholder="Ссылка на источник"/>
+              <div class="memory-actions">
+                <button id="grey14-preview" type="button" class="quiet-button">Локально проверить вывод</button>
+                <button id="grey14-save" type="button" class="quiet-button">Сохранить мой эталон</button>
+              </div>
+              <p id="grey14-example-result" class="memory-empty" role="status" aria-live="polite"></p>
+            </details>
+            <p class="memory-empty">Фоновое тестирование переиспользует существующий цикл Inner World 12 и очередь SQLite. Никаких новых фоновых вызовов Cloud.ru; стратегии и характер меняются только через прежние разрешения.</p>
+          </details>
           <details class="memory-queue" id="coordinator13">
             <summary>Tsukiyora 13.0 <span class="muted">единый центр · время фактов · контрольные проверки</span></summary>
             <p class="memory-empty">Это координация уже существующей памяти, учебных задач и рабочих заметок. Никаких автоматических исправлений фактов, принятия навыков, нового «сознания» или фоновых Cloud.ru-вызовов.</p>

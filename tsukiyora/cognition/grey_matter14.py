@@ -134,7 +134,7 @@ class GreyMatter14:
     def create_case(self, facts, rules, target, expected, *,
                     source_memory_id=None, confirmed=False):
         facts, rules, target = _case_payload(facts, rules, target)
-        if expected not in LABELS or confirmed is not True:
+        if not isinstance(expected, str) or expected not in LABELS or confirmed is not True:
             raise ValueError("User confirmation and an expected result are required.")
         if source_memory_id is not None and (
                 type(source_memory_id) is not int or source_memory_id <= 0):
@@ -160,12 +160,14 @@ class GreyMatter14:
                  source_memory_id,source_sha)
             )
             found = db.execute(
-                "SELECT id FROM grey14_cases WHERE facts_json=? "
+                "SELECT id,source_memory_id FROM grey14_cases WHERE facts_json=? "
                 "AND rules_json=? AND target=? AND expected=?",
                 (facts_json,rules_json,target,expected)
             ).fetchone()
             if found is None:
                 raise ValueError("Case could not be persisted.")
+            if found["source_memory_id"] != source_memory_id:
+                raise ValueError("An identical case is already linked to another source.")
             case_id = found["id"]
         return {"case_id":case_id, "expected_user_attested": True,
                 "facts_not_independently_verified": True,
@@ -183,6 +185,10 @@ class GreyMatter14:
             )]
             for row in rows:
                 row["source_current"] = self._current_source(db,row)
+                if not row["source_current"]:
+                    row["passed"] = None
+                    row["conclusion"] = None
+                    row["checked_at"] = None
                 row.pop("source_sha256")
         return {"items": rows, "case_kind":"user_attested_symbolic",
                 "model_accuracy_claimed":False,"cloud_calls":0}

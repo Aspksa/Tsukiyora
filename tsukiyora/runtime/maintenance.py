@@ -57,6 +57,7 @@ JOBS = {
     "cog8_reflect": 3600,
     "cog8_daily": 21600,
     "cog8_health": 3600,
+    "cog8_research": 3600,  # approved local questions, explicitly enabled docs
 }
 MAX_HISTORY_DAYS = 30
 

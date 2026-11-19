@@ -320,6 +320,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/growth-quality":
+            try:
+                return self.send_json(self.server.cognition.growth_quality.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path.startswith("/api/soul/dialogue9"):
             try:
                 dialogue=self.server.cognition.dialogue9
@@ -1166,7 +1172,10 @@ class SoulHandler(BaseHTTPRequestHandler):
             continuity=dialogue.prompt_context(conversation_id,history)
             # Bounded total guidance; NO extra provider call or background cost.
             fixed=dialogue.guidance()
-            prefix=(fixed + continuity)[:1150]
+            topic= self.server.cognition.topic_recall.prompt(
+                content,conversation_id,history)
+            # Keep the existing 1800-character total guidance budget.
+            prefix=(fixed + "\n" + continuity[:420] + "\n" + topic[:680])[:1450]
             remaining=max(0,1800-len(prefix)-2)
             extra=(prefix+"\n"+(earlier+" "+combined)[:remaining]).strip()[:1800]
             answer = cloud.complete(self.server.persona, history, memories,

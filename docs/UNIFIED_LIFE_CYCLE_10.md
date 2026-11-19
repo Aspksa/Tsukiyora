@@ -18,8 +18,8 @@ The old APIs remain valid, and original SQLite tables stay authoritative.
 
 ## Dialogue path
 
-Both \`/api/chat\` and \`/api/chat/stream\` use
-\`core.life10.chat_context(core, message, conversation_id, history)\`.
+Both `/api/chat` and `/api/chat/stream` use
+`core.life10.chat_context(core, message, conversation_id, history)`.
 
 This is an **additional bounded part** of the user-triggered Cloud.ru prompt,
 not a separate Cloud request. The context is assembled locally:
@@ -48,7 +48,7 @@ user, retain their previous permissions and budgets.
 
 ## Automatic safe local audit
 
-\`cog10_audit\` is registered **once** in \`Maintenance.JOBS\` (every 3,600
+`cog10_audit` is registered **once** in `Maintenance.JOBS` (every 3,600
 seconds when it becomes due). It uses the pre-existing single SQLite queue,
 single Python process worker, and chat-priority lock. After restart, the
 same queue recovers the job; there is no extra worker or process.
@@ -61,7 +61,7 @@ is only a reason for the user to inspect existing SOUL ACADEMY tasks, not a
 claim that a skill was trained or improved.
 
 At most **one** metadata-only V10 snapshot per UTC day is entered through
-the established, size-bounded \`soul8_journal\`. The day is identified and
+the established, size-bounded `soul8_journal`. The day is identified and
 deduplicated transactionally. V8 autonomy level **0** suppresses this log.
 No conversation text, passwords, API keys, or document bodies are written
 to the snapshot. All actions are already owned by V5/V7/V8 jobs — 10.0
@@ -74,7 +74,7 @@ new source evidence is not evidence that LLM quality has increased.
 ## Unified local center
 
 Settings → **Tsukiyora 10.0** reads:
-\`GET /api/soul/life10\`.
+`GET /api/soul/life10`.
 
 It displays the five existing source systems, real feedback count, warning
 signals, recent audit, and buttons to **open existing** Academy, V7, V8 or
@@ -90,14 +90,14 @@ TypeScript + HTML5 Canvas + CSS stays in the web UI, Python remains the
 single local API, and SQLite the single local database. Windows BAT,
 file paths with spaces/Cyrillic, Linux and persisted data remain supported.
 
-\`\`\`sh
+```sh
 python -m unittest discover -s tests -v
 python -m compileall -q launcher.py restore_memory.py tsukiyora tests scripts
 python launcher.py --self-test
-\`\`\`
+```
 
 GitHub Actions verifies Python syntax and tests on Windows and Ubuntu,
 frontend JS syntax, Windows BAT smoke mode and the million-record Atlas
 stress check. None of these verifies live Cloud.ru quality/billing or
 browser rendering on the user's own PC. The original
-\`soul/personality.json\` is not modified.
+`soul/personality.json` is not modified.

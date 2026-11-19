@@ -140,7 +140,8 @@ class Supervisor7Tests(unittest.TestCase):
                 "SELECT first_new_forge_id FROM soul_v7_policy WHERE id=1"
             ).fetchone()[0]
         result=self.engine.daily(self.core)
-        self.assertTrue(result["already_recorded"])
+        self.assertFalse(result["already_recorded"])
+        self.assertTrue(self.engine.daily(self.core)["already_recorded"])
         launcher.init_database(self.path)
         recovered=CognitiveCore(self.path)
         with closing(self.store.connect()) as db:

@@ -342,3 +342,18 @@ body{background:radial-gradient(ellipse 42% 55% at 25% 48%,#15100b 0%,#08080a 58
 #forge-auto-toggle{width:100%;font-weight:600}
 @media(max-width:650px){#forge-chat-toggle{font-size:10px;padding:5px}
   .forge-chat-proposal{margin:0 5px 8px}}
+
+/* Living Personality 8.0: same black-gold interface, no new pages. */
+#living8{color:inherit}
+#living8 label{display:block;margin:10px 0 5px;font-size:12px;line-height:1.5;color:#c5ab87}
+#living8 label:has(input[type="checkbox"]){display:flex;gap:9px;align-items:center;cursor:pointer}
+#living8 select{width:100%;min-width:0;box-sizing:border-box;
+  border:1px solid #665034;border-radius:8px;background:#100f10;
+  color:#ebd5b1;padding:9px;font-size:12px}
+#living8 input[type="checkbox"]{accent-color:#ca9b5b;width:16px;height:16px;flex:0 0 auto}
+#living8 .memory-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+#living8-goals,#living8-chronicle{border-top:1px solid #564128;
+  padding-top:8px;margin-top:9px;max-height:340px;overflow:auto}
+#living8-status,#living8-message{line-height:1.6;overflow-wrap:anywhere}
+#living8-chat-proposal{margin-top:6px}
+#living8-chat-proposal .memory-actions{display:flex;gap:6px;flex-wrap:wrap}

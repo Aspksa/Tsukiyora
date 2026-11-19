@@ -48,6 +48,7 @@ from tsukiyora.cognition.cognitive_evolution import CognitiveEvolution
 from tsukiyora.cognition.unified_cognitive import UnifiedCognitiveCore
 from tsukiyora.cognition.skill_forge import SkillForge
 from tsukiyora.cognition.cognitive_supervisor7 import CognitiveSupervisor7
+from tsukiyora.personality.living_personality8 import LivingPersonality8
 
 
 class CognitiveCore:
@@ -89,6 +90,7 @@ class CognitiveCore:
         self.orchestrator = UnifiedCognitiveCore(path)
         self.forge = SkillForge(path)
         self.supervisor7 = CognitiveSupervisor7(path)
+        self.living8 = LivingPersonality8(path)
         self.chat_priority = None
 
     def connect(self):
@@ -143,6 +145,7 @@ class CognitiveCore:
         self.orchestrator.initialize()
         self.forge.initialize()
         self.supervisor7.initialize()
+        self.living8.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -216,7 +219,8 @@ class CognitiveCore:
         baseline = row["guidance"] if row else ""
         tagged = self.experience.guidance()
         return (baseline + " " + tagged + " " + self.academy.guidance()
-                + " " + self.skills.guidance()).strip()[:1250]
+                + " " + self.skills.guidance() + " "
+                + self.living8.approved_style()).strip()[:1250]
 
     def biography(self) -> dict:
         """Explicit approved biography, stable persona and dated experience."""
@@ -303,6 +307,7 @@ class CognitiveCore:
                 "unified_cognitive": self.orchestrator.status(self.scheduler),
                 "skill_forge": self.forge.status(),
                 "cognitive_soul7": self.supervisor7.status(self),
+                "cognitive_soul8": self.living8.state(self),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

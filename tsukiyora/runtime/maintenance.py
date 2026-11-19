@@ -62,6 +62,8 @@ JOBS = {
     "cog10_audit": 3600,
     # V11 reuses precision_index, quality, academy and cog7/cog8 jobs.
     "mem11_audit": 21600,
+    # V12: bounded, offline notebook based on existing evidence, not LLM thoughts.
+    "cog12_reflect": 1800,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -247,6 +249,8 @@ class Maintenance:
                 result = core.life10.audit_once(core)
             elif kind == "mem11_audit":
                 result = core.memory11.audit_once(core)
+            elif kind == "cog12_reflect":
+                result = core.inner12.cycle(core)
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

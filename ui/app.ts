@@ -1683,6 +1683,180 @@ $("unified-tick").addEventListener("click",async()=>{
   }
 });
 
+// Cognitive Soul 6.0: new skills are non-executable drafts until explicitly approved.
+async function forgeAction(action, payload, notice) {
+  try {
+    const answer=await requestJSON("/api/soul/forge/"+action,"POST",payload);
+    $("forge-result").textContent=notice+(answer.id?" · #"+answer.id:"")+
+      (answer.state?" · "+answer.state:"");
+    await refreshSkillForge();
+  } catch(error) {
+    $("forge-result").textContent="Не выполнено: "+error.message;
+  }
+}
+function forgeButton(parent,label,handler) {
+  const btn=document.createElement("button");
+  btn.className="quiet-button";btn.type="button";
+  btn.textContent=label;
+  btn.addEventListener("click",handler);
+  parent.append(btn);
+}
+async function refreshSkillForge(){
+  if(!$("skill-forge").open) return;
+  try{
+    const domain=$("forge-domain").value;
+    const [status,items,history,course,ranks]=await Promise.all([
+      requestJSON("/api/soul/forge"),
+      requestJSON("/api/soul/forge/skills"),
+      requestJSON("/api/soul/forge/history"),
+      requestJSON("/api/soul/forge/curriculum?domain="+encodeURIComponent(domain)),
+      requestJSON("/api/soul/forge/compete?domain="+encodeURIComponent(domain))
+    ]);
+    $("forge-state").textContent="Навыков всего: "+status.skills+
+      " · активных: "+(status.by_state.approved||0)+
+      " · черновиков: "+(status.by_state.draft||0)+
+      " · теневых: "+(status.by_state.shadow||0)+
+      " · Cloud.ru в фоне: 0.";
+    const budget=status.cloud_budget;
+    $("forge-budget-status").textContent="Статус бюджета: "+budget.state+
+      " · предложено "+budget.requested_calls+
+      " · разрешено "+budget.approved_calls+
+      " · использовано сегодня "+budget.today_reserved+
+      ". Цена токенов не рассчитана.";
+    const curriculum=$("forge-curriculum");
+    curriculum.replaceChildren();
+    addCognitiveLine(curriculum,"Программа "+domain+" · уровень: "+course.stage+
+      " · структурных проверок: "+course.locally_tested_scenarios+
+      " · одобренных навыков: "+course.approved+
+      ". Проверка оценивает структуру, не качество модели.");
+    const candidates=$("forge-candidates");
+    candidates.replaceChildren();
+    const relevant=items.items.filter(x=>x.domain===domain);
+    for(const item of relevant.slice(0,40)){
+      const panel=document.createElement("div");panel.className="memory-record";
+      addCognitiveLine(panel,"Навык #"+item.id+" · v"+item.version+
+        " · "+item.state+" · "+item.origin+
+        " · источник: "+(item.parent_id??"нет")+
+        " · положительных оценок: "+item.metrics.positive_sources);
+      addCognitiveLine(panel,"Шаги: "+item.steps.join(" → "));
+      addCognitiveLine(panel,"Теневой тест: "+item.metrics.structural_passes+
+        "/"+item.metrics.scenario_count+
+        " · реальные оценки: "+item.metrics.live_positive+
+        "/"+item.metrics.live_ratings);
+      if(item.state==="draft" || item.state==="shadow" || item.state==="approved"){
+        forgeButton(panel,"Новая версия",()=>{
+          if(window.confirm("Создать новую локальную версию навыка #"+item.id+" без активации?"))
+            forgeAction("variant",{skill_id:item.id,confirmed:true},"Кандидат версии создан.");
+        });
+      }
+      if(item.state==="shadow"){
+        forgeButton(panel,"Одобрить навык",()=>{
+          if(window.confirm("Включить навык #"+item.id+
+            " для новых запросов области "+domain+"? Это изменение можно откатить."))
+            forgeAction("decide",{skill_id:item.id,approve:true,confirmed:true},
+                        "Навык включён вручную.");
+        });
+      }
+      if(item.state==="approved"){
+        forgeButton(panel,"Откатить",()=>{
+          if(window.confirm("Отключить навык #"+item.id+" и сохранить историю?"))
+            forgeAction("decide",{skill_id:item.id,approve:false,confirmed:true},
+                        "Навык отключён.");
+        });
+      }
+      if(["shadow","approved"].includes(item.state)){
+        forgeButton(panel,"Перенести в другую область",()=>{
+          const target=$("forge-domain").value;
+          const different=["logic","coding","legal","rag","documents"].find(x=>x!==target);
+          const chosen=window.prompt("Область переноса: logic, coding, legal, rag или documents",different);
+          if(!chosen) return;
+          if(window.confirm("Создать ТОЛЬКО черновик переноса в "+chosen+"?"))
+            forgeAction("transfer",{skill_id:item.id,target:chosen,confirmed:true},
+                        "Черновик переноса создан.");
+        });
+        forgeButton(panel,"Объединить с ID",()=>{
+          const other=Number($("forge-combine-id").value);
+          if(!Number.isSafeInteger(other)||other<=0){
+            $("forge-result").textContent="Введи ID второго проверенного навыка.";
+            return;
+          }
+          if(window.confirm("Объединить навыки #"+item.id+" и #"+other+
+                           " в новый неактивный кандидат?"))
+            forgeAction("compose",{left_id:item.id,right_id:other,
+                                   confirmed:true},"Составной навык создан.");
+        });
+      }
+      if(item.state!=="approved"&&item.state!=="archived"){
+        forgeButton(panel,"Архивировать",()=>{
+          if(window.confirm("Архивировать навык без удаления истории?"))
+            forgeAction("archive",{skill_id:item.id,confirmed:true},
+                        "Навык архивирован.");
+        });
+      }
+      if(budget.state==="approved" && budget.approved_calls>budget.today_reserved
+          && ["draft","shadow","approved"].includes(item.state)){
+        forgeButton(panel,"Создать облачный черновик (1 вызов)",()=>{
+          if(window.confirm("Отправить в Cloud.ru только названия разрешённых шагов "+
+            "и область навыка? Это 1 потенциально платный вызов. "+
+            "Никакие воспоминания или документы не отправятся."))
+            forgeAction("cloud/draft",{skill_id:item.id,
+                                      confirm_cloud_calls:true},
+                        "Облачный ответ проверен. Кандидат остаётся черновиком.");
+        });
+      }
+      candidates.append(panel);
+    }
+    if(!relevant.length) addCognitiveLine(candidates,
+      "Пока нет навыков в этой области. Локальное обучение может создать черновик после положительных оценок.");
+    const timeline=$("forge-history");timeline.replaceChildren();
+    addCognitiveLine(timeline,"Сравнение процедур (только структурная эвристика): "+
+      (ranks.ranked.slice(0,3).map(x=>"#"+x.id+": "+x.structural_passes+"/4").join(" · ")||"нет результатов"));
+    for(const event of history.items.slice(0,8)){
+      addCognitiveLine(timeline,"#"+event.skill_id+" · "+event.kind+
+        " · "+event.created_at);
+    }
+  }catch(error){
+    $("forge-state").textContent="Skill Forge недоступен: "+error.message;
+  }
+}
+$("skill-forge").addEventListener("toggle",refreshSkillForge);
+$("forge-domain").addEventListener("change",refreshSkillForge);
+$("forge-refresh").addEventListener("click",refreshSkillForge);
+$("forge-propose").addEventListener("click",()=>{
+  if(!window.confirm("Создать безопасный неактивный шаблон навыка в "+$("forge-domain").value+"?"))return;
+  forgeAction("propose",{domain:$("forge-domain").value,
+                        confirmed:true},"Кандидат сохранён.");
+});
+$("forge-shadow").addEventListener("click",()=>{
+  if(!window.confirm("Проверить максимум 8 черновиков локально без Cloud.ru?"))return;
+  forgeAction("shadow",{limit:8,confirmed:true},
+              "Теневая структурная проверка завершена.");
+});
+$("forge-budget-request").addEventListener("click",()=>{
+  const calls=Number($("forge-budget-calls").value);
+  if(!Number.isSafeInteger(calls)||calls<1||calls>20){
+    $("forge-result").textContent="Выбери 1–20 вызовов в сутки.";return;
+  }
+  if(!window.confirm("Подготовить предложение на "+calls+
+      " потенциально платных Cloud.ru-вызовов в сутки? Само по себе это НЕ разрешает расходы."))return;
+  forgeAction("budget/request",{calls,confirmed:true},
+              "Предложение бюджета подготовлено. Ожидается отдельное одобрение.");
+});
+$("forge-budget-approve").addEventListener("click",()=>{
+  if(!window.confirm("Отдельное согласование: ты ознакомился со стоимостью "+
+                     "Cloud.ru и согласен с ранее предложенным лимитом?"))return;
+  if(!window.confirm("Подтверди ещё раз: точная денежная стоимость токенов "+
+                     "программой не рассчитывается. Каждый вызов останется ручным."))return;
+  forgeAction("budget/decide",{approve:true,confirmed:true,
+                              ack_unpriced:true},
+              "Лимит вызовов отдельно согласован. Автозапуск Cloud.ru запрещён.");
+});
+$("forge-budget-revoke").addEventListener("click",()=>{
+  if(!window.confirm("Отозвать все разрешения на будущие Cloud.ru-вызовы Skill Forge?"))return;
+  forgeAction("budget/decide",{approve:false,confirmed:true},
+              "Облачные вызовы Skill Forge заблокированы.");
+});
+
 // Three opt-in cognitive extensions live in the existing settings panel.
 function addCognitiveLine(parent, label) {
   const line=document.createElement("p");

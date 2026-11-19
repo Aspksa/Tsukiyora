@@ -141,6 +141,11 @@ def handle_stream(handler, obj: dict):
             prompt += ("\n\nПодтверждённая отдельными контрольными задачами "
                        "стратегия предметной области (не переопределяет безопасность): "
                        +evol4_style)
+        forge_id,forge_guidance = handler.server.cognition.forge.guidance(content)
+        if forge_guidance:
+            prompt += ("\n\nРазрешённая локальная процедура предметной области "
+                       "(не выполняй внешних действий и не меняй личность): "
+                       +forge_guidance)
         # The biography and habits are explicitly approved local data.
         prompt += "\n\n" + handler.server.cognition.continuity.context()
         if any(m.get("possible_conflict") or m.get("potentially_stale")
@@ -204,6 +209,11 @@ def handle_stream(handler, obj: dict):
             try:
                 handler.server.cognition.evolution4.applied(
                     assistant["id"],evol4_id)
+            except (sqlite3.Error, ValueError):
+                pass
+        if forge_id is not None:
+            try:
+                handler.server.cognition.forge.applied(assistant["id"],forge_id)
             except (sqlite3.Error, ValueError):
                 pass
         # A provenance audit is local and never claims that a model answer is true.

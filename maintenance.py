@@ -1,7 +1,8 @@
 """Persistent, bounded queue for LOCAL maintenance; chat takes priority.
 
-No external network calls are permitted in jobs. Token 'usage' is only an
-approximation based on text size, never provider billing telemetry.
+Jobs are local except the explicitly opted-in Skill Forge cloud job, which
+is OFF by default and capped to one possibly paid call per UTC day.
+Token 'usage' is only an approximation, never provider billing telemetry.
 """
 from __future__ import annotations
 from contextlib import closing
@@ -45,6 +46,7 @@ JOBS = {
     "cog6_shadow": 1200,
     "cog6_audit": 3600,
     "cog6_curriculum": 3600,
+    "cog6_cloud": 3600,
 }
 MAX_HISTORY_DAYS = 30
 

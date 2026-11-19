@@ -102,6 +102,19 @@ class LivingPersonality8:
                     approved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     origin_id INTEGER NOT NULL REFERENCES soul8_proposals(id)
                 );
+                CREATE TABLE IF NOT EXISTS soul8_research(
+                    question_id INTEGER NOT NULL REFERENCES cognitive_next_questions(id)
+                        ON DELETE CASCADE,
+                    document_id INTEGER NOT NULL REFERENCES source_documents(id)
+                        ON DELETE CASCADE,
+                    ordinal INTEGER NOT NULL,
+                    revision INTEGER NOT NULL,
+                    excerpt_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(question_id,document_id,ordinal)
+                );
+                CREATE INDEX IF NOT EXISTS soul8_research_source
+                    ON soul8_research(document_id,ordinal);
                 CREATE TABLE IF NOT EXISTS soul8_journal(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     event TEXT NOT NULL,
@@ -463,6 +476,68 @@ class LivingPersonality8:
         return " ".join(PERSONA_STYLES[name][1] for name in names
                         if name in PERSONA_STYLES and counts[name]>=3)[:340]
 
+    def research(self,core):
+        """Offline retrieval ONLY for explicitly approved research questions.
+
+        Reads existing indexed documents with a separately enabled local
+        permission. Persists only pointers, revisions and excerpt hashes;
+        does not invent interpretations, trust claims or modify RAG sources.
+        """
+        with closing(self.store.connect()) as db:
+            level,perm=self._settings(db)
+            if level<3 or not perm["indexed_documents"]:
+                return {"searched":0,"reason":"no_document_permission",
+                        "cloud_calls":0}
+            questions=[dict(x) for x in db.execute(
+                "SELECT id,question FROM cognitive_next_questions "
+                "WHERE state='approved' ORDER BY id DESC LIMIT 3"
+            )]
+        total=0
+        for question in questions:
+            result=core.evidence.documents.search(question["question"],limit=4)
+            # Recheck mutable consent before persisting any local pointers.
+            with closing(self.store.connect()) as db,db:
+                level,perm=self._settings(db)
+                if level<3 or not perm["indexed_documents"]:
+                    return {"searched":0,"reason":"permission_revoked",
+                            "cloud_calls":0}
+                for item in result["items"]:
+                    fp=hashlib.sha256(item["content"].encode("utf-8")).hexdigest()
+                    total+=db.execute(
+                        "INSERT INTO soul8_research(question_id,document_id,ordinal,"
+                        "revision,excerpt_sha256) VALUES(?,?,?,?,?) "
+                        "ON CONFLICT(question_id,document_id,ordinal) DO UPDATE SET "
+                        "revision=excluded.revision,"
+                        "excerpt_sha256=excluded.excerpt_sha256",
+                        (question["id"],item["document_id"],item["ordinal"],
+                         item["revision"],fp)
+                    ).rowcount
+        if questions:
+            with closing(self.store.connect()) as db,db:
+                self._journal(db,"approved_local_research","existing_questions",
+                              _utc_day(),{"questions":len(questions),
+                                          "source_links":total})
+        return {"searched":len(questions),"source_links":total,
+                "cloud_calls":0,"factual_truth_verified":False,
+                "raw_text_copied_to_v8":False}
+
+    def research_sources(self,limit=30):
+        if type(limit) is not int or not 1<=limit<=50:
+            raise ValueError("Некорректный лимит.")
+        with closing(self.store.connect()) as db:
+            rows=[dict(x) for x in db.execute(
+                "SELECT r.question_id,r.document_id,r.ordinal,r.revision,"
+                "d.name,d.revision AS current_revision,r.created_at "
+                "FROM soul8_research r JOIN source_documents d "
+                "ON d.id=r.document_id "
+                "ORDER BY r.created_at DESC,r.document_id LIMIT ?",(limit,)
+            )]
+        for item in rows:
+            item["citation"]="[Документ #"+str(item["document_id"])+", фрагмент "+str(item["ordinal"])+"]"
+            item["source_updated_since_review"]=item["revision"]!=item["current_revision"]
+        return {"items":rows,"model_semantic_conclusions":False,
+                "cloud_calls":0,"approved_questions_only":True}
+
     def journal(self,limit=25):
         if type(limit) is not int or not 1<=limit<=100:
             raise ValueError("Некорректный лимит.")
@@ -516,6 +591,8 @@ class LivingPersonality8:
             return self.reflect(core)
         if kind=="cog8_daily":
             return self.daily(core)
+        if kind=="cog8_research":
+            return self.research(core)
         if kind=="cog8_health":
             # Reuse the existing supervisor; do not run a second extensive scan.
             with closing(self.store.connect()) as db:

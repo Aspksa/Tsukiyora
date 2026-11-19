@@ -1,4 +1,4 @@
-import {BrainAtlasView} from "./atlas_view.ts";
+import {BrainAtlasView, drawMemoryDial, memoryColors} from "./atlas_view.ts";
 // JavaScript-compatible TypeScript: browser can run this file without a build step.
 // A dedicated TypeScript build may be added later using the approved Node.js frontend.
 const canvas = document.getElementById("soul-canvas");
@@ -77,60 +77,35 @@ function paint() {
   }
   ctx.clearRect(0, 0, width, height);
   const x = width * .5, y = height * .48;
-  const r = Math.min(width * .39, height * .39, 254);
-  const halo = ctx.createRadialGradient(x, y, 6, x, y, r * 1.3);
-  halo.addColorStop(0, "rgba(212,149,76,.15)");
-  halo.addColorStop(.55, "rgba(166,115,61,.04)");
-  halo.addColorStop(1, "rgba(166,115,61,0)");
-  ctx.fillStyle = halo;
-  ctx.beginPath();
-  ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
-  ctx.fill();
+  const r = Math.min(width * .46, height * .46);
+  drawMemoryDial(ctx, x + graphPanX, y + graphPanY, r * graphScale);
   // Only records returned by SQLite are rendered as cells, no fake neurons.
   const counts = Array(8).fill(0);
   const kindCounts = {fact: 0, preference: 0, event: 0, biography: 0};
   const section = {fact: 0, preference: 2, event: 4, biography: 6};
   const radius = Math.max(2.1, Math.min(3.6, r / 68)) * Math.sqrt(graphScale);
-  const unit = Math.max(2.1, Math.min(3.6, r / 68));
-  const step = unit * 1.88;
-  const wedge = .69;
-  function capacity(level) {
-    const dist = r * .22 + level * step;
-    return Math.max(4, Math.floor(dist * wedge / (unit * 2.12)));
-  }
+  const totals = {};
+  for (const node of brainGraph.nodes) totals[node.kind] = (totals[node.kind] || 0) + 1;
   graphPositions = new Map();
   for (const node of brainGraph.nodes) {
     const kindIndex = kindCounts[node.kind] ?? 0;
     kindCounts[node.kind] = kindIndex + 1;
-    // Large memory types expand into neighbouring sectors instead of
-    // endlessly growing beyond the viewport.
-    const sector = ((section[node.kind] ?? 0) +
-       (kindIndex % 2) + Math.floor(kindIndex / 320) * 2) % 8;
-    let slot = counts[sector]++;
-    let level = 0;
-    while (slot >= capacity(level) && level < 110) {
-      slot -= capacity(level);
-      level++;
-    }
-    const columns = capacity(level);
-    const angle = -Math.PI / 2 + sector * Math.PI / 4 +
-      ((slot + .5) / columns - .5) * wedge +
-      (level % 2 ? .009 : 0);
-    const distance = r * .22 + level * step;
+    const sector = (section[node.kind] ?? 0) + (kindIndex % 2);
+    counts[sector]++;
+    const outer = kindIndex % 4 === 0;
+    const slot = outer ? Math.floor(kindIndex / 4) : kindIndex - Math.floor(kindIndex / 4) - 1;
+    const count = outer ? Math.ceil(totals[node.kind] / 4) : totals[node.kind] - Math.ceil(totals[node.kind] / 4);
+    const columns = outer ? Math.min(36, count) : Math.ceil(Math.sqrt(count * 2.5));
+    const rows = Math.ceil(count / columns);
+    const angle = -Math.PI / 2 + (section[node.kind] ?? 0) * Math.PI / 4 +
+      ((slot % columns + .5) / columns) * 1.43 + .06;
+    const distance = r * ((outer ? .84 : .31) +
+      (Math.floor(slot / columns) + .5) / rows * (outer ? .12 : .25));
     graphPositions.set(node.id, {
-      id: node.id, kind: node.kind, preview: node.preview,
+      id: node.id, kind: node.kind, preview: node.preview, outer,
       x: x + graphPanX + Math.cos(angle) * distance * graphScale,
       y: y + graphPanY + Math.sin(angle) * distance * graphScale,
     });
-  }
-  for (let sector = 0; sector < 8; sector++) {
-    const a = sector * Math.PI / 4 - Math.PI / 2;
-    ctx.beginPath();
-    ctx.moveTo(x + Math.cos(a) * r * .24, y + Math.sin(a) * r * .24);
-    ctx.lineTo(x + Math.cos(a) * r * .92, y + Math.sin(a) * r * .92);
-    ctx.strokeStyle = "rgba(203,151,84,.14)";
-    ctx.lineWidth = .7;
-    ctx.stroke();
   }
   const drawNodes = graphScale >= .85 || brainGraph.nodes.length < 300;
   if (!drawNodes) {
@@ -173,19 +148,19 @@ function paint() {
     ctx.quadraticCurveTo(x + graphPanX, y + graphPanY, b.x, b.y);
     ctx.stroke();
   }
-  ctx.beginPath();
   for (const node of graphPositions.values()) {
     if (!visible(node)) continue;
-    for (let side = 0; side <= 6; side++) {
-      const angle = side * Math.PI / 3;
-      const px = node.x + radius * Math.cos(angle);
-      const py = node.y + radius * Math.sin(angle);
-      if (side === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
+    const color = memoryColors[node.kind] || "#badbd9";
+    ctx.beginPath();
+    const size = node.outer ? radius : radius * .62;
+    ctx.arc(node.x, node.y, size, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, size + 1.3, 0, Math.PI * 2);
+    ctx.strokeStyle = color + "80";
+    ctx.stroke();
   }
-  ctx.strokeStyle = "rgba(238,190,123,.78)";
-  ctx.lineWidth = .82;
-  ctx.stroke();
   // A brief glow only when real records appeared since the previous refresh.
   if (!reducedMotion && performance.now() - graphPulseAt < 1700) {
     const strength = (1 - (performance.now() - graphPulseAt) / 1700) * .45;
@@ -375,10 +350,10 @@ canvas.addEventListener("click", async (event) => {
   await refreshMemory();
 });
 
-window.addEventListener("resize", () => {
+new ResizeObserver(() => {
   resize();
   if (reducedMotion) paint();
-}, {passive: true});
+}).observe(canvas);
 resize();
 if (reducedMotion) paint();
 else requestAnimationFrame(frame);

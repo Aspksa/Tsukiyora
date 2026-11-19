@@ -215,7 +215,7 @@ class UnifiedLifeCycle10:
                 "count": signals["memory_review"] + signals["conflict_review"]})
         if signals["academy_review"] or signals["recent_negative"] >= 3:
             actions.append({
-                "category": "academy", "section": "academy-v5",
+                "category": "academy", "section": "academy-details",
                 "label": "Разобрать ошибки и контрольные задания",
                 "count": signals["academy_review"],
                 "recent_negative": signals["recent_negative"]})

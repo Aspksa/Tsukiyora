@@ -94,6 +94,38 @@ SOURCES = {
         "SELECT 1 FROM memory_items WHERE id=? AND status='active' "
         "AND kind IN ('event','biography')"),
 }
+# V13: paginated source scans. Fixed SQL only, monotonically increasing IDs:
+# no repeated "newest two" starvation and no rescanning pruned notes.
+SOURCE_STREAMS = {
+    "check_memory":
+        "SELECT id FROM memory_suggestions WHERE state='pending' AND id>? "
+        "ORDER BY id LIMIT 2",
+    "check_conflict":
+        "SELECT id FROM cognitive_v5_reviews WHERE state='pending' AND id>? "
+        "ORDER BY id LIMIT 2",
+    "reflect_feedback":
+        "SELECT f.message_id AS id FROM cognitive_feedback f "
+        "JOIN messages m ON m.id=f.message_id AND m.role='assistant' "
+        "WHERE f.helpful=0 AND f.message_id>? ORDER BY f.message_id LIMIT 2",
+    "review_academy":
+        "SELECT id FROM soul8_goals WHERE category='academy' "
+        "AND state='waiting_review' AND id>? ORDER BY id LIMIT 2",
+    "test_strategy":
+        "SELECT id FROM forge_skills WHERE state='shadow' AND id>? "
+        "ORDER BY id LIMIT 2",
+    "study_question":
+        "SELECT id FROM cognitive_next_questions WHERE state='pending' "
+        "AND id>? ORDER BY id LIMIT 2",
+    "review_style":
+        "SELECT id FROM soul8_proposals WHERE kind='style' "
+        "AND state='pending' AND id>? ORDER BY id LIMIT 2",
+    "continue_goal":
+        "SELECT id FROM soul8_goals WHERE state='active' AND progress>=1 "
+        "AND id>? ORDER BY id LIMIT 2",
+    "continuity":
+        "SELECT id FROM memory_items WHERE status='active' "
+        "AND kind IN ('event','biography') AND id>? ORDER BY id LIMIT 2",
+}
 TOPICS = {
     "check_memory": ("памят", "вспом", "факт"),
     "check_conflict": ("памят", "факт", "противореч"),
@@ -127,6 +159,15 @@ class InnerWorld12:
                 );
                 CREATE INDEX IF NOT EXISTS soul12_notes_status
                     ON soul12_notes(status,id DESC);
+                CREATE TABLE IF NOT EXISTS soul13_source_cursors (
+                    kind TEXT PRIMARY KEY,
+                    last_id INTEGER NOT NULL DEFAULT 0 CHECK(last_id>=0)
+                );
+                CREATE TABLE IF NOT EXISTS soul13_turn (
+                    id INTEGER PRIMARY KEY CHECK(id=1),
+                    next_kind INTEGER NOT NULL DEFAULT 0 CHECK(next_kind>=0)
+                );
+                INSERT OR IGNORE INTO soul13_turn(id,next_kind) VALUES(1,0);
             """)
 
     def _source_current(self, db, kind, source_id):
@@ -151,18 +192,49 @@ class InnerWorld12:
             try:
                 total = 0
                 checked = 0
-                for kind in KINDS:
+                kinds = tuple(KINDS)
+                rotation = db.execute(
+                    "SELECT next_kind FROM soul13_turn WHERE id=1"
+                ).fetchone()[0] % len(kinds)
+                visited = 0
+                for offset in range(len(kinds)):
+                    kind = kinds[(rotation + offset) % len(kinds)]
+                    visited += 1
                     if total >= MAX_NEW_PER_TICK:
                         break
-                    for row in db.execute(SOURCES[kind][0]):
+                    db.execute(
+                        "INSERT OR IGNORE INTO soul13_source_cursors(kind,last_id)"
+                        " VALUES(?,0)", (kind,)
+                    )
+                    cursor = db.execute(
+                        "SELECT last_id FROM soul13_source_cursors WHERE kind=?",
+                        (kind,)
+                    ).fetchone()[0]
+                    scanned_to = cursor
+                    for row in db.execute(SOURCE_STREAMS[kind], (cursor,)):
                         checked += 1
+                        scanned_to = max(scanned_to, row["id"])
                         cur = db.execute(
                             "INSERT OR IGNORE INTO soul12_notes "
                             "(kind,source_table,source_id) VALUES(?,?,?)",
-                            (kind, KINDS[kind][0], row["id"]))
+                            (kind, KINDS[kind][0], row["id"])
+                        )
                         total += cur.rowcount
                         if total >= MAX_NEW_PER_TICK:
                             break
+                    if scanned_to > cursor:
+                        db.execute(
+                            "UPDATE soul13_source_cursors SET last_id=? "
+                            "WHERE kind=?", (scanned_to, kind)
+                        )
+                # Rotate the first category next time to prevent sustained
+                # high-volume sources starving rarer questions and goals.
+                db.execute(
+                    "UPDATE soul13_turn SET next_kind=? WHERE id=1",
+                    ((rotation + max(1, visited)) % len(kinds),)
+                )
+                # Already-scanned sources cannot be recreated after pruning,
+                # because the durable per-kind cursor moves forward only.
                 # Remove only notebook metadata. Never delete original evidence,
                 # user messages, existing goals, approvals, or saved facts.
                 db.execute(

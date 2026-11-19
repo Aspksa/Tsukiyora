@@ -92,6 +92,25 @@ export function drawMemoryDial(ctx, x, y, radius) {
   ctx.drawImage(dial, x - half, y - half, half * 2, half * 2);
 }
 
+// A rotating point sphere is the core glyph, drawn independently of record counts.
+export function drawCore(ctx, x, y, radius, seconds) {
+  ctx.save();
+  const phase = seconds * .48;
+  for (let i = 0; i < 96; i++) {
+    const latitude = 1 - (i + .5) / 48;
+    const band = Math.sqrt(1 - latitude * latitude);
+    const angle = i * GOLDEN + phase;
+    const depth = Math.cos(angle) * band;
+    const px = Math.sin(angle) * band;
+    const py = latitude * .94 - depth * .34;
+    ctx.globalAlpha = .22 + (depth + 1) * .36;
+    ctx.fillStyle = depth > 0 ? "#ffcf9a" : "#ee8a3c";
+    const size = Math.max(.8, radius * (.045 + .021 * depth));
+    ctx.fillRect(x + px * radius, y + py * radius, size, size);
+  }
+  ctx.restore();
+}
+
 export class BrainAtlasView {
   constructor(ctx) {
     this.ctx=ctx;
@@ -211,7 +230,10 @@ export class BrainAtlasView {
     this.shapes=[];
     const cx=width/2+panX,cy=height*.48+panY;
     const base=Math.min(width*.34,height*.35,242);
-    if (this.level === "overview") drawMemoryDial(ctx, cx, cy, base * 1.15 * zoom);
+    if (this.level === "overview") {
+      drawMemoryDial(ctx, cx, cy, base * 1.15 * zoom);
+      drawCore(ctx, cx, cy, base * .12 * zoom, reducedMotion ? 0 : performance.now() / 1000);
+    }
     const flicker=(!reducedMotion && performance.now()-this.pulseAt<1800)
       ? .18*(1-(performance.now()-this.pulseAt)/1800) : 0;
     ctx.lineWidth=.9;

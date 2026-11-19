@@ -320,6 +320,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/memory11":
+            try:
+                return self.send_json(self.server.cognition.memory11.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/life10":
             try:
                 return self.send_json(self.server.cognition.life10.status(
@@ -566,6 +572,26 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/memory11/search":
+            try:
+                obj = self._read_body()
+                return self.send_json(self.server.cognition.memory11.search(
+                    self.server.cognition, obj.get("query"),
+                    obj.get("conversation_id"), [], limit=obj.get("limit",8),
+                    as_of=obj.get("as_of")))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/memory11/benchmark":
+            try:
+                obj = self._read_body()
+                if obj.get("confirmed") is not True:
+                    raise ValueError("Нужно подтвердить локальную контрольную проверку.")
+                if self.server.chat_lock.locked():
+                    return self.send_json({"status":"deferred","reason":"chat_active"})
+                return self.send_json(self.server.cognition.memory11.benchmark(
+                    self.server.cognition, count=obj.get("count",5)))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path=="/api/soul/dialogue9/snooze":
             try:
                 obj=self._read_body()

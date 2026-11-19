@@ -722,6 +722,43 @@ async function loadChatHistory() {
   }
 }
 
+// A real saved conversation can be reopened without asking Cloud.ru anything.
+let latestDialogue9=null;
+async function refreshDialogue9Resume(){
+  try{
+    const old=await requestJSON("/api/soul/dialogue9/resume");
+    latestDialogue9=old.found?old:null;
+    $("dialogue9-resume").hidden=!latestDialogue9;
+    const note=$("dialogue9-resume-note");
+    if(latestDialogue9){
+      const last=latestDialogue9.last_messages.at(-1);
+      note.textContent="Сохранённый разговор: "+latestDialogue9.title+
+        (last?" · [Сообщение #"+last.message_id+"] "+
+         (last.role==="user"?"Ты: ":"Цукиёра: ")+last.excerpt:"");
+      note.hidden=false;
+    }else note.hidden=true;
+  }catch(_error){
+    latestDialogue9=null;
+    $("dialogue9-resume").hidden=true;
+    $("dialogue9-resume-note").hidden=true;
+  }
+}
+$("dialogue9-resume").addEventListener("click",async()=>{
+  if(chatBusy)return;
+  try{
+    const record=await requestJSON("/api/soul/dialogue9/resume");
+    if(!record.found)return;
+    activeSession=record.conversation_id;
+    preferNewConversation=false;
+    await refreshChatSessions();
+    $("chat-notice").textContent="Открыла настоящий сохранённый разговор «"+
+      record.title+"». История восстановлена локально, новых запросов Cloud.ru нет.";
+    $("message").focus();
+  }catch(error){
+    $("chat-notice").textContent="Не удалось вернуться к диалогу: "+error.message;
+  }
+});
+
 async function refreshChatSessions() {
   try {
     const result = await requestJSON("/api/memory/conversations?limit=30");
@@ -746,6 +783,7 @@ async function refreshChatSessions() {
       select.value = "";
     }
     await loadChatHistory();
+    await refreshDialogue9Resume();
   } catch (error) {
     $("chat-notice").textContent = error.message;
   }
@@ -1908,6 +1946,48 @@ $("v7-approve").addEventListener("click",async()=>{
   }catch(error){$("v7-case-state").textContent="Не одобрено: "+error.message;}
 });
 
+// Initiative is a REAL unfinished V8 local goal, never a fake assistant bubble.
+let pendingDialogue9Goal=null;
+async function refreshDialogue9Initiative(){
+  try{
+    // V8 already has an actionable proposal; avoid stacking duplicates.
+    if(!$("living8-chat-proposal").hidden){
+      $("dialogue9-initiative").hidden=true;
+      pendingDialogue9Goal=null;
+      return;
+    }
+    const state=await requestJSON("/api/soul/dialogue9/initiative");
+    pendingDialogue9Goal=state.item||null;
+    $("dialogue9-initiative").hidden=!pendingDialogue9Goal;
+    if(pendingDialogue9Goal){
+      $("dialogue9-initiative-text").textContent=pendingDialogue9Goal.label;
+    }
+  }catch(_error){
+    pendingDialogue9Goal=null;
+    $("dialogue9-initiative").hidden=true;
+  }
+}
+$("dialogue9-initiative-open").addEventListener("click",async()=>{
+  if(!pendingDialogue9Goal)return;
+  const settings=$("settings-dialog");
+  if(!settings.open)settings.showModal();
+  $("living8").open=true;
+  await refreshLiving8();
+});
+$("dialogue9-initiative-later").addEventListener("click",async()=>{
+  if(!pendingDialogue9Goal)return;
+  try{
+    const p=pendingDialogue9Goal;
+    await requestJSON("/api/soul/dialogue9/snooze","POST",{
+      goal_id:p.goal_id,progress:p.progress,confirmed:true
+    });
+    $("chat-notice").textContent="Напоминание о локальной задаче скрыто на сутки.";
+    await refreshDialogue9Initiative();
+  }catch(error){
+    $("chat-notice").textContent="Не удалось отложить предложение: "+error.message;
+  }
+});
+
 // One visible switch; no complicated budget form in the normal workflow.
 // ON is explicit permission for at most one potentially paid Cloud.ru call
 // per UTC day. OFF prevents new auto calls, not requests already in flight.
@@ -1955,6 +2035,7 @@ async function refreshForgeChatUI(){
     $("forge-chat-toggle").title="Skill Forge: "+error.message;
   }
   await refreshLiving8Chat();
+  await refreshDialogue9Initiative();
 }
 async function toggleForgeAuto(){
   if(forgeUIBusy)return;

@@ -236,9 +236,40 @@ class SkillForge:
                             recipe.insert(-1,step)
                             break
                     created+=int(self._insert(domain,recipe,"gap")["created"])
-        return {"new_drafts":created,"positive_examples":len(positive),
+        # Combine two locally checked skills into a NEW draft only.
+        composite=self.auto_compose()
+        return {"new_drafts":created+int(composite["created"]),
+                "composite_draft":composite["created"],
+                "positive_examples":len(positive),
                 "weak_domains":weak,"cloud_calls":0,
                 "automatic_approval":False}
+
+    def auto_compose(self):
+        """One safe non-executable composite per cycle, with zero activation."""
+        with closing(self.store.connect()) as db:
+            for domain in DOMAINS:
+                rows=[dict(x) for x in db.execute(
+                    "SELECT id,recipe FROM forge_skills "
+                    "WHERE domain=? AND state IN ('shadow','approved') "
+                    "ORDER BY id DESC LIMIT 8",(domain,)
+                )]
+                if len(rows)<2:
+                    continue
+                for left in rows:
+                    for right in rows:
+                        if left["id"]==right["id"]:
+                            continue
+                        recipe=json.loads(left["recipe"])
+                        for step in json.loads(right["recipe"]):
+                            if step not in recipe and len(recipe)<10:
+                                recipe.insert(-1,step)
+                        if recipe!=json.loads(left["recipe"]):
+                            result=self._insert(
+                                domain,recipe,"composite",parent_id=left["id"])
+                            if result["created"]:
+                                return result
+        return {"created":False,"cloud_calls":0}
+
 
     def propose(self,domain,*,confirmed=False):
         if domain not in DOMAINS or confirmed is not True:
@@ -499,9 +530,10 @@ class SkillForge:
             skill_id=item["skill_id"]
             metrics=self._metrics(db,skill_id)
             count=metrics["live_ratings"]; positive=metrics["live_positive"]
-            paused=bool(count>=8 and positive*4<=count and db.execute(
+            active=bool(db.execute(
                 "SELECT 1 FROM forge_active WHERE skill_id=?",(skill_id,)
             ).fetchone())
+            paused=bool(active and count>=8 and positive*4<=count)
             if paused:
                 db.execute(
                     "UPDATE forge_skills SET state='paused' WHERE id=?",(skill_id,)
@@ -513,8 +545,21 @@ class SkillForge:
                     "INSERT INTO forge_events(skill_id,kind) VALUES(?,'degraded')",
                     (skill_id,)
                 )
-            return {"measured":True,"samples":count,"positive":positive,
-                    "suspended":paused}
+            candidate=self._row(db,skill_id)
+        revised=False
+        # A failure is evidence for a draft experiment, not an instruction
+        # to auto-enable anything. Only after >=3 separate negative ratings.
+        if count>=3 and count-positive>=3 and candidate["state"]!="archived":
+            recipe=list(candidate["steps"])
+            for method in ("check_conflicts","note_uncertainty",
+                           "compare_alternatives","test_boundaries"):
+                if method not in recipe:
+                    recipe.insert(-1,method)
+                    revised=self._insert(candidate["domain"],recipe,
+                                         "variant",parent_id=skill_id)["created"]
+                    break
+        return {"measured":True,"samples":count,"positive":positive,
+                "suspended":paused,"new_revision_draft":revised}
 
     def audit(self):
         """Read-only dedupe + automatic *disable* if feedback is revoked."""

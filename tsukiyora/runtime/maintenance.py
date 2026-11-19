@@ -205,6 +205,10 @@ class Maintenance:
                 result = core.layers.repair(limit=1800)
             elif kind == "vector_repair":
                 result = core.vectors.repair(limit=1800)
+                local = core.vector13.index_step(limit=600)
+                result["vector13_indexed"] = local["indexed"]
+                result["vector13_stale"] = local["stale"]
+                result["vector13_complete"] = local["pass_complete"]
             elif kind == "quality":
                 result = core.quality.review(limit=140)
                 result = {"possible_duplicates": len(result["duplicates"]) +
@@ -283,6 +287,9 @@ class Maintenance:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"
             interval = JOBS[kind]
+            # Fixed temporary backfill cadence, not CPU/RAM adaptive loading.
+            if kind == "vector_repair" and not result.get("vector13_complete",True):
+                interval = 45
         except (sqlite3.Error, ValueError, OSError) as error:
             result = {"error": type(error).__name__}  # No sensitive content in logs.
             state = "warning"

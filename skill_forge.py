@@ -861,8 +861,8 @@ class SkillForge:
             try:
                 result=self._generate_with_cloud(item,cloud,self._persona)
                 self._finish_auto_attempt(item["id"],
-                    "completed" if result.get("candidate_created",False)
-                    else "rejected")
+                    "rejected" if result.get("state")=="rejected_cloud_output"
+                    else "completed")
                 return {"cloud_calls":1,"new_draft":int(
                     result.get("created",False)),"needs_user_approval":True}
             except Exception:

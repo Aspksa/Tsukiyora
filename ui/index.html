@@ -260,6 +260,34 @@
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
           </details>
+          <details class="memory-queue" id="answers15">
+            <summary>GREY MATTER 14.1 <span class="muted">качество настоящих ответов · обратная связь</span></summary>
+            <p class="memory-empty">Анализируются реальные ответы из сохранённых диалогов, а не вымышленные примеры. Проверка ссылок не устанавливает истинность сказанного. Оценки точности, ясности и контекста задаёшь ты; автосмены характера или моделей нет.</p>
+            <div class="memory-actions">
+              <button id="answers15-refresh" type="button" class="quiet-button">Обновить качество ответов</button>
+            </div>
+            <p id="answers15-status" class="memory-empty" role="status" aria-live="polite">Открой раздел, чтобы увидеть результаты.</p>
+            <div id="answers15-summary" class="memory-results"></div>
+            <label for="answers15-message">Ответ Цукиёры в текущем разговоре</label>
+            <select id="answers15-message">
+              <option value="">Выбери сохранённый ответ</option>
+            </select>
+            <p class="memory-empty">«Да» означает, что критерий выполнен по твоей оценке. Неизвестные критерии оставь пустыми. Такие отметки не становятся автоматически доказанными фактами.</p>
+            <label for="answers15-accuracy">Фактическая точность</label>
+            <select id="answers15-accuracy"><option value="">Не оцениваю</option><option value="1">Да</option><option value="0">Нет</option></select>
+            <label for="answers15-clarity">Ясность объяснения</label>
+            <select id="answers15-clarity"><option value="">Не оцениваю</option><option value="1">Да</option><option value="0">Нет</option></select>
+            <label for="answers15-grounding">Достаточность и корректность источников</label>
+            <select id="answers15-grounding"><option value="">Не оцениваю</option><option value="1">Да</option><option value="0">Нет</option></select>
+            <label for="answers15-continuity">Правильное понимание контекста</label>
+            <select id="answers15-continuity"><option value="">Не оцениваю</option><option value="1">Да</option><option value="0">Нет</option></select>
+            <div class="memory-actions">
+              <button id="answers15-inspect" type="button" class="quiet-button">Проверить ссылки в ответе</button>
+              <button id="answers15-save" type="button" class="quiet-button">Сохранить мою оценку</button>
+            </div>
+            <p id="answers15-result" class="memory-empty" role="status" aria-live="polite"></p>
+            <p class="memory-empty">Отрицательная оценка добавит короткую контекстную подсказку в следующем сообщении этого же диалога — без повторного вызова Cloud.ru. Она не изменяет личность, утверждённую память или стратегию сама по себе.</p>
+          </details>
           <details class="memory-queue" id="grey14">
             <summary>Tsukiyora 14.0 · GREY MATTER <span class="muted">логика · контрпримеры · развитие</span></summary>
             <p class="memory-empty">Локальные формальные задачи на рассуждение: доказать, опровергнуть, найти противоречие или честно признать отсутствие данных. Факты и ожидаемый результат задаёт и подтверждает пользователь. Это не чтение скрытых мыслей LLM и не доказательство сознания.</p>

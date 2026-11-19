@@ -685,7 +685,21 @@ function attachFeedback(node, messageId) {
     });
     controls.append(button);
   }
+  const detailed = document.createElement("button");
+  detailed.type="button";
+  detailed.className="feedback-button";
+  detailed.textContent="Оценить подробно";
+  detailed.title="Точность, ясность, источники и контекст";
+  detailed.addEventListener("click",async()=>{
+    if(!dialog.open)dialog.showModal();
+    $("cognitive-details").open=true;
+    $("answers15").open=true;
+    await refreshAnswers15();
+    $("answers15-message").value=String(messageId);
+    $("answers15").scrollIntoView({block:"nearest",behavior:"smooth"});
+  });
   node.append(controls);
+  node.append(detailed);
 }
 
 function showGreeting() {
@@ -1721,6 +1735,113 @@ $("unified-tick").addEventListener("click",async()=>{
     await refreshUnifiedCognitive();
   } catch(error) {
     $("unified-state").textContent="Локальная проверка: "+error.message;
+  }
+});
+
+// GREY MATTER 14.1: score REAL saved replies with explicit user feedback.
+// No independent truth detector or extra paid Cloud.ru request.
+async function refreshAnswers15(){
+  if(!$("answers15").open)return;
+  const select=$("answers15-message");
+  const preserve=select.value;
+  try{
+    const state=await requestJSON("/api/soul/answers15");
+    $("answers15-status").textContent=
+      "Оценок настоящих ответов: "+state.reviewed_real_answers+
+      " · локальных проверок ссылок: "+state.source_audits.total+
+      " · ссылки на отсутствующие источники: "+
+      state.source_audits.missing_source_refs+
+      " · возможные противоречия: "+state.source_audits.possible_conflicts+
+      " · дополнительные вызовы Cloud.ru: 0.";
+    const panel=$("answers15-summary");panel.replaceChildren();
+    for(const [model,data] of Object.entries(state.by_model)){
+      const criteria=Object.entries(data.dimensions)
+        .map(([key,info])=>key+": "+
+          (info.positive_rate===null?"не оценено":
+           Math.round(info.positive_rate*100)+"% из "+info.samples))
+        .join(" · ");
+      addCognitiveLine(panel,"Модель "+model+
+        " · отзывов: "+data.reviewed_answers+" · "+criteria);
+    }
+    if(!Object.keys(state.by_model).length){
+      addCognitiveLine(panel,"Пока нет подтверждённых оценок реальных ответов.");
+    }
+    addCognitiveLine(panel,"Показатели — пользовательские оценки, не независимая "+
+      "проверка истинности или причинного улучшения модели.");
+    select.replaceChildren();
+    const initial=document.createElement("option");
+    initial.value="";initial.textContent="Выбери сохранённый ответ";
+    select.append(initial);
+    if(activeSession){
+      const recent=await requestJSON("/api/soul/answers15/recent?"+
+        new URLSearchParams({conversation_id:activeSession}));
+      for(const item of recent.items){
+        const option=document.createElement("option");
+        option.value=String(item.id);
+        option.textContent="Ответ #"+item.id+" · "+item.created_at+
+          (item.accuracy!==null||item.clarity!==null||
+           item.grounding!==null||item.continuity!==null
+            ?" · оценён":" · ещё не оценён");
+        select.append(option);
+      }
+    }else{
+      addCognitiveLine(panel,"Открой диалог, чтобы выбрать реальный ответ.");
+    }
+    if(preserve&&[...select.options].some(x=>x.value===preserve))
+      select.value=preserve;
+  }catch(error){
+    $("answers15-status").textContent="Не удалось загрузить оценки: "+error.message;
+  }
+}
+$("answers15").addEventListener("toggle",refreshAnswers15);
+$("answers15-refresh").addEventListener("click",refreshAnswers15);
+$("answers15-save").addEventListener("click",async()=>{
+  const id=Number($("answers15-message").value);
+  if(!Number.isSafeInteger(id)||id<=0){
+    $("answers15-result").textContent="Выбери настоящий сохранённый ответ.";
+    return;
+  }
+  const review={message_id:id,confirmed:true};
+  for(const name of ["accuracy","clarity","grounding","continuity"]){
+    const v=$("answers15-"+name).value;
+    review[name]=v===""?null:v==="1";
+  }
+  if(["accuracy","clarity","grounding","continuity"].every(
+    key=>review[key]===null)){
+    $("answers15-result").textContent="Оцени хотя бы один критерий.";
+    return;
+  }
+  if(!window.confirm("Сохранить твою оценку реального ответа #"+id+
+    "? Она влияет лишь на подсказку в этом разговоре."))return;
+  try{
+    await requestJSON("/api/soul/answers15/review","POST",review);
+    $("answers15-result").textContent=
+      "Оценка ответа #"+id+" сохранена; исходные сообщения неизменны.";
+    await refreshAnswers15();
+  }catch(error){
+    $("answers15-result").textContent="Ошибка: "+error.message;
+  }
+});
+$("answers15-inspect").addEventListener("click",async()=>{
+  const id=Number($("answers15-message").value);
+  if(!Number.isSafeInteger(id)||id<=0){
+    $("answers15-result").textContent="Выбери сохранённый ответ.";
+    return;
+  }
+  if(!window.confirm("Локально проверить ссылки ответа #"+id+
+    "? Это не проверка достоверности всех утверждений."))return;
+  try{
+    const result=await requestJSON("/api/soul/answers15/inspect","POST",
+      {message_id:id,confirmed:true});
+    $("answers15-result").textContent=
+      "Ответ #"+id+" · проверка: "+result.source_state+
+      " · существующие ссылки: "+result.valid_citations+
+      " · отсутствующие: "+result.missing_citations+
+      " · возможные конфликты: "+result.possible_conflicts+
+      ". Истинность текста не доказана.";
+    await refreshAnswers15();
+  }catch(error){
+    $("answers15-result").textContent="Ошибка проверки: "+error.message;
   }
 });
 

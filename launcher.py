@@ -320,6 +320,19 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path == "/api/soul/answers15":
+            try:
+                return self.send_json(self.server.cognition.quality15.status(
+                    self.server.cognition))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if path == "/api/soul/answers15/recent":
+            try:
+                conversation_id=args.get("conversation_id",[None])[0]
+                return self.send_json(self.server.cognition.quality15.recent(
+                    conversation_id))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path == "/api/soul/grey14":
             try:
                 return self.send_json(self.server.cognition.grey14.status(
@@ -620,6 +633,32 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path == "/api/soul/answers15/review":
+            try:
+                obj=self._read_body()
+                return self.send_json(self.server.cognition.quality15.review(
+                    obj.get("message_id"),confirmed=obj.get("confirmed",False),
+                    accuracy=obj.get("accuracy"),clarity=obj.get("clarity"),
+                    grounding=obj.get("grounding"),
+                    continuity=obj.get("continuity")))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
+        if method == "POST" and path == "/api/soul/answers15/inspect":
+            try:
+                obj=self._read_body()
+                if obj.get("confirmed") is not True:
+                    raise ValueError("Требуется подтверждение локальной проверки.")
+                with closing(self.server.cognition.connect()) as db:
+                    msg=db.execute(
+                        "SELECT content FROM messages WHERE id=? AND role='assistant'",
+                        (obj.get("message_id"),)
+                    ).fetchone()
+                if msg is None:
+                    raise ValueError("Ответ не найден.")
+                return self.send_json(self.server.cognition.quality15.observe(
+                    self.server.cognition,obj.get("message_id"),msg["content"]))
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path == "/api/soul/grey14/preview":
             try:
                 from tsukiyora.cognition.grey_matter14 import solve
@@ -1358,6 +1397,18 @@ class SoulHandler(BaseHTTPRequestHandler):
                     self.server.cognition.forge.applied(assistant["id"],forge_id)
                 except (ValueError,sqlite3.Error):
                     pass
+            # Match the source-integrity audit already performed by streaming.
+            try:
+                self.server.cognition.quality15.observe(
+                    self.server.cognition,assistant["id"],answer)
+            except (ValueError,sqlite3.Error):
+                pass
+            try:
+                self.server.cognition.scheduler.record_answer(
+                    assistant["id"],state["model"],len(extra)+sum(
+                        len(x["content"]) for x in history),len(answer))
+            except (ValueError,sqlite3.Error):
+                pass
             return self.send_json({"conversation_id": conversation_id,
                                    "answer": answer, "cached": False})
 

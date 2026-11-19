@@ -59,6 +59,7 @@ from tsukiyora.memory.temporal13 import TemporalMemory13
 from tsukiyora.memory.cached_vector_index13 import CachedVectorIndex13
 from tsukiyora.cognition.coordinator13 import CognitiveCoordinator13
 from tsukiyora.cognition.grey_matter14 import GreyMatter14
+from tsukiyora.cognition.real_answer_quality import RealAnswerQuality
 
 
 class CognitiveCore:
@@ -111,6 +112,7 @@ class CognitiveCore:
         self.vector13 = CachedVectorIndex13(path)
         self.coordinator13 = CognitiveCoordinator13(path)
         self.grey14 = GreyMatter14(path)
+        self.quality15 = RealAnswerQuality(path)
         self.chat_priority = None
 
     def connect(self):
@@ -172,6 +174,7 @@ class CognitiveCore:
         self.vector13.initialize()
         self.coordinator13.initialize()
         self.grey14.initialize()
+        self.quality15.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -334,6 +337,7 @@ class CognitiveCore:
                 "skill_forge": self.forge.status(),
                 "cognitive_soul7": self.supervisor7.status(self),
                 "cognitive_soul8": self.living8.state(self),
+                "real_answers14_1":{"user_attested_real_reply_metrics":True,"extra_cloud_calls":0},
                 "grey_matter14":{"symbolic_logic":True,"reuses_existing_queue":True,"extra_cloud_calls":0},
                 "inner_world12":{"source_linked_working_notes":True,"same_queue":True,"extra_cloud_calls":0},
                 "memory11":{"adaptive_local_retrieval":True,"single_sqlite":True,"extra_cloud_calls":0},

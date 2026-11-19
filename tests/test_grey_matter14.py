@@ -188,7 +188,7 @@ class GreyMatter14Tests(unittest.TestCase):
 
     def test_schema_migration_and_persona_file(self):
         from tsukiyora.memory.migration_guard import SCHEMA_VERSION
-        self.assertEqual(SCHEMA_VERSION,15)
+        self.assertEqual(SCHEMA_VERSION,16)
         saved=self.store.add_memory("fact","Неприкосновенная проверка памяти")
         original=(launcher.ROOT/"soul"/"personality.json").read_bytes()
         with closing(self.store.connect()) as db, db:
@@ -196,7 +196,7 @@ class GreyMatter14Tests(unittest.TestCase):
         launcher.init_database(self.path)
         with closing(self.store.connect()) as db:
             self.assertEqual(db.execute(
-                "PRAGMA user_version").fetchone()[0],15)
+                "PRAGMA user_version").fetchone()[0],16)
             self.assertIsNotNone(db.execute(
                 "SELECT id FROM memory_items WHERE id=?",(saved["id"],)
             ).fetchone())

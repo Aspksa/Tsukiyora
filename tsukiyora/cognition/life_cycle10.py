@@ -84,6 +84,12 @@ class UnifiedLifeCycle10:
         if style:
             put("Ранее одобренная манера ответа (не изменение личности): " + style)
 
+        # An explicit negative review changes only a short, local hint
+        # for the next turn of this conversation; no independent LLM call.
+        feedback_hint = core.quality15.guidance(conversation_id)
+        if feedback_hint:
+            put("\n" + feedback_hint)
+
         # Only the user's earlier message in this conversation is eligible
         # as a referent; never convert an ambiguous "yes" to permission.
         followup = core.coordinator13.followup_hint(text, recent_history)

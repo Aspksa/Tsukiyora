@@ -228,6 +228,13 @@ def handle_stream(handler, obj: dict):
             audit = handler.server.cognition.audit.verify(assistant["id"], answer)
         except (sqlite3.Error, ValueError):
             pass
+        # The same local real-answer measurement applies to streaming
+        # and ordinary replies, after persistence, without another LLM call.
+        try:
+            handler.server.cognition.quality15.observe(
+                handler.server.cognition,assistant["id"],answer)
+        except (sqlite3.Error,ValueError):
+            pass
         evidence_audit = {"label":"unavailable"}
         try:
             evidence_audit = handler.server.cognition.evidence.verify_answer(

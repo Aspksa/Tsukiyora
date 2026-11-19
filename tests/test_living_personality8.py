@@ -137,6 +137,8 @@ class LivingPersonalityTests(unittest.TestCase):
             conn.execute("UPDATE cognitive_feedback SET helpful=0 "
                          "WHERE message_id=(SELECT MAX(message_id) FROM cognitive_feedback)")
         self.assertNotIn("ясно",self.soul.approved_style())
+        self.soul.control(0,confirmed=True)
+        self.assertEqual(self.soul.approved_style(),"")
         self.assertEqual(launcher.load_personality(),original_persona)
 
     def test_levels_disable_local_work_and_chat_proposals(self):
@@ -217,6 +219,9 @@ class LivingPersonalityTests(unittest.TestCase):
         self.assertNotIn("fictional label",json.dumps(matches))
         self.soul.permission("indexed_documents",False,confirmed=True)
         self.assertEqual(self.soul.research(self.core)["searched"],0)
+        self.assertEqual(self.soul.research_sources()["items"],[])
+        self.assertTrue(self.soul.research_sources()["hidden_by_permission"])
+        self.soul.permission("indexed_documents",True,confirmed=True)
         self.assertEqual(self.soul.research_sources()["items"][0]["document_id"],
                          imported["id"])
 

@@ -60,6 +60,8 @@ JOBS = {
     "cog8_research": 3600,  # approved local questions, explicitly enabled docs
     # V10: one metadata-only audit; no second worker or duplicate academy jobs.
     "cog10_audit": 3600,
+    # V11 reuses precision_index, quality, academy and cog7/cog8 jobs.
+    "mem11_audit": 21600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -243,6 +245,8 @@ class Maintenance:
                 result = core.living8.run_job(kind,core)
             elif kind == "cog10_audit":
                 result = core.life10.audit_once(core)
+            elif kind == "mem11_audit":
+                result = core.memory11.audit_once(core)
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

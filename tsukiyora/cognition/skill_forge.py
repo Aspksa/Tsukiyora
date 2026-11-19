@@ -471,6 +471,27 @@ class SkillForge:
             ).fetchone()["skill_id"]
             metrics=self._metrics(db,skill_id)
             if approve:
+                # New Cognitive Soul 7 skills must be compared against an
+                # existing method on paired, user-attested holdout answers
+                # before even a MANUAL activation can occur. Historical V6
+                # skills are grandfathered to avoid silently disabling them.
+                policy=db.execute(
+                    "SELECT first_new_forge_id FROM soul_v7_policy WHERE id=1"
+                ).fetchone()
+                if policy and skill_id>=policy["first_new_forge_id"]:
+                    v7=db.execute(
+                        "SELECT COUNT(*) n,COALESCE(SUM(baseline_correct),0) b,"
+                        "COALESCE(SUM(candidate_correct),0) c,"
+                        "COALESCE(SUM(CASE WHEN baseline_correct=1 AND"
+                        " candidate_correct=0 THEN 1 ELSE 0 END),0) regress,"
+                        "COUNT(DISTINCT model_label) models "
+                        "FROM soul_v7_cases WHERE skill_id=?",(skill_id,)
+                    ).fetchone()
+                    if (v7["n"]<8 or v7["c"]-v7["b"]<2
+                            or v7["regress"]!=0 or v7["models"]!=1):
+                        raise ValueError(
+                            "Нужны 8 уникальных парных эталонных примеров,"
+                            " улучшение минимум на 2 и ноль регрессий.")
                 if item["state"]!="shadow" or metrics["scenario_count"]<4 or metrics["structural_passes"]<4:
                     raise ValueError("Нужны четыре успешные локальные проверки и ручное подтверждение.")
                 if item["origin"]=="positive_feedback" and metrics["positive_sources"]<2:
@@ -643,8 +664,26 @@ class SkillForge:
             for item in rows:
                 item["steps"]=json.loads(item.pop("recipe"))
                 item["source_count"]=self._metrics(db,item["id"])["positive_sources"]
+                policy=db.execute(
+                    "SELECT first_new_forge_id FROM soul_v7_policy WHERE id=1"
+                ).fetchone()
+                needs=bool(policy and item["id"]>=policy["first_new_forge_id"])
+                proof=db.execute(
+                    "SELECT COUNT(*) n,COALESCE(SUM(candidate_correct),0) c,"
+                    "COALESCE(SUM(baseline_correct),0) b,"
+                    "COALESCE(SUM(CASE WHEN baseline_correct=1 AND"
+                    " candidate_correct=0 THEN 1 ELSE 0 END),0) regress,"
+                    "COUNT(DISTINCT model_label) models FROM soul_v7_cases "
+                    "WHERE skill_id=?",(item["id"],)
+                ).fetchone()
+                ready=bool(proof["n"]>=8 and proof["c"]-proof["b"]>=2
+                           and proof["regress"]==0 and proof["models"]==1)
+                item["evidence_count"]=proof["n"]
+                item["evidence_ready"]=ready
+                item["can_approve"]=not needs or ready
+                item["evidence_is_user_attested"]=True
         return {"items":rows,"manual_approval_required":True,
-                "check_type":"offline_structure_only",
+                "check_type":"offline_structure_and_user_attested_pairs",
                 "real_quality_proven":False}
 
     def auto_status(self):

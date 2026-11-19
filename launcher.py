@@ -320,6 +320,24 @@ class SoulHandler(BaseHTTPRequestHandler):
                 return self.send_json({"error":"Unknown Cognitive Soul endpoint."},404)
             except (ValueError,sqlite3.Error,OSError) as error:
                 return self._handle_error(error)
+        if path.startswith("/api/soul/cognitive7"):
+            try:
+                engine=self.server.cognition.supervisor7
+                core=self.server.cognition
+                if path=="/api/soul/cognitive7":
+                    return self.send_json(engine.status(core))
+                if path=="/api/soul/cognitive7/registry":
+                    return self.send_json(engine.registry())
+                if path=="/api/soul/cognitive7/plan":
+                    return self.send_json(engine.plan(core))
+                if path=="/api/soul/cognitive7/health":
+                    return self.send_json(engine.health(core))
+                if path=="/api/soul/cognitive7/verdict":
+                    return self.send_json(engine.verdict(
+                        int(args.get("skill_id",["0"])[0])))
+                return self.send_json({"error":"Unknown Cognitive Soul 7 resource."},404)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if path.startswith("/api/soul/forge"):
             try:
                 engine=self.server.cognition.forge
@@ -502,6 +520,30 @@ class SoulHandler(BaseHTTPRequestHandler):
         if not self._valid_write_origin():
             return self.send_json({"error": "Same-origin JSON request required."}, 403)
         path = urlsplit(self.path).path
+        if method == "POST" and path.startswith("/api/soul/cognitive7/"):
+            try:
+                obj=self._read_body()
+                engine=self.server.cognition.supervisor7
+                if path=="/api/soul/cognitive7/case":
+                    result=engine.add_case(
+                        obj.get("skill_id"),obj.get("question"),
+                        obj.get("expected"),obj.get("baseline_answer"),
+                        obj.get("candidate_answer"),obj.get("model"),
+                        confirmed=obj.get("confirmed",False),
+                        attested=obj.get("attested",False))
+                elif path=="/api/soul/cognitive7/approve":
+                    result=engine._approve(
+                        self.server.cognition.forge,obj.get("skill_id"),
+                        confirmed=obj.get("confirmed",False))
+                elif path=="/api/soul/cognitive7/rollback":
+                    result=self.server.cognition.forge.decide(
+                        obj.get("skill_id"),approve=False,
+                        confirmed=obj.get("confirmed",False))
+                else:
+                    return self.send_json({"error":"Unknown Cognitive Soul 7 action."},404)
+                return self.send_json(result)
+            except (ValueError,sqlite3.Error,OSError) as error:
+                return self._handle_error(error)
         if method == "POST" and path.startswith("/api/soul/forge/"):
             try:
                 data=self._read_body()

@@ -14,7 +14,7 @@ Tsukiyora/
 │   └── personality.json     Характер (остаётся на прежнем месте)
 ├── tsukiyora/                Внутренние Python-пакеты
 │   ├── academy/              Обучение, уроки, тесты, откат
-│   ├── cognition/            Cognitive Soul, Skill Forge, стратегии
+│   ├── cognition/            Cognitive Soul 1–7, Skill Forge, стратегии
 │   ├── memory/               SQLite, векторы, семантика, мозг, атлас
 │   ├── cloud/                Cloud.ru, лимиты, потоковый чат
 │   ├── runtime/              Планировщик, надёжность, бэкапы

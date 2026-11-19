@@ -53,6 +53,16 @@ class ForgeTests(unittest.TestCase):
             self.core.feedback(item["id"],success,note)
         return rows
 
+    def prove_skill(self, skill_id):
+        """Offline, explicitly attested paired evaluation for V7 skill gates."""
+        for n in range(8):
+            result=self.core.supervisor7.add_case(
+                skill_id,"Control question "+str(skill_id)+"-"+str(n),
+                "correct","incorrect","correct","fixed-test-model",
+                confirmed=True,attested=True
+            )
+        self.assertTrue(result["evidence_ready"])
+
     def test_negative_and_positive_evidence_creates_inactive_skills(self):
         self.assertFalse(self.forge.status()["auto_approval"])
         result=self.forge.discover()
@@ -84,6 +94,7 @@ class ForgeTests(unittest.TestCase):
         self.assertEqual(self.forge.guidance("Проверь договор"),(None,""))
         with self.assertRaises(ValueError):
             self.forge.decide(skill_id,approve=True)
+        self.prove_skill(skill_id)
         self.forge.decide(skill_id,approve=True,confirmed=True)
         selected,guidance=self.forge.guidance("Юридический договор")
         self.assertEqual(selected,skill_id)
@@ -134,6 +145,7 @@ class ForgeTests(unittest.TestCase):
     def test_feedback_can_create_revisions_without_auto_activation(self):
         sid=self.forge.propose("coding",confirmed=True)["id"]
         self.forge.shadow()
+        self.prove_skill(sid)
         self.forge.decide(sid,approve=True,confirmed=True)
         responses=self.score_answers(
             [False]*8,["Не устраивает точность ответа"]*8)
@@ -156,6 +168,7 @@ class ForgeTests(unittest.TestCase):
         skill=next(x for x in self.forge.skills()["items"]
                    if x["origin"]=="positive_feedback")
         self.forge.shadow()
+        self.prove_skill(skill["id"])
         self.forge.decide(skill["id"],approve=True,confirmed=True)
         # A user may change one original positive assessment.
         self.core.feedback(answers[0]["id"],False,"Теперь вижу ошибку")
@@ -292,6 +305,7 @@ class ForgeTests(unittest.TestCase):
         self.assertEqual(proposal["id"],created["id"])
         self.assertEqual(proposal["steps"],list(BASE["rag"]))
         self.assertFalse(self.forge.ready_proposals()["real_quality_proven"])
+        self.prove_skill(created["id"])
         self.forge.decide(created["id"],approve=True,confirmed=True)
         self.assertEqual(self.forge.ready_proposals()["items"],[])
         another=self.forge.variant(created["id"],confirmed=True)
@@ -404,6 +418,19 @@ class ForgeHttpTests(unittest.TestCase):
         disabled=self.post("/api/soul/forge/auto",
                            {"enabled":False,"confirmed":True})
         self.assertFalse(disabled["enabled"])
+        # Newly generated skills now require a full V7 holdout before the
+        # old V6 approval endpoint can activate them.
+        with self.assertRaises(HTTPError) as blocked:
+            self.post("/api/soul/forge/decide",
+                      {"skill_id":created["id"],"approve":True,"confirmed":True})
+        self.assertEqual(blocked.exception.code,400)
+        for n in range(8):
+            self.post("/api/soul/cognitive7/case",{
+                "skill_id":created["id"],"question":"Legal holdout "+str(n),
+                "expected":"right","baseline_answer":"wrong",
+                "candidate_answer":"right","model":"test-model",
+                "confirmed":True,"attested":True
+            })
         result=self.post("/api/soul/forge/decide",
                          {"skill_id":created["id"],"approve":True,"confirmed":True})
         self.assertEqual(result["state"],"approved")

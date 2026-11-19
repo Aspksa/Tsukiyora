@@ -47,6 +47,7 @@ from tsukiyora.cognition.self_improvement import SelfImprovement
 from tsukiyora.cognition.cognitive_evolution import CognitiveEvolution
 from tsukiyora.cognition.unified_cognitive import UnifiedCognitiveCore
 from tsukiyora.cognition.skill_forge import SkillForge
+from tsukiyora.cognition.cognitive_supervisor7 import CognitiveSupervisor7
 
 
 class CognitiveCore:
@@ -87,6 +88,7 @@ class CognitiveCore:
         self.evolution4 = CognitiveEvolution(path)
         self.orchestrator = UnifiedCognitiveCore(path)
         self.forge = SkillForge(path)
+        self.supervisor7 = CognitiveSupervisor7(path)
         self.chat_priority = None
 
     def connect(self):
@@ -140,6 +142,7 @@ class CognitiveCore:
         self.evolution4.initialize()
         self.orchestrator.initialize()
         self.forge.initialize()
+        self.supervisor7.initialize()
 
     def feedback(self, message_id: int, helpful: bool, note: str = "") -> dict:
         if type(message_id) is not int or message_id <= 0 or type(helpful) is not bool:
@@ -299,6 +302,7 @@ class CognitiveCore:
                 "evolution4": self.evolution4.report(),
                 "unified_cognitive": self.orchestrator.status(self.scheduler),
                 "skill_forge": self.forge.status(),
+                "cognitive_soul7": self.supervisor7.status(self),
                 "atlas_aggregate": self.materializer.status(),
                 "persona_arc": self.persona_arc.history(limit=3),
                 "character": {

@@ -260,6 +260,18 @@
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
           </details>
+          <details class="memory-queue" id="inner12">
+            <summary>Tsukiyora 12.0 <span class="muted">внутренние заметки · развитие · дневник</span></summary>
+            <p class="memory-empty">«Мысли» здесь — не скрытые рассуждения модели и не настоящие чувства, а проверяемые локальные рабочие заметки с ID источника. Они создаются через прежнюю SQLite-очередь, только пока приложение запущено и разрешена локальная практика.</p>
+            <p id="inner12-status" class="memory-empty" role="status" aria-live="polite">Данные ещё не загружены.</p>
+            <div class="memory-actions">
+              <button type="button" id="inner12-refresh" class="quiet-button">Обновить состояние</button>
+            </div>
+            <div id="inner12-overview" class="memory-results"></div>
+            <p class="memory-empty">Вопросы, ошибки, учебные и личностные предложения остаются на ручной проверке. Здесь можно проверить доказательства или закрыть только саму заметку, не меняя исходные сведения.</p>
+            <div id="inner12-notes" class="memory-results"></div>
+            <p id="inner12-result" class="memory-empty" role="status" aria-live="polite"></p>
+          </details>
           <details class="memory-queue" id="memory11">
             <summary>Tsukiyora 11.0 <span class="muted">умная память · гибридный поиск · контроль качества</span></summary>
             <p class="memory-empty">Единый локальный поиск по подтверждённым пользователем записям: FTS5 + граф связей + уже закэшированные векторы. Система не обучает LLM, не принимает факты за абсолютную истину и не делает платных фоновых запросов.</p>

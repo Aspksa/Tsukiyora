@@ -65,7 +65,7 @@
         <aside class="forge-chat-proposal" id="forge-chat-proposal" hidden aria-label="Новый навык готов к проверке">
           <p class="forge-proposal-kicker">SKILL FORGE · ПРЕДЛОЖЕНИЕ</p>
           <p id="forge-chat-proposal-text" class="forge-chat-proposal-text"></p>
-          <p class="forge-proposal-note">Локально проверен только порядок шагов, не качество ответов. Применение требует твоего решения.</p>
+          <p class="forge-proposal-note" id="forge-chat-evidence-note">Локально проверен только порядок шагов. Для новых навыков 7.0 дополнительно нужны эталонные сравнения и твоё одобрение.</p>
           <div class="memory-actions">
             <button id="forge-chat-apply" class="quiet-button" type="button">Применить навык</button>
             <button id="forge-chat-dismiss" class="quiet-button" type="button">Отклонить</button>
@@ -238,6 +238,39 @@
               <button type="button" class="quiet-button" id="academy-practice-evaluate">Проверить ответ локально</button>
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
+          </details>
+          <details class="memory-queue" id="cognitive-v7">
+            <summary>Cognitive Soul 7.0 <span class="muted">единый центр развития и доказательных проверок</span></summary>
+            <p class="memory-empty">Объединяет прежние источники навыков без копирования памяти, с одной существующей SQLite-очередью. Новые навыки можно одобрить только после 8 уникальных парных контрольных примеров, улучшения минимум на 2 ответа и без регрессий. Сравнения вручную подтверждаются пользователем; это не автоматический тест реальной LLM.</p>
+            <p id="v7-state" class="memory-empty" role="status">Загрузка статуса 7.0…</p>
+            <div class="memory-actions">
+              <button type="button" id="v7-refresh" class="quiet-button">Обновить реестр</button>
+            </div>
+            <div id="v7-registry" class="memory-results"></div>
+            <div id="v7-plan" class="memory-results"></div>
+            <details class="memory-queue" id="v7-test-panel">
+              <summary>Проверить новый навык на эталонных ответах</summary>
+              <p class="memory-empty">Для каждого независимого контрольного вопроса сравни два уже полученных ответа той же модели при сопоставимых условиях с эталоном. Цукиёра не делает дополнительные платные вызовы. Тексты примеров не сохраняются: в SQLite записываются хеш вопроса и результаты сравнения.</p>
+              <label for="v7-skill-id">ID проверяемого навыка</label>
+              <input id="v7-skill-id" type="number" min="1" step="1" placeholder="Номер навыка"/>
+              <label for="v7-model">Одинаковая модель для старого и нового ответа</label>
+              <input id="v7-model" type="text" maxlength="120" placeholder="Имя модели из Cloud.ru или локальной проверки"/>
+              <label for="v7-question">Контрольный вопрос</label>
+              <textarea id="v7-question" rows="2" maxlength="700"></textarea>
+              <label for="v7-expected">Эталонный ответ</label>
+              <textarea id="v7-expected" rows="2" maxlength="1500"></textarea>
+              <label for="v7-baseline">Ответ прежнего метода</label>
+              <textarea id="v7-baseline" rows="2" maxlength="1500"></textarea>
+              <label for="v7-candidate">Ответ нового навыка</label>
+              <textarea id="v7-candidate" rows="2" maxlength="1500"></textarea>
+              <div class="memory-actions">
+                <button id="v7-add-case" type="button" class="quiet-button">Записать подтверждённое сравнение</button>
+                <button id="v7-verdict" type="button" class="quiet-button">Проверить результаты</button>
+                <button id="v7-approve" type="button" class="quiet-button">Одобрить проверенный навык</button>
+              </div>
+              <p id="v7-case-state" class="memory-empty" role="status" aria-live="polite"></p>
+            </details>
+            <p class="memory-empty">Изменения кода, памяти, личности, внешние действия и скрытые Cloud.ru-эксперименты не выполняются. Действующий лимит Cloud.ru из Skill Forge 6.0 не повышается.</p>
           </details>
           <details class="memory-queue" id="cognitive-unified">
             <summary>Cognitive Soul 5.0 <span class="muted">единый автоматический центр</span></summary>

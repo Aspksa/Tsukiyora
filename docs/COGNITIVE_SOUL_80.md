@@ -81,6 +81,7 @@ Read-only GET localhost, same-origin:
 - /api/soul/living8/proposals
 - /api/soul/living8/journal
 - /api/soul/living8/diary
+- /api/soul/living8/research — ссылки на локально найденные источники
 
 POST (обязательное confirmed:true и same-origin):
 - /api/soul/living8/control: {"level":3,"confirmed":true}

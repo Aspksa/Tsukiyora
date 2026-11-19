@@ -40,6 +40,11 @@ JOBS = {
     "cog5_insights": 3600,
     "cog5_budget": 3600,
     "cog5_digest": 21600,
+    # Skill Forge 6.0 reuses the same ONE SQLite queue; never runs Cloud.ru.
+    "cog6_discover": 1800,
+    "cog6_shadow": 1200,
+    "cog6_audit": 3600,
+    "cog6_curriculum": 3600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -214,6 +219,8 @@ class Maintenance:
                 if not report["sqlite_integrity"] or report["foreign_key_errors"]:
                     raise sqlite3.DatabaseError("SQLite migration integrity warning")
             elif kind.startswith("cog5_") and kind in JOBS:
+                result = core.orchestrator.run_job(kind,core)
+            elif kind.startswith("cog6_") and kind in JOBS:
                 result = core.orchestrator.run_job(kind,core)
             else:
                 raise ValueError("Unknown local maintenance task")

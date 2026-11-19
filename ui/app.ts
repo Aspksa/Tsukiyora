@@ -82,8 +82,8 @@ function paint() {
   const cx = width / 2 + graphPanX, cy = height * .48 + graphPanY;
   const nodes = atlasView.active ? atlasView.shapes.filter(shape => shape.type === "memory") : graphPositions;
   ctx.save();
-  ctx.strokeStyle = "rgba(107,231,216,.48)";
-  ctx.fillStyle = "#a8fff0";
+  ctx.strokeStyle = "rgba(238,138,60,.48)";
+  ctx.fillStyle = "#ffcf9a";
   for (const id of recallSignal.ids) {
     const node = atlasView.active ? nodes.find(shape => shape.id === id) : nodes.get(id);
     if (!node) continue;
@@ -154,7 +154,7 @@ function paintGraph() {
       ctx.fillStyle = "rgba(174,126,66,.20)";
       ctx.strokeStyle = "rgba(226,177,106,.73)";
       ctx.fill(); ctx.stroke();
-      ctx.font = "11px system-ui,sans-serif";
+      ctx.font = "11px Consolas, monospace";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillStyle = "#ead0a9";
       ctx.fillText(String(counts[i]), px, py);

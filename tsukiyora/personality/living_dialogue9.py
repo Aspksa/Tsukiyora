@@ -148,8 +148,10 @@ class LivingDialogue9:
                 ).fetchone()
             else:
                 conv=db.execute(
-                    "SELECT id,title,updated_at FROM conversations "
-                    "ORDER BY updated_at DESC,id DESC LIMIT 1"
+                    "SELECT c.id,c.title,c.updated_at FROM conversations c "
+                    "ORDER BY COALESCE((SELECT MAX(m.id) FROM messages m "
+                    "WHERE m.conversation_id=c.id),0) DESC,"
+                    "c.updated_at DESC,c.id DESC LIMIT 1"
                 ).fetchone()
             if conv is None:
                 return {"found":False,"message_count":0,"cloud_calls":0}

@@ -20,6 +20,78 @@ function compact(n) {
   return n>=1000 ? (n/1000).toFixed(n>=10000 ? 0 : 1)+"k" : String(n);
 }
 
+// Static dial marks describe the four memory categories. Only API records
+// produce selectable cells. Cache the dial so idle frames use one blit.
+const categories = [
+  ["fact", "Факты", "#68d7cb"], ["preference", "Предпочтения", "#93adf4"],
+  ["event", "События", "#d8aa74"], ["biography", "Биография", "#b599e6"],
+];
+export const memoryColors = Object.fromEntries(categories.map(([kind,,color]) => [kind,color]));
+const dial = document.createElement("canvas");
+
+export function drawMemoryDial(ctx, x, y, radius) {
+  if (radius <= 0) return;
+  const size = Math.max(1, Math.ceil(radius * 2.12 * Math.min(devicePixelRatio, 2)));
+  if (dial.width !== size || dial.height !== size) {
+    dial.width = dial.height = size;
+    const g = dial.getContext("2d");
+    g.translate(size / 2, size / 2);
+    g.scale(size / 424, size / 424);
+    function ring(cx, cy, r, stroke, weight = 1) {
+      g.beginPath();
+      g.arc(cx, cy, r, 0, Math.PI * 2);
+      g.strokeStyle = stroke;
+      g.lineWidth = weight;
+      g.stroke();
+    }
+    function point(angle, distance) {
+      return [Math.cos(angle) * distance, Math.sin(angle) * distance];
+    }
+    for (const r of [26, 38, 60, 169, 186, 198]) ring(0, 0, r, "#49717d66", .7);
+    for (let i = 0; i < 144; i++) {
+      const a = i * Math.PI / 72;
+      g.beginPath();
+      g.moveTo(...point(a, 193));
+      g.lineTo(...point(a, i % 6 === 0 ? 198 : 195));
+      g.strokeStyle = "#719ba280";
+      g.stroke();
+    }
+    for (const [sector, [, label, color]] of categories.entries()) {
+      const start = sector * Math.PI / 2 - Math.PI / 2;
+      for (let i = 0; i < 20; i++) {
+        const a = start + (i + 1) * Math.PI / 43;
+        const [px, py] = point(a, 178);
+        ring(px, py, 4.4, color + "88", .8);
+        ring(px, py, 1.6, color + "70", .7);
+      }
+      for (let i = 0; i < 18; i++) {
+        const a = start + (i + 1) * Math.PI / 40;
+        for (let j = 0; j < 5; j++) {
+          const [px, py] = point(a, 75 + j * 5);
+          g.fillStyle = color + "59";
+          g.fillRect(px - .75, py - .75, 1.5, 1.5);
+        }
+      }
+      const mid = start + Math.PI / 4;
+      g.beginPath();
+      g.moveTo(...point(mid, 120));
+      g.lineTo(...point(mid, 169));
+      g.strokeStyle = color + "45";
+      g.stroke();
+      const [lx, ly] = point(mid, 134);
+      g.textAlign = "center";
+      g.font = "10px Segoe UI, sans-serif";
+      g.fillStyle = color;
+      g.fillText(label, lx, ly);
+    }
+    ring(0, 0, 17, "#64e0cf", 1.4);
+    ring(0, 0, 13, "#418c94", .7);
+    ring(0, 0, 5, "#dbf5eb", 1.2);
+  }
+  const half = radius * 1.06;
+  ctx.drawImage(dial, x - half, y - half, half * 2, half * 2);
+}
+
 export class BrainAtlasView {
   constructor(ctx) {
     this.ctx=ctx;
@@ -139,20 +211,7 @@ export class BrainAtlasView {
     this.shapes=[];
     const cx=width/2+panX,cy=height*.48+panY;
     const base=Math.min(width*.34,height*.35,242);
-    // A single dark central ring whose luminosity follows only real records.
-    const realCount=Math.max(0,Number(this.data?.total||0));
-    if (realCount>0 && this.level==="overview") {
-      ctx.beginPath();
-      ctx.arc(cx,cy,base*.24*zoom,0,Math.PI*2);
-      ctx.strokeStyle="rgba(192,139,71,"+
-        Math.min(.35,.07+Math.log2(realCount+1)*.014).toFixed(3)+")";
-      ctx.lineWidth=1.1;ctx.stroke();
-    }
-    const halo=ctx.createRadialGradient(cx,cy,3,cx,cy,base*1.5);
-    halo.addColorStop(0,"rgba(185,132,72,.14)");
-    halo.addColorStop(1,"rgba(185,132,72,0)");
-    ctx.fillStyle=halo;
-    ctx.fillRect(0,0,width,height);
+    if (this.level === "overview") drawMemoryDial(ctx, cx, cy, base * 1.15 * zoom);
     const flicker=(!reducedMotion && performance.now()-this.pulseAt<1800)
       ? .18*(1-(performance.now()-this.pulseAt)/1800) : 0;
     ctx.lineWidth=.9;
@@ -188,8 +247,8 @@ export class BrainAtlasView {
           ctx.save();ctx.shadowBlur=15+flicker*55;
           ctx.shadowColor="rgba(228,164,72,.6)";
         }
-        hex(ctx,px,py,radius*zoom,"rgba(174,125,67,.22)",
-            "rgba(234,186,116,"+(.72+flicker)+")");
+        const color = memoryColors[item.kind] || "#89beca";
+        hex(ctx,px,py,radius*zoom,"#0b1a24",color);
         if (flicker>0) ctx.restore();
         ctx.textAlign="center";ctx.textBaseline="middle";
         ctx.fillStyle="#f0d0a0";ctx.font="12px system-ui,sans-serif";

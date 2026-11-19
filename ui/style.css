@@ -139,61 +139,17 @@ button:disabled { cursor: not-allowed; }
 .soul-panel {
   position: relative;
   display: grid;
-  align-content: space-between;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   isolation: isolate;
   overflow: hidden;
   padding: clamp(20px, 3vw, 44px);
   background:
-    radial-gradient(ellipse at 50% 51%, #29202c 0%, transparent 65%),
-    linear-gradient(145deg, #1d1a23, #131218 68%);
-}
-
-.soul-orbit {
-  position: absolute;
-  top: 48%;
-  left: 50%;
-  display: grid;
-  place-items: center;
-  width: min(81%, 490px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 1px solid #d9aa7335;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.soul-orbit::before, .soul-orbit::after {
-  content: "";
-  position: absolute;
-  border-radius: inherit;
-}
-
-.soul-orbit::before {
-  inset: 8%;
-  border: 1px solid #e6b77c40;
-  background: radial-gradient(circle, transparent 66%, #edb17609 74%);
-}
-
-.soul-orbit::after {
-  inset: -5%;
-  border: 1px solid #f0bd8120;
-  mask-image: linear-gradient(123deg, #000, transparent 28% 70%, #000);
-}
-
-.soul-orbit span {
-  position: relative;
-  width: 62%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background:
-    radial-gradient(ellipse at 29% 24%, #6e4b41 0%, #3b2b37 32%, #211a27 60%, #15131c 83%);
-  box-shadow: inset 2px 2px 4px #f4be8cba, inset 9px 14px 32px #d4916938,
-    0 0 48px #bf7b6740;
+    radial-gradient(ellipse at center, #0a202b, #07121b 72%);
 }
 
 #soul-canvas {
-  position: absolute;
-  inset: 0;
+  grid-row: 2;
+  min-height: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -214,6 +170,8 @@ button:disabled { cursor: not-allowed; }
   pointer-events: none;
 }
 
+.soul-title { grid-row: 1; }
+.soul-footer { grid-row: 3; }
 .soul-title h1 {
   margin: 0;
   font: 400 clamp(44px, 5.3vw, 82px)/.98 var(--display);
@@ -379,8 +337,7 @@ dialog::backdrop { background: #08070cba; }
 
 @media (max-width: 820px) {
   .stage { grid-template-columns: minmax(0, 1fr); height: auto; margin-block: 16px; }
-  .soul-panel { min-height: clamp(255px, 54vw, 410px); }
-  .soul-orbit { width: min(38%, 255px); }
+  .soul-panel { height: clamp(395px, 83vw, 580px); }
   .chat-panel { min-height: 440px; }
   .conversation.has-messages { flex-basis: min(52dvh, 440px); }
 }
@@ -394,7 +351,6 @@ dialog::backdrop { background: #08070cba; }
   .status { font-size: 11px; }
   .soul-panel, .chat-panel { border-radius: 17px; }
   .soul-title h1 { font-size: 45px; }
-  .soul-orbit { width: 32%; }
   .soul-title p { max-width: 25ch; text-shadow: 0 1px 5px var(--ink); }
   .chat-heading { min-height: 66px; gap: 7px; }
   .chat-heading h2 { font-size: 25px; }
@@ -689,3 +645,21 @@ button:disabled{cursor:not-allowed}
 #dialogue9-initiative .memory-actions{display:flex;gap:6px;flex-wrap:wrap}
 @media(max-width:650px){#dialogue9-resume{font-size:10px;padding:5px 6px}
   #dialogue9-resume-note{margin:4px 6px}}
+
+#brain-activity {
+  margin-inline-start: .5em;
+  color: #8fddd2;
+  font-weight: 400;
+}
+.chat-signal {
+  position: fixed;
+  top: -4px;
+  left: -4px;
+  z-index: 5;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d8fff7;
+  box-shadow: 0 0 0 4px #82ead944, 0 0 16px 3px #7adfc8aa;
+  pointer-events: none;
+}

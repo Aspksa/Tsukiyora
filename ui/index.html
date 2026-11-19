@@ -71,6 +71,16 @@
             <button id="forge-chat-dismiss" class="quiet-button" type="button">Отклонить</button>
           </div>
         </aside>
+        <aside class="forge-chat-proposal" id="living8-chat-proposal" hidden aria-label="Предложение саморазвития Цукиёры">
+          <p class="forge-proposal-kicker">LIVING SOUL 8.0 · ИНИЦИАТИВА</p>
+          <p id="living8-chat-text" class="forge-chat-proposal-text"></p>
+          <p class="forge-proposal-note">Предложение основано на локальных данных. Одобрение не запускает платные действия и не меняет ядро личности.</p>
+          <div class="memory-actions">
+            <button type="button" id="living8-chat-approve" class="quiet-button">Одобрить</button>
+            <button type="button" id="living8-chat-reject" class="quiet-button">Отклонить</button>
+            <button type="button" id="living8-chat-details" class="quiet-button">Показать прогресс</button>
+          </div>
+        </aside>
         <div class="composer">
           <label class="sr-only" for="message">Сообщение</label>
           <textarea id="message" rows="1" maxlength="8000" disabled placeholder="Подключи Cloud.ru в настройках" aria-label="Текст сообщения"></textarea>
@@ -238,6 +248,30 @@
               <button type="button" class="quiet-button" id="academy-practice-evaluate">Проверить ответ локально</button>
               <p class="memory-empty" id="academy-practice-result" role="status"></p>
             </details>
+          </details>
+          <details class="memory-queue" id="living8">
+            <summary>Cognitive Soul 8.0 <span class="muted">личность, цели, самостоятельность</span></summary>
+            <p class="memory-empty">Цукиёра самостоятельно ведёт только разрешённые локальные цели, дневник и предложения. Личность из soul/personality.json, память и история остаются защищёнными. Её «внутреннее состояние» — программная оценка, а не настоящие эмоции.</p>
+            <p id="living8-status" class="memory-empty" role="status">Загрузка состояния...</p>
+            <label for="living8-level">Уровень самостоятельности</label>
+            <select id="living8-level">
+              <option value="0">0 · Отключить фоновое развитие 8.0</option>
+              <option value="1">1 · Только наблюдение</option>
+              <option value="2">2 · Разрешённая локальная работа</option>
+              <option value="3" selected>3 · Расширенная локальная автономность</option>
+            </select>
+            <div class="memory-actions">
+              <button type="button" id="living8-save-level" class="quiet-button">Сохранить уровень</button>
+              <button type="button" id="living8-refresh" class="quiet-button">Обновить</button>
+            </div>
+            <label><input type="checkbox" id="living8-proactive" checked/> Предлагать результаты и новые привычки в чате</label>
+            <label><input type="checkbox" id="living8-practice" checked/> Фоновые локальные проверки и план развития</label>
+            <label><input type="checkbox" id="living8-documents"/> Локальный поиск по одобренным вопросам в уже индексированных документах</label>
+            <p class="memory-empty">Cloud.ru, изменения кода, внешние действия, запись фактов в память и активация навыков не входят в разрешения 8.0. Отдельные прежние настройки Cloud.ru не меняются.</p>
+            <div id="living8-goals" class="memory-results"></div>
+            <div id="living8-research" class="memory-results"></div>
+            <div id="living8-chronicle" class="memory-results"></div>
+            <p id="living8-message" class="memory-empty" role="status" aria-live="polite"></p>
           </details>
           <details class="memory-queue" id="cognitive-v7">
             <summary>Cognitive Soul 7.0 <span class="muted">единый центр развития и доказательных проверок</span></summary>

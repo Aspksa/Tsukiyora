@@ -17,7 +17,7 @@ MODULES = {
     "memory": "atlas_materializer brain_atlas layered_memory memory_quality memory_store migration_guard precision_memory semantic_groups vector_memory",
     "cloud": "cloudru resource_guard stream_runtime",
     "runtime": "reliability maintenance",
-    "personality": "persona_arc persona_continuity soul_growth experience_engine experience_skills conversation_memory",
+    "personality": "persona_arc persona_continuity soul_growth living_personality8 experience_engine experience_skills conversation_memory",
     "documents": "contract_insights document_parser evidence_review local_documents rag_fusion rag_pipeline",
 }
 

@@ -47,6 +47,10 @@ JOBS = {
     "cog6_audit": 3600,
     "cog6_curriculum": 3600,
     "cog6_cloud": 3600,
+    # V7 uses the SAME persistent SQLite worker. All new jobs are offline.
+    "cog7_review": 1800,
+    "cog7_health": 3600,
+    "cog7_daily": 21600,
 }
 MAX_HISTORY_DAYS = 30
 
@@ -224,6 +228,8 @@ class Maintenance:
                 result = core.orchestrator.run_job(kind,core)
             elif kind.startswith("cog6_") and kind in JOBS:
                 result = core.orchestrator.run_job(kind,core)
+            elif kind.startswith("cog7_") and kind in JOBS:
+                result = core.supervisor7.run_job(kind,core)
             else:
                 raise ValueError("Unknown local maintenance task")
             state = "ok"

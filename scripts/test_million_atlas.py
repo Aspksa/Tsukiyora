@@ -13,10 +13,10 @@ import time
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from memory_store import MemoryStore
-from soul_growth import SoulGrowth
-from brain_atlas import BrainAtlas
-from atlas_materializer import AtlasMaterializer
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.personality.soul_growth import SoulGrowth
+from tsukiyora.memory.brain_atlas import BrainAtlas
+from tsukiyora.memory.atlas_materializer import AtlasMaterializer
 
 COUNT=1_000_000
 

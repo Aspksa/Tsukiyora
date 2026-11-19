@@ -14,9 +14,9 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import cloudru
+import tsukiyora.cloud.cloudru as cloudru
 import launcher
-from memory_store import MemoryStore
+from tsukiyora.memory.memory_store import MemoryStore
 
 
 def fake_cloud(method, resource, token, payload=None):

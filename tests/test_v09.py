@@ -14,13 +14,13 @@ from urllib.error import HTTPError
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import launcher
-from memory_store import MemoryStore,_fingerprint
-from migration_guard import MigrationGuard,SCHEMA_VERSION
-from rag_pipeline import RagPipeline
-from academy_metrics import AcademyMetrics
-from cognitive_core import CognitiveCore
-from brain_atlas import BrainAtlas
-from reliability import Reliability
+from tsukiyora.memory.memory_store import MemoryStore,_fingerprint
+from tsukiyora.memory.migration_guard import MigrationGuard,SCHEMA_VERSION
+from tsukiyora.documents.rag_pipeline import RagPipeline
+from tsukiyora.academy.academy_metrics import AcademyMetrics
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.memory.brain_atlas import BrainAtlas
+from tsukiyora.runtime.reliability import Reliability
 
 
 class V09DataTests(unittest.TestCase):
@@ -58,7 +58,7 @@ class V09DataTests(unittest.TestCase):
                            " VALUES(?,?,?)",(lo,hi,relation))
             db.execute("UPDATE memory_items SET updated_at='2022-01-01 00:00:00' "
                        "WHERE id=?",(root["id"],))
-        with patch("cloudru._request",side_effect=AssertionError("RAG called cloud")):
+        with patch("tsukiyora.cloud.cloudru._request",side_effect=AssertionError("RAG called cloud")):
             output=RagPipeline(self.path).search("Гараж Лексус ремонт фар",limit=15)
         self.assertEqual(output["cloud_requests"],0)
         ids=[x["id"] for x in output["items"]]

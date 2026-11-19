@@ -12,8 +12,8 @@ from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
 import launcher
-from cognitive_core import CognitiveCore
-from memory_store import MemoryStore
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.memory.memory_store import MemoryStore
 
 
 class FakeGuard:
@@ -113,7 +113,7 @@ class ImprovementTests(unittest.TestCase):
             self.engine.remove_case(case["id"])
         self.assertTrue(self.engine.remove_case(case["id"],confirmed=True)["deleted"])
         self.assertEqual(self.engine.cases()["items"][0]["id"]!=case["id"],True)
-        from self_improvement import _normalized
+        from tsukiyora.cognition.self_improvement import _normalized
         self.assertEqual(_normalized(" Верно, 1! "),_normalized("верно 1"))
         self.assertNotEqual(_normalized("Верно 1, возможно"),_normalized("Верно 1"))
         self.assertNotEqual(_normalized("Неверно 1"),_normalized("Верно 1"))

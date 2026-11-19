@@ -20,14 +20,14 @@ from urllib.request import Request,build_opener,ProxyHandler
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import launcher
-from memory_store import MemoryStore,_fingerprint
-from soul_growth import SoulGrowth
-from precision_memory import PrecisionMemory
-from soul_academy import SoulAcademy
-from persona_continuity import PersonaContinuity
-from brain_atlas import BrainAtlas
-from cognitive_core import CognitiveCore
-from reliability import Reliability
+from tsukiyora.memory.memory_store import MemoryStore,_fingerprint
+from tsukiyora.personality.soul_growth import SoulGrowth
+from tsukiyora.memory.precision_memory import PrecisionMemory
+from tsukiyora.academy.soul_academy import SoulAcademy
+from tsukiyora.personality.persona_continuity import PersonaContinuity
+from tsukiyora.memory.brain_atlas import BrainAtlas
+from tsukiyora.cognition.cognitive_core import CognitiveCore
+from tsukiyora.runtime.reliability import Reliability
 
 
 class V08LocalTests(unittest.TestCase):
@@ -45,7 +45,7 @@ class V08LocalTests(unittest.TestCase):
         exact=self.store.add_memory("fact","Лексус фары ремонт и проверка герметичности")
         unrelated=self.store.add_memory("fact","Рецепт вкусного китайского чая")
         engine=PrecisionMemory(self.path)
-        with patch("cloudru._request", side_effect=AssertionError("Offline must not call Cloud.ru")):
+        with patch("tsukiyora.cloud.cloudru._request", side_effect=AssertionError("Offline must not call Cloud.ru")):
             out=engine.search("ремонт фар лексус")
         self.assertEqual(out["cloud_requests"],0)
         self.assertEqual(out["items"][0]["id"],exact["id"])
@@ -134,7 +134,7 @@ class V08LocalTests(unittest.TestCase):
         self.assertEqual(self.store.stats()["memories"],1)
 
     def test_local_cognitive_jobs_are_bounded_and_never_use_cloud(self):
-        with patch("cloudru._request", side_effect=AssertionError("Background requested network")):
+        with patch("tsukiyora.cloud.cloudru._request", side_effect=AssertionError("Background requested network")):
             for _ in range(12):
                 result=self.core.scheduler.tick(self.core,max_millis=1000)
                 self.assertIn(result["status"],("ok","idle","warning"))

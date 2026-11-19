@@ -17,16 +17,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 import re
 
-from memory_store import MemoryStore
-from soul_growth import SoulGrowth
-from cognitive_core import CognitiveCore, CognitiveWorker
-from migration_guard import MigrationGuard
-from resource_guard import ResourceGuard
-from reliability import Reliability
-from memory_quality import MemoryQuality
-from vector_memory import VectorMemory
-from stream_runtime import handle_stream, stop_stream
-from cloudru import CloudSession, CloudError
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.personality.soul_growth import SoulGrowth
+from tsukiyora.cognition.cognitive_core import CognitiveCore, CognitiveWorker
+from tsukiyora.memory.migration_guard import MigrationGuard
+from tsukiyora.cloud.resource_guard import ResourceGuard
+from tsukiyora.runtime.reliability import Reliability
+from tsukiyora.memory.memory_quality import MemoryQuality
+from tsukiyora.memory.vector_memory import VectorMemory
+from tsukiyora.cloud.stream_runtime import handle_stream, stop_stream
+from tsukiyora.cloud.cloudru import CloudSession, CloudError
 from urllib.request import build_opener, ProxyHandler
 import webbrowser
 
@@ -786,7 +786,7 @@ class SoulHandler(BaseHTTPRequestHandler):
                 encoded=obj.get("base64")
                 if not isinstance(encoded,str) or len(encoded)>1400000:
                     raise ValueError("Файл превышает допустимый размер.")
-                from document_parser import extract_document
+                from tsukiyora.documents.document_parser import extract_document
                 try:
                     binary=base64.b64decode(encoded,validate=True)
                 except (ValueError,binascii.Error):

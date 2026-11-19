@@ -17,13 +17,13 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import cloudru
+import tsukiyora.cloud.cloudru as cloudru
 import launcher
-from cognitive_core import CognitiveCore, CognitiveWorker
-from experience_engine import ExperienceEngine
-from memory_quality import MemoryQuality, compare
-from memory_store import MemoryStore
-from vector_memory import VectorMemory
+from tsukiyora.cognition.cognitive_core import CognitiveCore, CognitiveWorker
+from tsukiyora.personality.experience_engine import ExperienceEngine
+from tsukiyora.memory.memory_quality import MemoryQuality, compare
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.memory.vector_memory import VectorMemory
 
 
 class FreshDatabase(unittest.TestCase):
@@ -78,7 +78,7 @@ class MemoryQualityTests(FreshDatabase):
         user = self.memory.append_messages(conv["id"], [
             {"role": "user", "content": "Я люблю путешествовать"}
         ])[0]
-        from soul_growth import SoulGrowth
+        from tsukiyora.personality.soul_growth import SoulGrowth
         SoulGrowth(self.db_path).propose(user["id"], user["content"])
         self.assertEqual(MemoryQuality(self.db_path).review()["scanned"], 0)
 

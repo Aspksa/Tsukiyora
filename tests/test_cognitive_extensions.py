@@ -6,8 +6,8 @@ from contextlib import closing
 from pathlib import Path
 
 import launcher
-from memory_store import MemoryStore
-from cognitive_core import CognitiveCore
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.cognition.cognitive_core import CognitiveCore
 
 
 class CognitiveExtensionsTests(unittest.TestCase):

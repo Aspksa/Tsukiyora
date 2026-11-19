@@ -17,12 +17,12 @@ import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import cloudru
+import tsukiyora.cloud.cloudru as cloudru
 import launcher
-from cognitive_core import CognitiveCore, CognitiveWorker
-from memory_store import MemoryStore
-from soul_growth import SoulGrowth
-from vector_memory import VectorMemory, pack_vector, unpack_vector, similarity
+from tsukiyora.cognition.cognitive_core import CognitiveCore, CognitiveWorker
+from tsukiyora.memory.memory_store import MemoryStore
+from tsukiyora.personality.soul_growth import SoulGrowth
+from tsukiyora.memory.vector_memory import VectorMemory, pack_vector, unpack_vector, similarity
 
 
 class FakeEmbeddings:

@@ -28,13 +28,14 @@
       </div>
     </header>
 
-    <main class="stage">
-      <section class="soul-panel" aria-label="Ядро личности Цукиёры">
+    <main class="stage" id="workspace-stage">
+      <section class="soul-panel" aria-label="Карта памяти Цукиёры">
         <div class="soul-map-heading">
           <h2>Карта памяти</h2>
           <div id="brain-activity" role="status"></div>
         </div>
-        <canvas id="soul-canvas" tabindex="0" aria-label="Интерактивная карта памяти. Стрелки перемещают, плюс и минус масштабируют, Home сбрасывает вид. Мышью: колесо и перетаскивание."></canvas>
+        <button class="map-button map-expand" id="map-expand" type="button" aria-controls="map-inspector" aria-expanded="false">Развернуть карту</button>
+        <canvas id="soul-canvas" tabindex="0" aria-label="Интерактивная карта памяти. Enter разворачивает карту. Стрелки перемещают, плюс и минус масштабируют, Home сбрасывает вид. Мышью: колесо и перетаскивание."></canvas>
         <div class="soul-footer">
           <ul class="memory-legend" aria-label="Категории памяти">
             <li>Факты</li><li>Предпочтения</li><li>События</li><li>Биография</li>
@@ -49,6 +50,46 @@
           <span id="brain-fps" class="muted" aria-live="off"></span>
         </div>
       </section>
+
+      <aside class="map-inspector" id="map-inspector" aria-labelledby="map-inspector-title" hidden>
+        <h2 id="map-inspector-title">Обзор архива</h2>
+        <form class="map-search" id="map-search">
+          <label class="sr-only" for="map-query">Найти запись по тексту или ID</label>
+          <input id="map-query" type="search" maxlength="250" placeholder="Текст или #ID">
+          <button class="map-button" type="submit">Найти</button>
+          <label class="sr-only" for="map-kind">Категория памяти</label>
+          <select id="map-kind">
+            <option value="">Все категории</option>
+            <option value="fact">Факты</option>
+            <option value="preference">Предпочтения</option>
+            <option value="event">События</option>
+            <option value="biography">Биография</option>
+          </select>
+        </form>
+        <div class="map-controls" role="group" aria-label="Вид карты">
+          <button class="map-button" type="button" id="map-rings" aria-pressed="true">Кольца</button>
+          <button class="map-button" type="button" id="map-hex" aria-pressed="false">Соты</button>
+          <button class="map-button" type="button" id="map-center">К центру</button>
+          <button class="map-button" type="button" id="map-overview" hidden>Обзор</button>
+        </div>
+        <p class="map-status" id="map-search-status" role="status"></p>
+        <div class="map-results" id="map-results"></div>
+        <section class="map-record" id="map-record" aria-labelledby="map-record-title" hidden>
+          <div class="map-record-heading">
+            <h3 id="map-record-title">Воспоминание</h3>
+            <button class="map-button" type="button" id="map-clear-record" aria-label="Снять выделение">×</button>
+          </div>
+          <p class="map-record-meta" id="map-record-meta"></p>
+          <p class="map-record-body" id="map-record-body"></p>
+          <div class="map-controls">
+            <button class="map-button" type="button" id="map-open-source" hidden>Исходное сообщение</button>
+            <button class="map-button" type="button" id="map-manage-record">Открыть в памяти</button>
+          </div>
+        </section>
+        <div class="map-inspector-footer">
+          <button class="map-button" type="button" id="map-download">Скачать PNG</button>
+        </div>
+      </aside>
 
       <section class="chat-panel" id="chat-panel" tabindex="-1" aria-label="Чат Цукиёры">
         <div class="chat-heading">

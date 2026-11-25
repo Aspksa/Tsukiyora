@@ -1,5 +1,5 @@
 import {BrainAtlasView, drawMemoryDial, drawCore, memoryColors, memoryKinds,
-        memoryMapRadius, sectorAngle} from "./atlas_view.ts";
+        memoryMapRadius, sectorAngle, sectorPoint, drawHexSector} from "./atlas_view.ts";
 import {RequestTrace} from "./request_trace.ts";
 // JavaScript-compatible TypeScript: browser can run this file without a build step.
 // A dedicated TypeScript build may be added later using the approved Node.js frontend.
@@ -24,6 +24,10 @@ let vectorAvailableForSearch = false;
 let width = 0, height = 0, time = 0, last = 0;
 const graphCenter = () => ({x: width / 2 + graphPanX, y: height * .48 + graphPanY});
 const requestTrace = new RequestTrace();
+let mapLayout = "rings";
+let mapSelectedId = null;
+let mapRecord = null;
+let mapSearchRevision = 0;
 
 async function loadState() {
   try {
@@ -117,6 +121,9 @@ function visibleTraceSources(sources) {
 }
 
 function paint() {
+  const overview = $("map-overview");
+  const atOverview = !atlasView.active || atlasView.level === "overview";
+  if (overview.hidden !== atOverview) overview.hidden = atOverview;
   paintGraph();
   const radius = memoryMapRadius(width, height, graphScale);
   requestTrace.draw(ctx, graphCenter(), radius, visibleTraceSources, reducedMotion);
@@ -124,13 +131,21 @@ function paint() {
 
 function paintGraph() {
   if (atlasView.active) {
-    atlasView.draw(width,height,graphScale,graphPanX,graphPanY,reducedMotion);
+    atlasView.draw(width,height,graphScale,graphPanX,graphPanY,reducedMotion,mapLayout,mapSelectedId);
     return;
   }
   ctx.clearRect(0, 0, width, height);
   const r = memoryMapRadius(width, height, graphScale);
   const {x: cx, y: cy} = graphCenter();
-  drawMemoryDial(ctx, cx, cy, r);
+  if (mapLayout === "rings") {
+    drawMemoryDial(ctx, cx, cy, r);
+  } else if (r > 0) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * .99, 0, Math.PI * 2);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#8a694c52";
+    ctx.stroke();
+  }
   drawCore(ctx, cx, cy, r * .095, reducedMotion ? 0 : time / 1000);
   // SQLite atlas sectors split each category by record ID parity.
   const groups = Array.from({length: 8}, () => []);
@@ -147,10 +162,15 @@ function paintGraph() {
     for (let i = 0; i < counts.length; i++) {
       const count = groups[i].length;
       if (!count) continue;
-      const a = sectorAngle(i);
-      const px = cx + Math.cos(a) * r * .60;
-      const py = cy + Math.sin(a) * r * .60;
+      const position = sectorPoint(i, cx, cy, r, mapLayout);
+      const {x:px, y:py} = position;
       const size = Math.min(r * .13, 11 + Math.log2(count + 1) * 2);
+      const kind = memoryKinds[Math.floor(i / 2)];
+      if (mapLayout === "hex") {
+        drawHexSector(ctx, position, kind, count);
+        graphSectors.set(i, {...position, radius: position.cellRadius, kind});
+        continue;
+      }
       ctx.beginPath();
       for (let k = 0; k < 6; k++) {
         const phi = k * Math.PI / 3;
@@ -158,7 +178,6 @@ function paintGraph() {
         if (k === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
       }
       ctx.closePath();
-      const kind = memoryKinds[Math.floor(i / 2)];
       const color = memoryColors[kind];
       ctx.fillStyle = color + "25";
       ctx.strokeStyle = color + "ac";
@@ -172,8 +191,25 @@ function paintGraph() {
     return;
   }
   for (const [sector, nodes] of groups.entries()) {
+    if (!nodes.length) continue;
+    if (mapLayout === "hex") {
+      const position = sectorPoint(sector, cx, cy, r, mapLayout);
+      drawHexSector(ctx, position, nodes[0].kind, nodes.length, false);
+      for (const [index, node] of nodes.entries()) {
+        const angle = index * 2.399963;
+        const distance = Math.sqrt((index + .5) / nodes.length) * position.cellRadius * .54;
+        graphPositions.set(node.id, {
+          id: node.id, kind: node.kind, preview: node.preview,
+          x: position.x + Math.cos(angle) * distance,
+          y: position.y + Math.sin(angle) * distance + position.cellRadius * .06,
+          radius: Math.min(radius, Math.max(.85, position.cellRadius * .28 / Math.sqrt(nodes.length))),
+        });
+      }
+      continue;
+    }
     const outerCount = nodes.length >= 8 ? Math.floor(nodes.length * .33) : 0;
     for (const [band, entries] of [nodes.slice(outerCount), nodes.slice(0, outerCount)].entries()) {
+      if (!entries.length) continue;
       const outer = band === 1;
       const columns = Math.min(outer ? 18 : 11, Math.ceil(Math.sqrt(entries.length) * (outer ? 1.8 : 1.25)));
       const rows = Math.ceil(entries.length / columns);
@@ -200,16 +236,19 @@ function paintGraph() {
     const a = graphPositions.get(edge.source_id), b = graphPositions.get(edge.target_id);
     if (!a || !b || (!visible(a) && !visible(b))) continue;
     ctx.beginPath();
+    ctx.globalAlpha = mapSelectedId ? .44 : 1;
     ctx.strokeStyle = edge.relation === "possible_conflict"
       ? "#f5a38972" : (memoryColors[a.kind] || "#8ed6d6") + "46";
     ctx.moveTo(a.x, a.y);
     ctx.quadraticCurveTo(cx, cy, b.x, b.y);
     ctx.stroke();
   }
-  const focus = graphPositions.get(hoveredMemory);
+  ctx.globalAlpha = 1;
+  const focus = graphPositions.get(mapSelectedId ?? hoveredMemory);
   if (focus) {
     ctx.save();
     ctx.strokeStyle = (memoryColors[focus.kind] || "#8ed6d6") + "b0";
+    ctx.lineWidth = mapSelectedId ? 1.6 : 1;
     ctx.fillStyle = "#e6fff7";
     let shown = 0;
     for (const edge of brainGraph.edges) {
@@ -220,6 +259,8 @@ function paintGraph() {
       ctx.beginPath();
       ctx.moveTo(focus.x, focus.y);
       ctx.lineTo(other.x, other.y);
+      ctx.strokeStyle = edge.relation === "possible_conflict" ? "#f5a389cf"
+        : (memoryColors[other.kind] || "#8ed6d6") + "d0";
       ctx.stroke();
       ctx.fillRect(focus.x + (other.x - focus.x) * progress - 1,
         focus.y + (other.y - focus.y) * progress - 1, 2, 2);
@@ -227,6 +268,7 @@ function paintGraph() {
     }
     ctx.beginPath();
     ctx.arc(focus.x, focus.y, radius + 5, 0, Math.PI * 2);
+    ctx.strokeStyle = (memoryColors[focus.kind] || "#8ed6d6") + "db";
     ctx.stroke();
     ctx.restore();
   }
@@ -246,6 +288,7 @@ function paintGraph() {
     ctx.fillStyle = color + (node.outer ? "b0" : "c8");
     ctx.fill();
   }
+  if (graphScale >= 1.6) drawMapNodeLabels(focus, visible, {x:cx,y:cy}, r);
   // A brief glow only when real records appeared since the previous refresh.
   if (!reducedMotion && performance.now() - graphPulseAt < 1700) {
     const strength = (1 - (performance.now() - graphPulseAt) / 1700) * .45;
@@ -259,6 +302,35 @@ function paintGraph() {
       ctx.stroke();
     }
   }
+}
+
+function drawMapNodeLabels(focus, visible, center, radius) {
+  const labels = [];
+  ctx.save();
+  ctx.font = "10px Consolas, monospace";
+  ctx.textBaseline = "middle";
+  const paintLabel = (node) => {
+    if (!node || !visible(node) || labels.length === 12) return;
+    const x = node.x + node.radius + 5, y = node.y;
+    const name = "#" + node.id + " " + node.preview.replace(/\s+/g," ").slice(0,22);
+    const size = ctx.measureText(name).width + 5;
+    const outerX = Math.max(Math.abs(x - center.x), Math.abs(x + size - center.x));
+    if (x < 0 || x + size > width || y < 34 || y > height - 12 ||
+        Math.hypot(outerX, Math.abs(y - center.y) + 6) > radius * .98 ||
+        labels.some(label => Math.abs(y-label.y) < 13 && x < label.right && x+size > label.x)) return;
+    labels.push({x,y,right:x+size});
+    ctx.fillStyle = "#100a06d9";
+    ctx.fillRect(x-2,y-6,size,12);
+    ctx.fillStyle = memoryColors[node.kind] || "#e9e2d6";
+    ctx.textAlign = "left";
+    ctx.fillText(name,x,y);
+  };
+  paintLabel(focus);
+  for (const node of graphPositions.values()) {
+    if (node !== focus) paintLabel(node);
+    if (labels.length === 12) break;
+  }
+  ctx.restore();
 }
 
 let renderCostMs = 0;
@@ -355,6 +427,12 @@ function nearestBrainNode(px, py) {
   return found;
 }
 
+function overMapCore(px, py) {
+  const center = graphCenter();
+  const coreRadius = Math.max(12, memoryMapRadius(width,height,graphScale)*.13);
+  return $("map-inspector").hidden && Math.hypot(px-center.x, py-center.y) <= coreRadius;
+}
+
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
@@ -388,12 +466,14 @@ canvas.addEventListener("pointermove", (event) => {
     return;
   }
   const rect = canvas.getBoundingClientRect();
-  const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
+  const x = event.clientX - rect.left, y = event.clientY - rect.top;
+  const node = nearestBrainNode(x,y);
+  const core = !node && overMapCore(x,y);
   hoveredMemory = node?.id ?? null;
   if (reducedMotion) paint();
   canvas.title = node ? (node.type ? node.preview : node.kind + ": " + node.preview)
-    : "Колёсико — масштаб; перетаскивание — перемещение";
-  canvas.style.cursor = node ? "pointer" : "grab";
+    : core ? "Развернуть карту" : "Колёсико — масштаб; перетаскивание — перемещение";
+  canvas.style.cursor = node || core ? "pointer" : "grab";
 });
 canvas.addEventListener("pointerup", (event) => {
   graphDrag = null;
@@ -420,8 +500,12 @@ canvas.addEventListener("dblclick", async () => {
 canvas.addEventListener("click", async (event) => {
   if (graphMoved) { graphMoved = false; return; }
   const rect = canvas.getBoundingClientRect();
-  const node = nearestBrainNode(event.clientX - rect.left, event.clientY - rect.top);
-  if (!node) return;
+  const x = event.clientX - rect.left, y = event.clientY - rect.top;
+  const node = nearestBrainNode(x,y);
+  if (!node) {
+    if (overMapCore(x,y)) $("map-expand").click();
+    return;
+  }
   if (atlasView.active && node.type && node.type !== "memory") {
     try {
       await atlasView.open(node);
@@ -437,10 +521,7 @@ canvas.addEventListener("click", async (event) => {
     }
     return;
   }
-  $("memory-search").value = node.preview.slice(0, 60);
-  $("memory-details").open = true;
-  if (!dialog.open) dialog.showModal();
-  await refreshMemory();
+  await showMapRecord(node.id, false);
 });
 
 new ResizeObserver(() => {
@@ -459,6 +540,194 @@ const memoryLabels = {
   fact: "Факт", preference: "Предпочтение",
   event: "Событие", biography: "Биография",
 };
+
+function setMapExpanded(expanded) {
+  $("workspace-stage").classList.toggle("map-expanded", expanded);
+  $("map-inspector").hidden = !expanded;
+  $("chat-panel").hidden = expanded;
+  $("map-expand").textContent = expanded ? "Вернуться к чату" : "Развернуть карту";
+  $("map-expand").setAttribute("aria-expanded", String(expanded));
+}
+
+function resetMapPosition() {
+  graphScale = 1;
+  graphPanX = 0;
+  graphPanY = 0;
+  paint();
+}
+
+async function openMapOverview() {
+  atlasView.active = false;
+  await refreshBrain();
+  resetMapPosition();
+}
+
+function setMapLayout(layout) {
+  mapLayout = layout;
+  $("map-rings").setAttribute("aria-pressed", String(layout === "rings"));
+  $("map-hex").setAttribute("aria-pressed", String(layout === "hex"));
+  resetMapPosition();
+}
+
+function markMapResult() {
+  for (const button of $("map-results").children) {
+    if (Number(button.dataset.memoryId) === mapSelectedId) button.setAttribute("aria-current", "true");
+    else button.removeAttribute("aria-current");
+  }
+}
+
+async function showMapRecord(id, locate = true) {
+  setMapExpanded(true);
+  mapRecord = null;
+  mapSelectedId = id;
+  $("map-record").hidden = true;
+  $("map-search-status").textContent = "Открываю запись…";
+  markMapResult();
+  paint();
+  try {
+    const item = await memoryRequest("/api/memory/" + id);
+    if (mapSelectedId !== id) return;
+    if (locate) {
+      const onMap = atlasView.active
+        ? atlasView.level === "nodes" && atlasView.data.nodes.some(node => node.id === id)
+        : brainGraph.nodes.some(node => node.id === id);
+      if (!onMap) {
+        const target = await memoryRequest("/api/soul/atlas?" + new URLSearchParams({level:"locate",id}));
+        if (mapSelectedId !== id) return;
+        await atlasView.goto(target, () => mapSelectedId === id);
+        if (mapSelectedId !== id) return;
+      }
+      resetMapPosition();
+    }
+    mapRecord = item;
+    const date = new Date(item.created_at.replace(" ", "T") + "Z");
+    const source = item.source_type === "message" && item.source_ref
+      ? "Сообщение #" + item.source_ref : "Добавлено вручную";
+    $("map-record-title").textContent = "Воспоминание #" + item.id;
+    $("map-record-meta").textContent = [memoryLabels[item.kind],date.toLocaleDateString("ru-RU"),source].join(" · ");
+    $("map-record-body").textContent = item.content;
+    $("map-open-source").hidden = item.source_type !== "message" || !item.source_ref;
+    $("map-record").hidden = false;
+    $("map-search-status").textContent = "";
+    if (matchMedia("(max-width: 820px)").matches) {
+      $("map-record").scrollIntoView({block:"nearest"});
+    }
+    paint();
+  } catch (error) {
+    if (mapSelectedId !== id) return;
+    mapSelectedId = null;
+    markMapResult();
+    $("map-search-status").textContent = error.message;
+    paint();
+  }
+}
+
+async function searchMap(event) {
+  event.preventDefault();
+  const revision = ++mapSearchRevision;
+  const query = $("map-query").value.trim();
+  const kind = $("map-kind").value;
+  const output = $("map-results");
+  output.replaceChildren();
+  const id = /^#?([1-9][0-9]*)$/.exec(query);
+  if (id && Number.isSafeInteger(Number(id[1]))) {
+    await showMapRecord(Number(id[1]));
+    return;
+  }
+  $("map-search-status").textContent = "Ищу в архиве…";
+  try {
+    const params = new URLSearchParams({query,kind,limit:"20"});
+    const result = await memoryRequest("/api/memory?" + params);
+    if (revision !== mapSearchRevision) return;
+    for (const item of result.items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "map-result";
+      button.dataset.memoryId = String(item.id);
+      button.textContent = "#" + item.id + " · " + item.content.slice(0, 105) +
+        (item.content.length > 105 ? "…" : "");
+      button.addEventListener("click", () => showMapRecord(item.id));
+      output.append(button);
+    }
+    markMapResult();
+    $("map-search-status").textContent = result.items.length
+      ? (!query ? "Последние записи · " + result.items.length
+        : result.items.length === 20 ? "Первые 20 записей" : "Найдено записей · " + result.items.length)
+      : "Записей не найдено.";
+  } catch (error) {
+    if (revision === mapSearchRevision) $("map-search-status").textContent = error.message;
+  }
+}
+
+$("map-expand").addEventListener("click", () => {
+  const expanded = $("map-inspector").hidden;
+  setMapExpanded(expanded);
+  if (expanded) {
+    $("map-query").focus({preventScroll:true});
+    if (!$("map-results").children.length && !mapRecord) $("map-search").requestSubmit();
+  }
+});
+document.querySelector('.workspace-rail a[href="#chat-panel"]').addEventListener("click", () => setMapExpanded(false));
+$("map-rings").addEventListener("click", () => setMapLayout("rings"));
+$("map-hex").addEventListener("click", () => setMapLayout("hex"));
+$("map-center").addEventListener("click", resetMapPosition);
+$("map-overview").addEventListener("click", openMapOverview);
+$("map-search").addEventListener("submit", searchMap);
+$("map-kind").addEventListener("change", () => $("map-search").requestSubmit());
+function clearMapRecord() {
+  mapRecord = null;
+  mapSelectedId = null;
+  $("map-record").hidden = true;
+  markMapResult();
+  paint();
+}
+$("map-clear-record").addEventListener("click", clearMapRecord);
+$("map-open-source").addEventListener("click", async () => {
+  if (!mapRecord?.source_ref) return;
+  try {
+    if (await openSavedMessage(mapRecord.source_ref)) {
+      setMapExpanded(false);
+      $("chat-panel").focus({preventScroll:true});
+      $("conversation").querySelector(".dialogue-highlight")?.scrollIntoView({block:"nearest"});
+    } else {
+      $("map-search-status").textContent = "Дождись окончания текущего ответа.";
+    }
+  } catch (error) {
+    $("map-search-status").textContent = error.message;
+  }
+});
+$("map-manage-record").addEventListener("click", async () => {
+  if (!mapRecord) return;
+  $("memory-search").value = mapRecord.content.slice(0, 60);
+  $("memory-details").open = true;
+  if (!dialog.open) dialog.showModal();
+  await refreshMemory();
+});
+$("map-download").addEventListener("click", () => {
+  const output = document.createElement("canvas");
+  output.width = canvas.width;
+  output.height = canvas.height;
+  if (!output.width || !output.height) return;
+  const image = output.getContext("2d");
+  const background = image.createRadialGradient(output.width/2,output.height/2,0,
+    output.width/2,output.height/2,Math.hypot(output.width,output.height)*.36);
+  background.addColorStop(0,"#130c06");
+  background.addColorStop(1,"#030201");
+  image.fillStyle = background;
+  image.fillRect(0,0,output.width,output.height);
+  image.drawImage(canvas,0,0);
+  output.toBlob(blob => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "tsukiyora-memory-map.png";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url),5000);
+  });
+});
 
 function memoryFeedback(message) {
   $("memory-feedback").textContent = message;
@@ -535,8 +804,10 @@ async function refreshMemory() {
           try {
             await memoryRequest("/api/memory/" + item.id, "DELETE");
             if (editingMemoryId === item.id) clearMemoryEditor();
+            if (mapSelectedId === item.id) clearMapRecord();
             memoryFeedback("Запись убрана. История изменения сохранена.");
             await refreshMemory();
+            await refreshBrain();
           } catch (error) {
             memoryFeedback(error.message);
           }
@@ -565,16 +836,21 @@ $("memory-save").addEventListener("click", async () => {
   }
   const button = $("memory-save");
   button.disabled = true;
+  const recordId = editingMemoryId;
   try {
-    if (editingMemoryId === null) {
+    if (recordId === null) {
       await memoryRequest("/api/memory", "POST", {kind: $("memory-kind").value, content});
       memoryFeedback("Запомнила. Запись остаётся только на этом компьютере.");
     } else {
-      await memoryRequest("/api/memory/" + editingMemoryId, "PUT", {content, reason: "Исправлено пользователем"});
+      await memoryRequest("/api/memory/" + recordId, "PUT", {content, reason: "Исправлено пользователем"});
       memoryFeedback("Исправила и сохранила историю изменения.");
     }
     clearMemoryEditor();
     await refreshMemory();
+    await refreshBrain();
+    if (recordId !== null && recordId === mapSelectedId && !$("map-inspector").hidden) {
+      await showMapRecord(recordId, false);
+    }
   } catch (error) {
     memoryFeedback(error.message);
   } finally {
@@ -894,6 +1170,40 @@ $("chat-sessions").addEventListener("change", async () => {
   await loadChatHistory();
 });
 
+async function openSavedMessage(messageId) {
+  if (chatBusy) return false;
+  const nearby=await requestJSON("/api/memory/history/context?"+
+    new URLSearchParams({message_id:String(messageId)}));
+  if (chatBusy) return false;
+  activeSession=nearby.conversation_id;
+  preferNewConversation=false;
+  const sessions=$("chat-sessions");
+  if (![...sessions.options].some(option => option.value===activeSession)) {
+    const option=document.createElement("option");
+    option.value=activeSession;
+    option.textContent=nearby.title;
+    sessions.append(option);
+  }
+  sessions.value=activeSession;
+  const log=$("conversation");
+  log.replaceChildren();
+  log.classList.add("has-messages");
+  let selected=null;
+  for (const message of nearby.messages) {
+    const bubble=addChatBubble(message.role,message.content);
+    if (message.role==="assistant") attachFeedback(bubble,message.id);
+    if (message.id===nearby.selected_message_id) {
+      bubble.classList.add("dialogue-highlight");
+      selected=bubble;
+    }
+  }
+  if (selected) selected.scrollIntoView({block:"center"});
+  $("chat-notice").textContent="Фрагмент истории около сообщения #"+messageId+
+    ". Для последних сообщений снова выбери диалог в списке.";
+  $("dialogue-memory").open=false;
+  return true;
+}
+
 // Entirely local history search. Never interpolates conversation text as HTML.
 let lastDialogueQuery="";
 let dialogueCursor=null;
@@ -920,34 +1230,8 @@ async function searchDialogueHistory(nextPage=false) {
       choice.textContent=record.title+" · "+record.role+" #"+record.id+
         " · "+record.excerpt;
       choice.addEventListener("click",async () => {
-        if (chatBusy) return;
-        activeSession=record.conversation_id;
-        preferNewConversation=false;
-        const sessions=$("chat-sessions");
-        if (![...sessions.options].some(o=>o.value===activeSession)) {
-          const opt=document.createElement("option");
-          opt.value=activeSession;opt.textContent=record.title;
-          sessions.append(opt);
-        }
-        sessions.value=activeSession;
         try {
-          const nearby=await requestJSON("/api/memory/history/context?"+
-            new URLSearchParams({message_id:String(record.id)}));
-          const log=$("conversation");
-          log.replaceChildren();log.classList.add("has-messages");
-          let selected=null;
-          for (const msg of nearby.messages) {
-            const bubble=addChatBubble(msg.role,msg.content);
-            if (msg.role==="assistant") attachFeedback(bubble,msg.id);
-            if (msg.id===nearby.selected_message_id) {
-              bubble.classList.add("dialogue-highlight");
-              selected=bubble;
-            }
-          }
-          if (selected) selected.scrollIntoView({block:"center"});
-          $("chat-notice").textContent="Фрагмент истории около сообщения #"+
-            record.id+". Для последних сообщений снова выбери диалог в списке.";
-          $("dialogue-memory").open=false;
+          await openSavedMessage(record.id);
         } catch (error) {
           $("chat-notice").textContent="Ошибка открытия сообщения: "+error.message;
         }
@@ -3742,11 +4026,22 @@ $("cognitive-details").addEventListener("toggle", () => {
 
 canvas.addEventListener("keydown", (event) => {
   const key = event.key;
-  if (key==="Escape" && atlasView.active) {
+  if (key === "Enter" && $("map-inspector").hidden) {
+    event.preventDefault();
+    $("map-expand").click();
+    return;
+  }
+  if (key==="Escape" && atlasView.active && atlasView.level !== "overview") {
     event.preventDefault();
     atlasView.back().then(() => {if (reducedMotion) paint();}).catch(
       (error) => { $("soul-live-state").textContent=error.message; }
     );
+    return;
+  }
+  if (key === "Escape" && !$("map-inspector").hidden) {
+    event.preventDefault();
+    setMapExpanded(false);
+    $("map-expand").focus({preventScroll:true});
     return;
   }
   if (key === "+" || key === "=") graphScale = Math.min(3.2, graphScale * 1.13);

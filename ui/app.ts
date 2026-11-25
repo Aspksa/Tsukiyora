@@ -1,4 +1,6 @@
-import {BrainAtlasView, drawMemoryDial, drawCore, memoryColors} from "./atlas_view.ts";
+import {BrainAtlasView, drawMemoryDial, drawCore, memoryColors, memoryKinds,
+        memoryMapRadius, sectorAngle} from "./atlas_view.ts";
+import {RequestTrace} from "./request_trace.ts";
 // JavaScript-compatible TypeScript: browser can run this file without a build step.
 // A dedicated TypeScript build may be added later using the approved Node.js frontend.
 const canvas = document.getElementById("soul-canvas");
@@ -9,6 +11,7 @@ const $ = (id) => document.getElementById(id);
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let brainGraph = {nodes: [], edges: [], pending: 0};
 let graphPositions = new Map();
+let graphSectors = new Map();
 let graphScale = 1;
 let graphPanX = 0;
 let graphPanY = 0;
@@ -19,6 +22,8 @@ let graphDrag = null;
 let graphMoved = false;
 let vectorAvailableForSearch = false;
 let width = 0, height = 0, time = 0, last = 0;
+const graphCenter = () => ({x: width / 2 + graphPanX, y: height * .48 + graphPanY});
+const requestTrace = new RequestTrace();
 
 async function loadState() {
   try {
@@ -65,45 +70,8 @@ function resize() {
 }
 
 let hoveredMemory = null;
-let cellBlend = 0;
-const cellNames = ["Факты", "Предпочтения", "События", "Биография"];
-// Axial neighbours in a pointy-top hexagonal grid around the central core.
-const cellCenters = [[.866, -1.5], [1.732, 0], [-.866, 1.5], [-1.732, 0]];
-
-function drawCells(cx, cy, size, opacity) {
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  for (const [i, [gx, gy]] of cellCenters.entries()) {
-    const x = cx + gx * size, y = cy + gy * size;
-    ctx.beginPath();
-    for (let side = 0; side < 6; side++) {
-      const angle = (side + .5) * Math.PI / 3;
-      const px = x + Math.cos(angle) * size, py = y + Math.sin(angle) * size;
-      if (side === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fillStyle = "#100c08";
-    ctx.strokeStyle = "#936b4280";
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#e4bc8e";
-    ctx.textAlign = "center";
-    ctx.font = "11px Consolas, monospace";
-    ctx.fillText(cellNames[i], x, y - .67 * size);
-  }
-  ctx.restore();
-}
-
-const traceNodes = {
-  chat: ["Чат", .88, .18], db: ["SQLite", .14, .82],
-  core: ["Контекст", .50, .48], cloud: ["Cloud.ru", .85, .80],
-};
-let traceSegments = [];
-function traceStep(from, to, description) {
-  const previous = traceSegments.at(-1);
-  // Stagger simultaneous server events so each hop can be followed.
-  const start = Math.max(performance.now(), previous ? previous.start + 320 : 0);
-  traceSegments.push({from, to, start});
+function traceStep(from, to, description, sources) {
+  requestTrace.add(from, to, sources);
   traceNote(description);
   if (reducedMotion) paint();
 }
@@ -113,87 +81,45 @@ function traceNote(description) {
   li.textContent = description;
   $("request-steps").append(li);
   $("request-trace").hidden = false;
+  $("chat-map-link").hidden = false;
 }
 
-function drawRequestTrace() {
-  if (!traceSegments.length || !width || !height) return;
-  const now = performance.now();
-  const points = Object.fromEntries(Object.entries(traceNodes).map(([key, [label, x, y]]) =>
-    [key, {label, x: width * x + (key === "core" ? graphPanX : 0),
-      y: height * y + (key === "core" ? graphPanY : 0)}]));
-  const used = new Set();
-  ctx.save();
-  for (const step of traceSegments) {
-    if (!reducedMotion && now < step.start) continue;
-    const a = points[step.from], b = points[step.to];
-    used.add(step.from); used.add(step.to);
-    const t = reducedMotion ? 1 : Math.min(1, (now - step.start) / 750);
-    const bendX = (a.x + b.x) / 2 + (a.y - b.y) * .16;
-    const bendY = (a.y + b.y) / 2 + (b.x - a.x) * .16;
-    const color = step.from === "cloud" ? "#a8d8f3" : "#ffb874";
-    ctx.strokeStyle = color + (t < 1 ? "a0" : "40");
-    ctx.lineWidth = t < 1 ? 1.6 : .8;
-    ctx.beginPath();
-    ctx.moveTo(a.x,a.y);
-    ctx.quadraticCurveTo(bendX,bendY,b.x,b.y);
-    ctx.stroke();
-    if (t < 1) {
-      ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8;
-      for (let i = 0; i < 4; i++) {
-        const u = Math.max(0, t - i * .028), v = 1 - u;
-        ctx.beginPath();
-        ctx.arc(v*v*a.x + 2*u*v*bendX + u*u*b.x,
-          v*v*a.y + 2*u*v*bendY + u*u*b.y, 3.6-i*.7, 0, Math.PI*2);
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
+function finishTrace(interrupted = false) {
+  requestTrace.outcome = interrupted ? "interrupted" : "complete";
+  $("request-replay").hidden = reducedMotion || !requestTrace.steps.length;
+  if (reducedMotion) paint();
+}
+
+$("request-replay").addEventListener("click", () => {
+  requestTrace.replay();
+  showBrainActivity("Повтор пути запроса");
+});
+
+function visibleTraceSources(sources) {
+  const points = new Map();
+  for (const {id, sector} of sources) {
+    let shape;
+    if (atlasView.active) {
+      shape = atlasView.shapes.find(item => item.type === "memory" && item.id === id);
+      if (!shape) shape = atlasView.shapes.find(item => item.type === "sector"
+        ? item.sector === sector
+        : (item.type === "region" || item.type === "cluster") && atlasView.sector === sector
+          && id >= item.firstId && id <= item.lastId);
+    } else {
+      shape = graphSectors.size ? graphSectors.get(sector) : graphPositions.get(id);
+    }
+    if (shape && shape.x >= 0 && shape.x <= width && shape.y >= 0 && shape.y <= height) {
+      points.set(shape, {...shape, radius: (shape.radius || 2) + 4,
+                        color: memoryColors[shape.kind] || "#8ce9cd"});
     }
   }
-  ctx.font = "12px Consolas, monospace";
-  ctx.textAlign = "center";
-  for (const key of used) {
-    const p = points[key];
-    const y = p.y + (key === "core" ? 27 : 0);
-    const w = ctx.measureText(p.label).width + 16;
-    ctx.fillStyle = "#100c09";
-    ctx.fillRect(p.x-w/2,y-10,w,20);
-    ctx.strokeStyle = "#b884506e";
-    ctx.strokeRect(p.x-w/2,y-10,w,20);
-    ctx.fillStyle = "#ffcf9a";
-    ctx.fillText(p.label,p.x,y+4);
-  }
-  ctx.restore();
+  return points.values();
 }
 
-let recallSignal = null;
 function paint() {
   paintGraph();
-  drawRequestTrace();
-  if (!recallSignal) return;
-  const t = (performance.now() - recallSignal.started) / 1150;
-  if (t >= 1) {
-    recallSignal = null;
-    return;
-  }
-  const cx = width / 2 + graphPanX, cy = height * .48 + graphPanY;
-  const nodes = atlasView.active ? atlasView.shapes.filter(shape => shape.type === "memory") : graphPositions;
-  ctx.save();
-  ctx.strokeStyle = "rgba(238,138,60,.48)";
-  ctx.fillStyle = "#ffcf9a";
-  for (const id of recallSignal.ids) {
-    const node = atlasView.active ? nodes.find(shape => shape.id === id) : nodes.get(id);
-    if (!node) continue;
-    ctx.beginPath();
-    ctx.moveTo(node.x, node.y);
-    ctx.lineTo(cx, cy);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(node.x + (cx - node.x) * t, node.y + (cy - node.y) * t, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
+  const radius = memoryMapRadius(width, height, graphScale);
+  requestTrace.draw(ctx, graphCenter(), radius, visibleTraceSources, reducedMotion);
 }
 
 function paintGraph() {
@@ -202,68 +128,29 @@ function paintGraph() {
     return;
   }
   ctx.clearRect(0, 0, width, height);
-  const x = width * .5, y = height * .48;
-  const r = Math.min(width * .46, height * .46);
-  const cx = x + graphPanX, cy = y + graphPanY;
-  const target = Math.max(0, Math.min(1, (graphScale - 1.22) / .58));
-  cellBlend = reducedMotion ? target : cellBlend + (target - cellBlend) * .18;
-  if (Math.abs(target - cellBlend) < .002) cellBlend = target;
-  const cellSize = r * graphScale * .32;
-  if (cellBlend < 1) {
-    ctx.save();
-    ctx.globalAlpha = 1 - cellBlend;
-    drawMemoryDial(ctx, cx, cy, r * graphScale);
-    ctx.restore();
-  }
-  if (cellBlend > 0) drawCells(cx, cy, cellSize, cellBlend);
-  drawCore(ctx, cx, cy, r * .09 * graphScale, reducedMotion ? 0 : time / 1000);
-  // Only records returned by SQLite are rendered as cells, no fake neurons.
-  const counts = Array(8).fill(0);
-  const kindCounts = {fact: 0, preference: 0, event: 0, biography: 0};
-  const section = {fact: 0, preference: 2, event: 4, biography: 6};
-  const radius = Math.max(2.1, Math.min(3.6, r / 68)) * Math.sqrt(graphScale);
-  const totals = {};
-  for (const node of brainGraph.nodes) totals[node.kind] = (totals[node.kind] || 0) + 1;
-  graphPositions = new Map();
+  const r = memoryMapRadius(width, height, graphScale);
+  const {x: cx, y: cy} = graphCenter();
+  drawMemoryDial(ctx, cx, cy, r);
+  drawCore(ctx, cx, cy, r * .095, reducedMotion ? 0 : time / 1000);
+  // SQLite atlas sectors split each category by record ID parity.
+  const groups = Array.from({length: 8}, () => []);
   for (const node of brainGraph.nodes) {
-    const kindIndex = kindCounts[node.kind] ?? 0;
-    kindCounts[node.kind] = kindIndex + 1;
-    const sector = (section[node.kind] ?? 0) + (kindIndex % 2);
-    counts[sector]++;
-    const outer = kindIndex % 4 === 0;
-    const slot = outer ? Math.floor(kindIndex / 4) : kindIndex - Math.floor(kindIndex / 4) - 1;
-    const count = outer ? Math.ceil(totals[node.kind] / 4) : totals[node.kind] - Math.ceil(totals[node.kind] / 4);
-    const columns = outer ? Math.min(36, count) : Math.ceil(Math.sqrt(count * 2.5));
-    const rows = Math.ceil(count / columns);
-    const angle = -Math.PI / 2 + (section[node.kind] ?? 0) * Math.PI / 4 +
-      ((slot % columns + .5) / columns) * 1.43 + .06;
-    const distance = r * ((outer ? .84 : .31) +
-      (Math.floor(slot / columns) + .5) / rows * (outer ? .12 : .25));
-    const ringX = Math.cos(angle) * distance * graphScale;
-    const ringY = Math.sin(angle) * distance * graphScale;
-    let offsetX = ringX, offsetY = ringY;
-    if (cellBlend > 0) {
-      const [gx, gy] = cellCenters[Math.floor((section[node.kind] ?? 0) / 2)];
-      const orbit = .60 * Math.sqrt((kindIndex + .5) / totals[node.kind]);
-      const theta = kindIndex * 2.399963;
-      offsetX += ((gx + Math.cos(theta) * orbit) * cellSize - ringX) * cellBlend;
-      offsetY += ((gy + Math.sin(theta) * orbit) * cellSize - ringY) * cellBlend;
-    }
-    graphPositions.set(node.id, {
-      id: node.id, kind: node.kind, preview: node.preview, outer,
-      x: cx + offsetX,
-      y: cy + offsetY,
-    });
+    const kind = memoryKinds.indexOf(node.kind);
+    if (kind >= 0) groups[kind * 2 + node.id % 2].push(node);
   }
+  const radius = Math.max(1.6, Math.min(2.9, r / 87));
+  graphPositions.clear();
+  graphSectors.clear();
   const drawNodes = graphScale >= .85 || brainGraph.nodes.length < 300;
   if (!drawNodes) {
     // Level of detail: collapse >300 tiny cells into the eight real groups.
     for (let i = 0; i < counts.length; i++) {
-      if (!counts[i]) continue;
-      const a = i * Math.PI / 4 - Math.PI / 2;
-      const px = x + graphPanX + Math.cos(a) * r * .66 * graphScale;
-      const py = y + graphPanY + Math.sin(a) * r * .66 * graphScale;
-      const size = 11 + Math.log2(counts[i] + 1) * 2;
+      const count = groups[i].length;
+      if (!count) continue;
+      const a = sectorAngle(i);
+      const px = cx + Math.cos(a) * r * .60;
+      const py = cy + Math.sin(a) * r * .60;
+      const size = Math.min(r * .13, 11 + Math.log2(count + 1) * 2);
       ctx.beginPath();
       for (let k = 0; k < 6; k++) {
         const phi = k * Math.PI / 3;
@@ -271,15 +158,38 @@ function paintGraph() {
         if (k === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
       }
       ctx.closePath();
-      ctx.fillStyle = "rgba(174,126,66,.20)";
-      ctx.strokeStyle = "rgba(226,177,106,.73)";
+      const kind = memoryKinds[Math.floor(i / 2)];
+      const color = memoryColors[kind];
+      ctx.fillStyle = color + "25";
+      ctx.strokeStyle = color + "ac";
       ctx.fill(); ctx.stroke();
       ctx.font = "11px Consolas, monospace";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillStyle = "#ead0a9";
-      ctx.fillText(String(counts[i]), px, py);
+      ctx.fillStyle = color;
+      ctx.fillText(String(count), px, py);
+      graphSectors.set(i, {x: px, y: py, radius: size, kind});
     }
     return;
+  }
+  for (const [sector, nodes] of groups.entries()) {
+    const outerCount = nodes.length >= 8 ? Math.floor(nodes.length * .33) : 0;
+    for (const [band, entries] of [nodes.slice(outerCount), nodes.slice(0, outerCount)].entries()) {
+      const outer = band === 1;
+      const columns = Math.min(outer ? 18 : 11, Math.ceil(Math.sqrt(entries.length) * (outer ? 1.8 : 1.25)));
+      const rows = Math.ceil(entries.length / columns);
+      const spread = (outer ? .67 : .50) * Math.PI / 4;
+      for (const [index, node] of entries.entries()) {
+        const row = Math.floor(index / columns);
+        const rowLength = Math.min(columns, entries.length - row * columns);
+        const angle = sectorAngle(sector) + ((index % columns + .5 - rowLength / 2) / columns) * spread;
+        const distance = r * ((outer ? .84 : .30) + (row + .5) / rows * (outer ? .10 : .29));
+        graphPositions.set(node.id, {
+          id: node.id, kind: node.kind, preview: node.preview, outer,
+          x: cx + Math.cos(angle) * distance, y: cy + Math.sin(angle) * distance,
+          radius: outer ? radius * 1.2 : radius * .64,
+        });
+      }
+    }
   }
   // Viewport culling and bounded edge count avoid huge Canvas workloads.
   const visible = (n) => n.x >= -15 && n.x <= width + 15 &&
@@ -291,16 +201,16 @@ function paintGraph() {
     if (!a || !b || (!visible(a) && !visible(b))) continue;
     ctx.beginPath();
     ctx.strokeStyle = edge.relation === "possible_conflict"
-      ? "rgba(232,125,93,.35)" : "rgba(221,171,110,.19)";
+      ? "#f5a38972" : (memoryColors[a.kind] || "#8ed6d6") + "46";
     ctx.moveTo(a.x, a.y);
-    ctx.quadraticCurveTo(x + graphPanX, y + graphPanY, b.x, b.y);
+    ctx.quadraticCurveTo(cx, cy, b.x, b.y);
     ctx.stroke();
   }
   const focus = graphPositions.get(hoveredMemory);
   if (focus) {
     ctx.save();
-    ctx.strokeStyle = "#ffcf9a99";
-    ctx.fillStyle = "#ffe9c2";
+    ctx.strokeStyle = (memoryColors[focus.kind] || "#8ed6d6") + "b0";
+    ctx.fillStyle = "#e6fff7";
     let shown = 0;
     for (const edge of brainGraph.edges) {
       if (edge.source_id !== focus.id && edge.target_id !== focus.id) continue;
@@ -324,19 +234,22 @@ function paintGraph() {
     if (!visible(node)) continue;
     const color = memoryColors[node.kind] || "#badbd9";
     ctx.beginPath();
-    const size = node.outer ? radius : radius * .62;
+    const size = node.radius;
     ctx.arc(node.x, node.y, size, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    if (node.outer) {
+      ctx.lineWidth = .85;
+      ctx.strokeStyle = color + "88";
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, size * .34, 0, Math.PI * 2);
+    }
+    ctx.fillStyle = color + (node.outer ? "b0" : "c8");
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, size + 1.3, 0, Math.PI * 2);
-    ctx.strokeStyle = color + "80";
-    ctx.stroke();
   }
   // A brief glow only when real records appeared since the previous refresh.
   if (!reducedMotion && performance.now() - graphPulseAt < 1700) {
     const strength = (1 - (performance.now() - graphPulseAt) / 1700) * .45;
-    ctx.strokeStyle = "rgba(247,205,145," + Math.max(0, strength).toFixed(3) + ")";
+    ctx.strokeStyle = "rgba(149,247,212," + Math.max(0, strength).toFixed(3) + ")";
     ctx.lineWidth = 1.2;
     for (const id of [...graphFreshIds].slice(0, 48)) {
       const node = graphPositions.get(id);
@@ -1126,24 +1039,6 @@ function showBrainActivity(text) {
   activityTimer = setTimeout(() => { status.textContent = ""; }, 5000);
 }
 
-// The moving signal carries no message content. Coordinates follow the
-// current layout and graph pan, including the stacked mobile layout.
-function animateChatSignal(returning) {
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const box = canvas.getBoundingClientRect();
-  const composer = $("message").getBoundingClientRect();
-  const core = [box.left + box.width / 2 + graphPanX, box.top + box.height * .48 + graphPanY];
-  const chat = [composer.left + composer.width / 2, composer.top + composer.height / 2];
-  const points = returning ? [core, chat] : [chat, core];
-  const signal = document.createElement("i");
-  signal.className = "chat-signal";
-  signal.setAttribute("aria-hidden", "true");
-  document.body.append(signal);
-  const frames = points.map(([x, y]) => ({ transform: "translate(" + x + "px," + y + "px)" }));
-  const animation = signal.animate(frames, {duration: 820, easing: "ease-in-out"});
-  animation.onfinish = animation.oncancel = () => signal.remove();
-}
-
 async function sendMessage() {
   if (!cloudReady || chatBusy) return;
   const content = $("message").value.trim();
@@ -1162,11 +1057,13 @@ async function sendMessage() {
     $("conversation").replaceChildren();
     $("conversation").classList.add("has-messages");
   }
-  traceSegments = [];
+  requestTrace.clear();
+  $("chat-map-link").hidden = true;
+  $("request-replay").hidden = true;
+  if (reducedMotion) paint();
   $("request-steps").replaceChildren();
   $("request-trace").hidden = true;
   showBrainActivity("Отправка сообщения");
-  animateChatSignal(false);
   addChatBubble("user", content);
   const placeholder = addChatBubble("assistant", "");
   const body = placeholder.querySelector("p");
@@ -1199,11 +1096,9 @@ async function sendMessage() {
       } else if (event === "context") {
         const ids = data.memory_ids || [];
         traceStep("db", "core", "История и память → контекст · найдено записей: " + data.memory_count +
-          (ids.length ? " (" + ids.map(id => "#" + id).join(", ") + ")" : ""));
+          (ids.length ? " (" + ids.map(id => "#" + id).join(", ") + ")" : ""),
+          ids.map(id => ({id, sector: data.memory_sectors?.[id]})));
         showBrainActivity("Поиск завершён · записей для ответа: " + data.memory_count);
-        if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-          recallSignal = {started: performance.now(), ids: data.memory_ids || []};
-        }
       } else if (event === "model_request") {
         traceStep("core", "cloud", "Подготовлен запрос к " + data.model + " · Cloud.ru /v1/chat/completions · сообщений в локальной истории: " +
           data.history_count + ", фрагментов документов: " + data.document_count);
@@ -1215,13 +1110,13 @@ async function sendMessage() {
           body.textContent = "";
           traceStep(cached ? "db" : "cloud", "chat", cached ? "SQLite → чат · сохранённый ответ" : "Cloud.ru → чат · началась передача ответа");
           showBrainActivity("Приходит ответ");
-          animateChatSignal(true);
         }
         received = true;
         body.textContent += data.text || "";
         autoScrollChat();
       } else if (event === "done") {
         complete = true;
+        finishTrace();
         showBrainActivity(data.pending ? "Воспоминания ждут подтверждения" : "Диалог сохранён");
         attachFeedback(placeholder, data.message_id);
         pendingClientId = "";
@@ -1233,6 +1128,7 @@ async function sendMessage() {
         if (data.pending) $("chat-notice").textContent += " Новые воспоминания ждут подтверждения: " + data.pending;
       } else if (event === "stopped") {
         stopped = true;
+        finishTrace(true);
         traceNote("Остановлено пользователем");
         showBrainActivity("Ответ остановлен");
         body.textContent += "\n[Ответ остановлен. Неполный текст не сохранён.]";
@@ -1252,8 +1148,11 @@ async function sendMessage() {
     await refreshForgeChatUI();
   } catch (error) {
     $("message").value = content;
-    traceNote("Ошибка: " + error.message);
-    showBrainActivity("Ошибка запроса");
+    if (!complete && !stopped) {
+      traceNote("Ошибка: " + error.message);
+      finishTrace(true);
+      showBrainActivity("Ошибка запроса");
+    }
     if (!received) placeholder.remove();
     $("chat-notice").textContent = "Ошибка: " + error.message + ". Можно повторить сообщение.";
   } finally {
@@ -1261,7 +1160,7 @@ async function sendMessage() {
     chatBusy = false;
     $("stop-message").hidden = true;
     setCloudReady(cloudReady, $("model-info").textContent);
-    $("message").focus();
+    $("message").focus({preventScroll: true});
   }
 }
 

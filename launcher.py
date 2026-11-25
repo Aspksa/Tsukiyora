@@ -615,6 +615,7 @@ class SoulHandler(BaseHTTPRequestHandler):
             "/ui/style.css": (UI / "style.css", "text/css; charset=utf-8"),
             "/ui/app.ts": (UI / "app.ts", "text/javascript; charset=utf-8"),
             "/ui/atlas_view.ts": (UI / "atlas_view.ts", "text/javascript; charset=utf-8"),
+            "/ui/request_trace.ts": (UI / "request_trace.ts", "text/javascript; charset=utf-8"),
         }
         match = allowed.get(path)
         if not match:

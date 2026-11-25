@@ -7,6 +7,7 @@ import threading
 import uuid
 
 from tsukiyora.cloud.cloudru import CloudError, persona_prompt
+from tsukiyora.memory.brain_atlas import KIND_BASE
 from tsukiyora.personality.living_dialogue9 import RECENT_WINDOW
 from tsukiyora.personality.soul_growth import SoulGrowth
 
@@ -113,6 +114,11 @@ def handle_stream(handler, obj: dict):
         send_event(handler, "context", {
             "memory_ids": [item["id"] for item in memories if isinstance(item.get("id"), int)],
             "memory_count": len(memories),
+            "memory_sectors": {
+                item["id"]: KIND_BASE[item["kind"]] + item["id"] % 2
+                for item in memories
+                if isinstance(item.get("id"), int) and item.get("kind") in KIND_BASE
+            },
         })
         prompt = persona_prompt(handler.server.persona, memories)
         # V10 uses the SAME bounded, locally sourced dialogue composer

@@ -23,17 +23,23 @@ function compact(n) {
 // Static dial marks describe the four memory categories. Only API records
 // produce selectable cells. Cache the dial so idle frames use one blit.
 const categories = [
-  ["fact", "Факты", "#ee8a3c"], ["preference", "Предпочтения", "#e8c25a"],
-  ["event", "События", "#e0795f"], ["biography", "Биография", "#ffcf9a"],
+  ["fact", "Факты", "#64e2bd"], ["preference", "Предпочтения", "#85d9f4"],
+  ["event", "События", "#b3aeff"], ["biography", "Биография", "#f4c184"],
 ];
 export const memoryColors = Object.fromEntries(categories.map(([kind,,color]) => [kind,color]));
+export const memoryKinds = Object.keys(memoryColors);
+export const sectorAngle = (sector) => -Math.PI / 2 + (sector + .5) * Math.PI / 4;
+export const memoryMapRadius = (width, height, zoom) => Math.min(width, height) * .415 * zoom;
 const dial = document.createElement("canvas");
+let drawDialLabels = false;
 
 export function drawMemoryDial(ctx, x, y, radius) {
   if (radius <= 0) return;
   const size = Math.max(1, Math.ceil(radius * 2.12 * Math.min(devicePixelRatio, 2)));
-  if (dial.width !== size || dial.height !== size) {
+  const showLabels = radius >= 170;
+  if (dial.width !== size || dial.height !== size || drawDialLabels !== showLabels) {
     dial.width = dial.height = size;
+    drawDialLabels = showLabels;
     const g = dial.getContext("2d");
     g.translate(size / 2, size / 2);
     g.scale(size / 424, size / 424);
@@ -47,46 +53,44 @@ export function drawMemoryDial(ctx, x, y, radius) {
     function point(angle, distance) {
       return [Math.cos(angle) * distance, Math.sin(angle) * distance];
     }
-    for (const r of [26, 38, 60, 169, 186, 198]) ring(0, 0, r, "#a27c5466", .7);
-    for (let i = 0; i < 144; i++) {
-      const a = i * Math.PI / 72;
+    for (const r of [53, 70, 101, 129, 157, 185, 198]) ring(0, 0, r, "#93cacc25", .85);
+    for (let i = 0; i < 120; i++) {
+      const a = i * Math.PI / 60;
       g.beginPath();
-      g.moveTo(...point(a, 193));
-      g.lineTo(...point(a, i % 6 === 0 ? 198 : 195));
-      g.strokeStyle = "#bd967280";
+      g.moveTo(...point(a, i % 5 === 0 ? 191 : 195));
+      g.lineTo(...point(a, 198));
+      g.strokeStyle = i % 5 === 0 ? "#95c8d290" : "#95c8d248";
       g.stroke();
     }
     for (const [sector, [, label, color]] of categories.entries()) {
       const start = sector * Math.PI / 2 - Math.PI / 2;
-      for (let i = 0; i < 20; i++) {
-        const a = start + (i + 1) * Math.PI / 43;
-        const [px, py] = point(a, 178);
-        ring(px, py, 4.4, color + "88", .8);
-        ring(px, py, 1.6, color + "70", .7);
-      }
-      for (let i = 0; i < 18; i++) {
-        const a = start + (i + 1) * Math.PI / 40;
-        for (let j = 0; j < 5; j++) {
-          const [px, py] = point(a, 75 + j * 5);
-          g.fillStyle = color + "59";
-          g.fillRect(px - .75, py - .75, 1.5, 1.5);
-        }
-      }
-      const mid = start + Math.PI / 4;
+      const lo = start + .09, hi = start + Math.PI / 2 - .09;
       g.beginPath();
-      g.moveTo(...point(mid, 120));
-      g.lineTo(...point(mid, 169));
-      g.strokeStyle = color + "45";
+      g.arc(0, 0, 186, lo, hi);
+      g.arc(0, 0, 75, hi, lo, true);
+      g.closePath();
+      g.fillStyle = color + "08";
+      g.fill();
+      g.beginPath();
+      g.arc(0, 0, 198, lo, hi);
+      g.lineWidth = 2;
+      g.strokeStyle = color + "86";
       g.stroke();
-      const [lx, ly] = point(mid, 134);
-      g.textAlign = "center";
-      g.font = "10px Consolas, monospace";
-      g.fillStyle = color;
-      g.fillText(label, lx, ly);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(...point(start, 65));
+      g.lineTo(...point(start, 181));
+      g.strokeStyle = "#9bccca30";
+      g.stroke();
+      if (showLabels) {
+        const [lx, ly] = point(start + Math.PI / 4, 137);
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.font = "600 10px Consolas, monospace";
+        g.fillStyle = color;
+        g.fillText(label, lx, ly);
+      }
     }
-    ring(0, 0, 17, "#ee8a3c", 1.4);
-    ring(0, 0, 13, "#8a4a1c", .7);
-    ring(0, 0, 5, "#ffcf9a", 1.2);
   }
   const half = radius * 1.06;
   ctx.drawImage(dial, x - half, y - half, half * 2, half * 2);
@@ -94,7 +98,20 @@ export function drawMemoryDial(ctx, x, y, radius) {
 
 // A rotating point sphere is the core glyph, drawn independently of record counts.
 export function drawCore(ctx, x, y, radius, seconds) {
+  if (radius <= 0) return;
   ctx.save();
+  const glow = ctx.createRadialGradient(x, y, radius * .31, x, y, radius * 2.55);
+  glow.addColorStop(0, "#61e3c644");
+  glow.addColorStop(1, "#61e3c600");
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - radius * 2.6, y - radius * 2.6, radius * 5.2, radius * 5.2);
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 1.46, 0, Math.PI * 2);
+  ctx.fillStyle = "#081a20";
+  ctx.strokeStyle = "#81e6cdb0";
+  ctx.lineWidth = 1.15;
+  ctx.fill();
+  ctx.stroke();
   const phase = seconds * .48;
   for (let i = 0; i < 96; i++) {
     const latitude = 1 - (i + .5) / 48;
@@ -104,7 +121,7 @@ export function drawCore(ctx, x, y, radius, seconds) {
     const px = Math.sin(angle) * band;
     const py = latitude * .94 - depth * .34;
     ctx.globalAlpha = .22 + (depth + 1) * .36;
-    ctx.fillStyle = depth > 0 ? "#ffcf9a" : "#ee8a3c";
+    ctx.fillStyle = depth > 0 ? "#c7ffe9" : "#52c9b0";
     const size = Math.max(.8, radius * (.045 + .021 * depth));
     ctx.fillRect(x + px * radius, y + py * radius, size, size);
   }
@@ -229,11 +246,15 @@ export class BrainAtlasView {
     ctx.clearRect(0,0,width,height);
     this.shapes=[];
     const cx=width/2+panX,cy=height*.48+panY;
-    const base=Math.min(width*.34,height*.35,242);
+    const radius=memoryMapRadius(width,height,zoom);
+    const base=radius/1.15/zoom;
     if (this.level === "overview") {
-      drawMemoryDial(ctx, cx, cy, base * 1.15 * zoom);
-      drawCore(ctx, cx, cy, base * .12 * zoom, reducedMotion ? 0 : performance.now() / 1000);
+      drawMemoryDial(ctx, cx, cy, radius);
+    } else {
+      ctx.beginPath();ctx.arc(cx,cy,radius*.99,0,Math.PI*2);
+      ctx.strokeStyle="#93cacc38";ctx.lineWidth=1;ctx.stroke();
     }
+    drawCore(ctx, cx, cy, base * .145 * zoom, reducedMotion ? 0 : performance.now() / 1000);
     const flicker=(!reducedMotion && performance.now()-this.pulseAt<1800)
       ? .18*(1-(performance.now()-this.pulseAt)/1800) : 0;
     ctx.lineWidth=.9;
@@ -244,74 +265,76 @@ export class BrainAtlasView {
       // Only aggregated real SQLite memory_links contribute to these lines.
       for (const edge of (this.data.sector_links||[]).slice(0,64)) {
         if (edge.source===edge.target) continue;
-        const a=-Math.PI/2+edge.source*Math.PI/4;
-        const b=-Math.PI/2+edge.target*Math.PI/4;
+        const a=sectorAngle(edge.source);
+        const b=sectorAngle(edge.target);
         const sx=cx+Math.cos(a)*base*.68*zoom;
         const sy=cy+Math.sin(a)*base*.68*zoom;
         const tx=cx+Math.cos(b)*base*.68*zoom;
         const ty=cy+Math.sin(b)*base*.68*zoom;
         ctx.beginPath();ctx.moveTo(sx,sy);
         ctx.quadraticCurveTo(cx,cy,tx,ty);
-        ctx.strokeStyle="rgba(218,160,83,"+
+        ctx.strokeStyle="rgba(115,204,198,"+
           Math.min(.55,.13+Math.log2(1+edge.count)*.055).toFixed(3)+")";
         ctx.lineWidth=Math.min(2.8,.65+Math.log2(1+edge.count)*.2);
         ctx.stroke();
       }
       for (const item of sectors) {
-        const angle=-Math.PI/2+item.id*Math.PI/4;
+        const angle=sectorAngle(item.id);
         const px=cx+Math.cos(angle)*base*.68*zoom;
         const py=cy+Math.sin(angle)*base*.68*zoom;
-        const radius=18+Math.min(12,Math.log2(item.count+1)*1.8);
+        const radius=12+Math.min(11,Math.log2(item.count+1)*1.2);
         if (px<-40||px>width+40||py<-40||py>height+40) continue;
         // Glow only on actual local memory updates or navigation events.
         // Idle frames remain inexpensive, and reduced-motion removes pulses.
         if (flicker>0) {
           ctx.save();ctx.shadowBlur=15+flicker*55;
-          ctx.shadowColor="rgba(228,164,72,.6)";
+          ctx.shadowColor="#79e6cb99";
         }
         const color = memoryColors[item.kind] || "#89beca";
-        hex(ctx,px,py,radius*zoom,"#0c0907",color);
+        ctx.beginPath();
+        ctx.arc(px,py,radius*zoom,0,Math.PI*2);
+        ctx.fillStyle="#091b23";ctx.strokeStyle=color;
+        ctx.fill();ctx.stroke();
         if (flicker>0) ctx.restore();
         ctx.textAlign="center";ctx.textBaseline="middle";
-        ctx.fillStyle="#f0d0a0";ctx.font="12px Consolas, monospace";
-        ctx.fillText(compact(item.count),px,py-4);
-        ctx.font="9px Consolas, monospace";
-        ctx.fillText(String(item.id+1),px,py+9);
+        ctx.fillStyle="#dff9f2";ctx.font="12px Consolas, monospace";
+        ctx.fillText(compact(item.count),px,py);
         this.shapes.push({x:px,y:py,radius:radius*zoom,
-                          type:"sector",sector:item.id,
+                          type:"sector",sector:item.id,kind:item.kind,
                           preview:NAMES[item.kind]+" · "+item.count+" записей"});
       }
     } else if (this.level==="clusters" || this.level==="regions") {
       // Regions and 256-ID clusters share one bounded virtualized renderer.
       const groups=this.level==="regions"
         ? (this.data.regions||[]) : (this.data.clusters||[]);
-      const spacing=Math.min(15,Math.max(7,base/19))*zoom;
+      const spacing=Math.min(15,Math.max(7,base/19),base*.6/Math.sqrt(groups.length || 1))*zoom;
+      const color=memoryColors[this.data.kind] || "#84d8cf";
       // Stable golden-angle placement and screen-space culling keep draw bounded.
       for (let i=0;i<groups.length;i++) {
         const cluster=groups[i];
         const angle=i*GOLDEN;
-        const distance=Math.sqrt(i+.5)*spacing*1.16;
+        const distance=Math.sqrt(i+.5)*spacing*1.16+base*.23*zoom;
         const px=cx+Math.cos(angle)*distance,py=cy+Math.sin(angle)*distance;
         if (px<-25||px>width+25||py<-25||py>height+25) continue;
         const radius=(5+Math.min(4,Math.sqrt(cluster.count)*.32))*zoom;
-        hex(ctx,px,py,radius,"rgba(179,127,65,.17)",
-            "rgba(236,184,104,"+(.58+flicker)+")");
+        hex(ctx,px,py,radius,color+"1f",color+(flicker ? "ce" : "9a"));
         if (zoom>1.35 || groups.length<40) {
-          ctx.fillStyle="#dec29b";ctx.font="9px Consolas, monospace";
+          ctx.fillStyle="#d3ece7";ctx.font="9px Consolas, monospace";
           ctx.textAlign="center";ctx.textBaseline="middle";
           ctx.fillText(compact(cluster.count),px,py);
         }
         this.shapes.push({x:px,y:py,radius:Math.max(radius,8),
                           type:this.level==="regions"?"region":"cluster",
-                          region:cluster.region,bucket:cluster.bucket,
+                          region:cluster.region,bucket:cluster.bucket,kind:this.data.kind,
+                          firstId:cluster.first_id,lastId:cluster.last_id,
                           preview:(this.level==="regions"?"Область памяти":"Сота-кластер")+
                             " · "+cluster.count+" записей · ID "+
                             cluster.first_id+"–"+cluster.last_id});
       }
       if (this.data.has_more) {
         const px=width-45,py=height-37;
-        hex(ctx,px,py,19,"rgba(171,117,50,.25)","rgba(240,186,108,.85)");
-        ctx.fillStyle="#f0d1a1";ctx.textAlign="center";ctx.font="11px Consolas, monospace";
+        hex(ctx,px,py,19,"#64e2bd24","#64e2bdc0");
+        ctx.fillStyle="#d3ece7";ctx.textAlign="center";ctx.font="11px Consolas, monospace";
         ctx.fillText("Ещё",px,py+4);
         this.shapes.push({x:px,y:py,radius:22,type:"more",
                           preview:"Показать следующую страницу кластеров"});
@@ -319,11 +342,11 @@ export class BrainAtlasView {
     } else if (this.level==="nodes") {
       const nodes=this.data.nodes||[];
       const map=new Map();
-      const spacing=11*zoom;
+      const spacing=Math.min(11,base*.72/Math.sqrt(nodes.length || 1))*zoom;
       for (let i=0;i<nodes.length;i++) {
         const node=nodes[i];
         const angle=i*GOLDEN;
-        const distance=Math.sqrt(i+.3)*spacing;
+        const distance=Math.sqrt(i+.3)*spacing+base*.23*zoom;
         const px=cx+Math.cos(angle)*distance,py=cy+Math.sin(angle)*distance;
         map.set(node.id,{x:px,y:py});
       }
@@ -332,7 +355,7 @@ export class BrainAtlasView {
         if (!a||!b) continue;
         ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
         ctx.strokeStyle=edge.relation==="possible_conflict"
-          ? "rgba(244,124,103,.42)" : "rgba(223,167,105,.23)";
+          ? "#f5a38972" : "#92cbc145";
         ctx.stroke();
       }
       for (const node of nodes) {
@@ -340,8 +363,8 @@ export class BrainAtlasView {
         if (!point) continue;
         if (point.x<-20||point.x>width+20||point.y<-20||point.y>height+20) continue;
         const radius=5*zoom;
-        hex(ctx,point.x,point.y,radius,"rgba(190,143,75,.13)",
-            "rgba(243,195,130,"+(.72+flicker)+")");
+        const color=memoryColors[node.kind] || "#84d8cf";
+        hex(ctx,point.x,point.y,radius,color+"28",color+(flicker ? "e8" : "b5"));
         this.shapes.push({x:point.x,y:point.y,radius:Math.max(7,radius),
                           type:"memory",id:node.id,preview:node.preview,
                           kind:node.kind});
@@ -352,7 +375,7 @@ export class BrainAtlasView {
       this.level==="regions" ? "Нажми область · Esc — назад" :
       this.level==="clusters" ? "Нажми кластер · Esc — назад" :
       "Нажми воспоминание · двойной щелчок — обзор";
-    ctx.fillStyle="rgba(222,189,146,.65)";
+    ctx.fillStyle="#a0c2c7";
     ctx.font="10px Consolas, monospace";ctx.textAlign="center";
     ctx.fillText(label,width*.5,height-22);
   }

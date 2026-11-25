@@ -569,6 +569,12 @@ class SoulHandler(BaseHTTPRequestHandler):
                     return self.send_json({"items": store.find_memories(
                         query=arg("query"), kind=arg("kind"),
                         limit=int(arg("limit", "50")))})
+                match = re.fullmatch(r"/api/memory/([1-9][0-9]{0,18})", path)
+                if match:
+                    item = store.get_memory(int(match.group(1)))
+                    if item is None:
+                        return self.send_json({"error": "Воспоминание не найдено."}, 404)
+                    return self.send_json(item)
                 if path == "/api/memory/conversations":
                     return self.send_json({"conversations": store.list_conversations(
                         limit=int(arg("limit", "30")))})

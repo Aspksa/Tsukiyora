@@ -124,6 +124,9 @@ class MemoryApiTests(unittest.TestCase):
         self.assertEqual(found["items"][0]["id"], memory_id)
         _, changed = self.request(f"/api/memory/{memory_id}", "PUT", {"content": "Исправленная запись"})
         self.assertEqual(changed["item"]["content"], "Исправленная запись")
+        _, detail = self.request(f"/api/memory/{memory_id}")
+        self.assertEqual((detail["id"], detail["content"], detail["source_type"]),
+                         (memory_id, "Исправленная запись", "manual"))
         _, conversation = self.request("/api/memory/conversations", "POST", {"title": "Встреча"})
         conversation_id = conversation["conversation"]["id"]
         _, messages = self.request("/api/memory/messages", "POST", {
@@ -137,6 +140,9 @@ class MemoryApiTests(unittest.TestCase):
         self.assertTrue((self.path.parent / "backups" / backup["filename"]).exists())
         _, result = self.request(f"/api/memory/{memory_id}", "DELETE")
         self.assertTrue(result["deleted"])
+        with self.assertRaises(HTTPError) as removed:
+            self.request(f"/api/memory/{memory_id}")
+        self.assertEqual(removed.exception.code, 404)
         _, status = self.request("/api/memory/status")
         self.assertEqual(status["memories"], 0)
         self.assertEqual(status["messages"], 1)

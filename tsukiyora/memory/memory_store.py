@@ -234,6 +234,17 @@ class MemoryStore:
                 (pattern, "%" + pattern + "%", kind or "", kind or "", limit),
             )]
 
+    def get_memory(self, memory_id: int) -> dict | None:
+        if type(memory_id) is not int or not 1 <= memory_id <= 2**63 - 1:
+            raise ValueError("Invalid memory ID.")
+        with closing(self.connect()) as db:
+            row = db.execute(
+                "SELECT id, kind, content, created_at, updated_at, source_type, "
+                "source_ref, verification_state FROM memory_items WHERE id=? AND status='active'",
+                (memory_id,),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
     def correct_memory(self, memory_id: int, content: str, reason: str = "user correction") -> dict:
         if type(memory_id) is not int or memory_id <= 0:
             raise ValueError("Invalid memory ID.")

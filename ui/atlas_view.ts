@@ -16,6 +16,17 @@ function hex(ctx,x,y,r,fill,stroke) {
   ctx.fill();ctx.stroke();
 }
 
+function drawAtlasNode(ctx,x,y,r,fill,stroke,layout) {
+  if (layout === "hex") {
+    hex(ctx,x,y,r,fill,stroke);
+    return;
+  }
+  ctx.beginPath();
+  ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle=fill;ctx.strokeStyle=stroke;
+  ctx.fill();ctx.stroke();
+}
+
 function compact(n) {
   return n>=1000 ? (n/1000).toFixed(n>=10000 ? 0 : 1)+"k" : String(n);
 }
@@ -30,6 +41,42 @@ export const memoryColors = Object.fromEntries(categories.map(([kind,,color]) =>
 export const memoryKinds = Object.keys(memoryColors);
 export const sectorAngle = (sector) => -Math.PI / 2 + (sector + .5) * Math.PI / 4;
 export const memoryMapRadius = (width, height, zoom) => Math.min(width, height) * .415 * zoom;
+const honeycomb = [[0,-1], [1,-1], [2,-1], [1,0], [0,1], [-1,1], [-2,1], [-1,0]];
+
+export function sectorPoint(sector, cx, cy, radius, layout, distance = .59) {
+  if (layout === "hex") {
+    const [column, row] = honeycomb[sector];
+    const cell = radius * .215;
+    return {x: cx + 1.5 * column * cell, y: cy + Math.sqrt(3) * (row + column / 2) * cell,
+            cellRadius: cell * .94};
+  }
+  const angle = sectorAngle(sector);
+  return {x: cx + Math.cos(angle) * radius * distance, y: cy + Math.sin(angle) * radius * distance};
+}
+
+export function drawHexSector(ctx, {x,y,cellRadius}, kind, count, aggregate = true) {
+  const color = memoryColors[kind];
+  ctx.save();
+  ctx.lineWidth = 1;
+  hex(ctx,x,y,cellRadius,color+"10",color+"62");
+  ctx.beginPath();
+  ctx.arc(x,y,cellRadius*.38,0,Math.PI*2);
+  ctx.strokeStyle=color+"30";
+  ctx.stroke();
+  if (cellRadius >= 28) {
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.font="600 "+Math.min(10,Math.round(cellRadius*.27))+"px Consolas, monospace";
+    ctx.fillStyle=color;
+    ctx.fillText(NAMES[kind],x,y-cellRadius*.56,cellRadius*1.5);
+  }
+  if (aggregate || cellRadius >= 36) {
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.font=(aggregate ? "12px" : "9px")+" Consolas, monospace";
+    ctx.fillStyle=aggregate ? "#e9e2d6" : color+"ad";
+    ctx.fillText(compact(count),x,y+(aggregate ? 0 : cellRadius*.72));
+  }
+  ctx.restore();
+}
 const dial = document.createElement("canvas");
 let drawDialLabels = false;
 
@@ -189,13 +236,14 @@ export class BrainAtlasView {
     return null;
   }
 
-  async goto(target) {
+  async goto(target, shouldApply = () => true) {
     if (!target || !target.is_real_record) throw new Error("Сота не найдена.");
     const sector=Number(target.sector),bucket=Number(target.bucket);
     const result=await this.fetch("nodes",sector,bucket);
     if (!result.nodes.some(item=>item.id===target.memory_id)) {
       throw new Error("Выбранная запись не попала в ограниченную выдачу.");
     }
+    if (!shouldApply()) return;
     this.active=true;
     this.level="nodes";this.sector=sector;
     this.region=Number(target.region);this.bucket=bucket;
@@ -241,14 +289,14 @@ export class BrainAtlasView {
     return result;
   }
 
-  draw(width,height,zoom,panX,panY,reducedMotion) {
+  draw(width,height,zoom,panX,panY,reducedMotion,layout = "rings",selectedId = null) {
     const ctx=this.ctx;
     ctx.clearRect(0,0,width,height);
     this.shapes=[];
     const cx=width/2+panX,cy=height*.48+panY;
     const radius=memoryMapRadius(width,height,zoom);
     const base=radius/1.15/zoom;
-    if (this.level === "overview") {
+    if (this.level === "overview" && layout === "rings") {
       drawMemoryDial(ctx, cx, cy, radius);
     } else {
       ctx.beginPath();ctx.arc(cx,cy,radius*.99,0,Math.PI*2);
@@ -265,24 +313,26 @@ export class BrainAtlasView {
       // Only aggregated real SQLite memory_links contribute to these lines.
       for (const edge of (this.data.sector_links||[]).slice(0,64)) {
         if (edge.source===edge.target) continue;
-        const a=sectorAngle(edge.source);
-        const b=sectorAngle(edge.target);
-        const sx=cx+Math.cos(a)*base*.68*zoom;
-        const sy=cy+Math.sin(a)*base*.68*zoom;
-        const tx=cx+Math.cos(b)*base*.68*zoom;
-        const ty=cy+Math.sin(b)*base*.68*zoom;
-        ctx.beginPath();ctx.moveTo(sx,sy);
-        ctx.quadraticCurveTo(cx,cy,tx,ty);
+        const a=sectorPoint(edge.source,cx,cy,radius,layout);
+        const b=sectorPoint(edge.target,cx,cy,radius,layout);
+        ctx.beginPath();ctx.moveTo(a.x,a.y);
+        ctx.quadraticCurveTo(cx,cy,b.x,b.y);
         ctx.strokeStyle="rgba(115,204,198,"+
           Math.min(.55,.13+Math.log2(1+edge.count)*.055).toFixed(3)+")";
         ctx.lineWidth=Math.min(2.8,.65+Math.log2(1+edge.count)*.2);
         ctx.stroke();
       }
       for (const item of sectors) {
-        const angle=sectorAngle(item.id);
-        const px=cx+Math.cos(angle)*base*.68*zoom;
-        const py=cy+Math.sin(angle)*base*.68*zoom;
-        const radius=12+Math.min(11,Math.log2(item.count+1)*1.2);
+        const position=sectorPoint(item.id,cx,cy,radius,layout);
+        const {x:px,y:py}=position;
+        if (layout === "hex") {
+          drawHexSector(ctx,position,item.kind,item.count);
+          this.shapes.push({x:px,y:py,radius:position.cellRadius,
+                            type:"sector",sector:item.id,kind:item.kind,
+                            preview:NAMES[item.kind]+" · "+item.count+" записей"});
+          continue;
+        }
+        const markerRadius=12+Math.min(11,Math.log2(item.count+1)*1.2);
         if (px<-40||px>width+40||py<-40||py>height+40) continue;
         // Glow only on actual local memory updates or navigation events.
         // Idle frames remain inexpensive, and reduced-motion removes pulses.
@@ -292,14 +342,14 @@ export class BrainAtlasView {
         }
         const color = memoryColors[item.kind] || "#89beca";
         ctx.beginPath();
-        ctx.arc(px,py,radius*zoom,0,Math.PI*2);
+        ctx.arc(px,py,markerRadius*zoom,0,Math.PI*2);
         ctx.fillStyle="#091b23";ctx.strokeStyle=color;
         ctx.fill();ctx.stroke();
         if (flicker>0) ctx.restore();
         ctx.textAlign="center";ctx.textBaseline="middle";
         ctx.fillStyle="#dff9f2";ctx.font="12px Consolas, monospace";
         ctx.fillText(compact(item.count),px,py);
-        this.shapes.push({x:px,y:py,radius:radius*zoom,
+        this.shapes.push({x:px,y:py,radius:markerRadius*zoom,
                           type:"sector",sector:item.id,kind:item.kind,
                           preview:NAMES[item.kind]+" · "+item.count+" записей"});
       }
@@ -317,7 +367,7 @@ export class BrainAtlasView {
         const px=cx+Math.cos(angle)*distance,py=cy+Math.sin(angle)*distance;
         if (px<-25||px>width+25||py<-25||py>height+25) continue;
         const radius=(5+Math.min(4,Math.sqrt(cluster.count)*.32))*zoom;
-        hex(ctx,px,py,radius,color+"1f",color+(flicker ? "ce" : "9a"));
+        drawAtlasNode(ctx,px,py,radius,color+"1f",color+(flicker ? "ce" : "9a"),layout);
         if (zoom>1.35 || groups.length<40) {
           ctx.fillStyle="#d3ece7";ctx.font="9px Consolas, monospace";
           ctx.textAlign="center";ctx.textBaseline="middle";
@@ -341,6 +391,10 @@ export class BrainAtlasView {
       }
     } else if (this.level==="nodes") {
       const nodes=this.data.nodes||[];
+      if (layout === "hex" && radius > 0) {
+        ctx.lineWidth=1;
+        hex(ctx,cx,cy,radius*.88,"#02010000","#93725070");
+      }
       const map=new Map();
       const spacing=Math.min(11,base*.72/Math.sqrt(nodes.length || 1))*zoom;
       for (let i=0;i<nodes.length;i++) {
@@ -354,8 +408,11 @@ export class BrainAtlasView {
         const a=map.get(edge.source_id),b=map.get(edge.target_id);
         if (!a||!b) continue;
         ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+        const selected=edge.source_id===selectedId || edge.target_id===selectedId;
+        ctx.lineWidth=selected ? 1.8 : .75;
         ctx.strokeStyle=edge.relation==="possible_conflict"
-          ? "#f5a38972" : "#92cbc145";
+          ? (selected ? "#f5a389dc" : "#f5a3894a")
+          : (selected ? "#b3f1dfdc" : "#92cbc133");
         ctx.stroke();
       }
       for (const node of nodes) {
@@ -364,7 +421,12 @@ export class BrainAtlasView {
         if (point.x<-20||point.x>width+20||point.y<-20||point.y>height+20) continue;
         const radius=5*zoom;
         const color=memoryColors[node.kind] || "#84d8cf";
-        hex(ctx,point.x,point.y,radius,color+"28",color+(flicker ? "e8" : "b5"));
+        ctx.lineWidth=.9;
+        drawAtlasNode(ctx,point.x,point.y,radius,color+"28",color+(flicker ? "e8" : "b5"),layout);
+        if (node.id===selectedId) {
+          ctx.beginPath();ctx.arc(point.x,point.y,radius+5,0,Math.PI*2);
+          ctx.lineWidth=1.4;ctx.strokeStyle=color;ctx.stroke();
+        }
         this.shapes.push({x:point.x,y:point.y,radius:Math.max(7,radius),
                           type:"memory",id:node.id,preview:node.preview,
                           kind:node.kind});
